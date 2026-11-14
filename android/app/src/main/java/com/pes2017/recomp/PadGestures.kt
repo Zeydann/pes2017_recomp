@@ -256,3 +256,67 @@ class FakeShotGesture(
         armed = false
     }
 }
+
+/**
+ * Which sector of the skill wheel a thumb is over, and when the wheel is open
+ * at all.
+ *
+ * Eight sectors, 45 degrees each, starting at the right and running the way a
+ * clock face's numbers do the other way: sector 0 right, 1 up-right, 2 up, 3
+ * up-left, 4 left, 5 down-left, 6 down, 7 down-right. The screen's y grows
+ * downward, so the angle is taken from -dy. The deadzone is what makes a
+ * quick tap nothing at all: inside a quarter of the radius the thumb has not
+ * said which move it wants, and the hold threshold is what keeps an ordinary
+ * press from opening the wheel in the first place.
+ */
+object TrickWheel {
+    /** How long the thumb has to stay down before the wheel opens. */
+    const val HOLD_MS = 120L
+
+    /** The fraction of the radius that is "no move chosen". */
+    const val DEADZONE = 0.25f
+
+    const val SECTORS = 8
+
+    /** Degrees per sector. */
+    private const val STEP_DEGREES = 360.0 / SECTORS
+
+    /**
+     * The sector under a thumb that is [dx], [dy] from where it landed, or -1
+     * for the deadzone and for a radius too small to mean anything.
+     */
+    fun sector(dx: Float, dy: Float, radius: Float): Int {
+        if (radius <= 0f) return -1
+        if (dx * dx + dy * dy < (radius * DEADZONE) * (radius * DEADZONE)) return -1
+        val degrees = Math.toDegrees(kotlin.math.atan2(-dy.toDouble(), dx.toDouble()))
+        val fromRight = ((degrees % 360.0) + 360.0) % 360.0
+        return (((fromRight + STEP_DEGREES / 2.0) / STEP_DEGREES).toInt()) % SECTORS
+    }
+
+    /** Whether a thumb held this long has become a wheel rather than a tap. */
+    fun isHold(heldMs: Long): Boolean = heldMs >= HOLD_MS
+}
+
+/**
+ * The shortest gap between two presses of the same button for the second to be
+ * a press of its own rather than the bounce of the first. Two taps of sprint --
+ * the speed burst -- are a fifth of a second apart and never touch this; a
+ * chattering switch, or one press delivered twice by a driver, does.
+ *
+ * Only the press *pulse* is gated, never the hold: a suppressed pulse still
+ * holds its bit, so a bounce can only cost a tap that was one edge anyway.
+ */
+class TapCadence(private val minGapMs: Long = 40L) {
+    private var lastAt = Long.MIN_VALUE
+
+    /** Whether a press at [nowMs] should also leave a pulse for the guest. */
+    fun accept(nowMs: Long): Boolean {
+        if (lastAt != Long.MIN_VALUE && nowMs - lastAt < minGapMs) return false
+        lastAt = nowMs
+        return true
+    }
+
+    fun reset() {
+        lastAt = Long.MIN_VALUE
+    }
+}

@@ -44,6 +44,17 @@ enum class ControlKind {
      * last frame, so a second thumb cannot interrupt it.
      */
     SKILL,
+
+    /**
+     * The skill wheel: hold it and the eight sectors of a ring appear, each one
+     * a move from runtime/skill_moves.h; slide to a sector and lift to play it.
+     * A quick tap does nothing -- the wheel only opens after [TrickWheel.HOLD_MS]
+     * -- so a thumb resting near it cannot set off a feint. It holds no bit of
+     * its own; the runtime owns the stick and buttons until the move's last
+     * frame, and the player's left stick supplies whatever exit the move waits
+     * for.
+     */
+    TRICK,
 }
 
 /** When a control belongs on screen. */
@@ -141,7 +152,26 @@ data class ControlElement(
     var swipeDownDouble: Boolean = false,
     var swipeLeftDouble: Boolean = false,
     var swipeRightDouble: Boolean = false,
+    /**
+     * What a TRICK wheel plays in each sector, as an index into
+     * runtime/skill_moves.h, or -1 for a sector with no move. The order is the
+     * wheel's: 0 right, then anticlockwise (up-right, up, ...). Changing this
+     * array in place keeps the element's identity, which the overlay uses to
+     * find the control under a finger.
+     */
+    var trickMoves: IntArray = IntArray(SkillMoves.COUNT) { -1 },
 ) {
+    /** The move a wheel sector plays, or -1 for none and for a sector off the wheel. */
+    fun trickMove(sector: Int): Int {
+        if (sector < 0 || sector >= trickMoves.size) return -1
+        return trickMoves[sector]
+    }
+
+    /** Binds one sector of the wheel; -1 leaves it empty. */
+    fun setTrickMove(sector: Int, move: Int) {
+        if (sector < 0 || sector >= trickMoves.size) return
+        trickMoves[sector] = if (SkillMoves.valid(move)) move else -1
+    }
     /** Whether it is on screen at all: the player's switch, the phase and the pad, all three. */
     fun shownIn(phase: GamePhase, stance: PadStance = PadStance.ATTACK): Boolean =
         visible && phase.shows(shownWhen, stance)
@@ -255,6 +285,11 @@ class ControlLayout private constructor(
                 }
                 item.put("swipeActions", actions)
             }
+            // The wheel's sectors, written only for a wheel that uses one: a
+            // layout from before the wheel keeps the defaults it starts from.
+            if (element.kind == ControlKind.TRICK) {
+                item.put("trick", JSONArray(element.trickMoves.toList()))
+            }
             array.put(item)
         }
         val root = JSONObject()
@@ -361,6 +396,11 @@ class ControlLayout private constructor(
                     // Optional and additive: a player's saved layout keeps its
                     // plain bits, and the compound half is read over the top
                     // when this build wrote it.
+                    item.optJSONArray("trick")?.let { moves ->
+                        for (sector in 0 until min(element.trickMoves.size, moves.length())) {
+                            element.setTrickMove(sector, moves.optInt(sector, element.trickMoves[sector]))
+                        }
+                    }
                     item.optJSONArray("swipeActions")?.let { actions ->
                         for (index in 0 until min(DIRECTIONS.size, actions.length())) {
                             val entry = actions.optJSONObject(index) ?: continue
@@ -459,6 +499,13 @@ class ControlLayout private constructor(
                     place("skill_drag_back", ControlKind.SKILL, 3, "DRAG BK", -330f, -100f, 48f, 0.40f, visible = false, shownWhen = PhaseMask.MATCH),
                     place("skill_body_feint", ControlKind.SKILL, 4, "BODY FNT", -330f, -40f, 48f, 0.40f, visible = false, shownWhen = PhaseMask.MATCH),
 
+                    // The skill wheel, above the action diamond and clear of
+                    // both the shoot-to-pass drag and the skill stick's touch
+                    // area: hold it and a ring of eight moves opens under the
+                    // thumb; slide and lift to play one. Nothing happens on a
+                    // quick tap.
+                    place("trick", ControlKind.TRICK, 0, "SKILL", -240f, -268f, 64f, 0.45f, shownWhen = PhaseMask.MATCH),
+
                     // Four-way swipes, hidden until the player binds a direction:
                     // an unbound swipe stays out of the way rather than
                     // duplicating an action button. The four action buttons take
@@ -498,6 +545,7 @@ class ControlLayout private constructor(
                 widthDp, heightDp,
             )
             applyDefaultSwipes(pad)
+            applyDefaultTrick(pad)
             return pad
         }
 
@@ -555,6 +603,21 @@ class ControlLayout private constructor(
             )
         }
 
+        /**
+         * The wheel's eight starting moves, one per sector, in the wheel's own
+         * order: right, up-right, up, up-left, left, down-left, down,
+         * down-right. Every move in the table is reachable from the ring out
+         * of the box, and no two sectors share one, so the default wheel can
+         * be used without opening the editor at all.
+         */
+        private fun applyDefaultTrick(pad: ControlLayout) {
+            val element = pad.find("trick") ?: return
+            // ronaldo chop, elastico, body feint, rainbow, drag back, step
+            // over, double touch, roulette -- indices into runtime/skill_moves.h.
+            val sectors = intArrayOf(6, 7, 4, 2, 3, 5, 0, 1)
+            for (sector in sectors.indices) element.setTrickMove(sector, sectors[sector])
+        }
+
         /** The name printed on a control: its Xbox name, or the PlayStation one. */
         fun labelFor(element: ControlElement, playStation: Boolean): String {
             if (!playStation) return element.label
@@ -569,6 +632,7 @@ class ControlLayout private constructor(
                 "rt" -> "R2"
                 "stick" -> "L"
                 "right_stick" -> "R"
+                "trick" -> "SKILL"
                 "start" -> "START"
                 "back" -> "SELECT"
                 else -> element.label

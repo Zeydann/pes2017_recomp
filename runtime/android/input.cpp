@@ -86,6 +86,9 @@ namespace
     std::mutex g_skillLock;
     skill::Flick g_skill;
     ::input::StickPulses g_skillPulses;
+    // The button half of a move (the rainbow's 2x R3): a move's clicks are
+    // played out one guest frame at a time, exactly like its stick half.
+    ::skill::ButtonSeq g_skillButtons;
 
     int16_t ToAxis(float value)
     {
@@ -280,6 +283,7 @@ void android::input::SetSkillStick(bool flick)
         std::lock_guard lock(g_skillLock);
         g_skill.End();
         g_skillPulses.Clear();
+        g_skillButtons.Clear();
     }
     if (was != flick) LOGI("touch: the skill stick is %s", flick ? "a flick" : "the finger's position");
 }
@@ -334,10 +338,14 @@ bool android::input::PlaySkill(int index)
             LOGW("touch: no skill move %d; the palette and the runtime disagree", index);
         return false;
     }
+    // A button-only move (the rainbow) takes the stick by letting go of it:
+    // otherwise a stick move still playing would run on beside the clicks.
+    if (move->count == 0) g_skillPulses.Clear();
     const int taken = g_skillPulses.Play(move->steps, move->count);
-    LOGI("touch: skill '%s', %d steps,%s", move->id, taken,
-         move->leavesExitToPlayer ? " the left stick is the player's" : " right stick only");
-    return taken > 0;
+    g_skillButtons.Play(move->buttons, move->buttonCount);
+    LOGI("touch: skill '%s', %d steps, %d clicks,%s", move->id, taken, move->buttonCount,
+         move->leavesExitToPlayer ? " the left stick is the player's" : " no exit to supply");
+    return taken > 0 || move->buttonCount > 0;
 }
 
 void android::input::AddLook(float dx, float dy)
@@ -438,10 +446,15 @@ bool android::input::Poll(uint32_t user, Pad& out)
         // replaying the touch slot keeps the deflection it was recorded with.
         std::int16_t skillX = 0, skillY = 0;
         const bool flick = g_skillPulses.Sample(skillX, skillY);
+        std::uint16_t skillButtons = 0;
+        const bool click = g_skillButtons.Sample(skillButtons);
 
         std::lock_guard lock(g_touch.lock);
         if (g_touch.connected) { out = g_touch.pad; any = true; }
         if (flick) { out.rightX = skillX; out.rightY = skillY; }
+        // A move's clicks are added to whatever the pad is holding, so a
+        // rainbow can be played while the thumb rests on a button.
+        if (click) out.buttons = std::uint16_t(out.buttons | skillButtons);
     }
     if (HardwarePadEnabled())
     {

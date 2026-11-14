@@ -234,4 +234,71 @@ class PadGesturesTest {
         assertFalse(SwipePriority.sendsSwipe(faked = true, bound))
         assertFalse(SwipePriority.sendsSwipe(faked = false, SwipeAction.NONE))
     }
+
+    // ---- the speed burst's two taps ------------------------------------------
+
+    @Test
+    fun twoTapsOfSprintAreTwoPresses() {
+        // The speed burst is two taps of RB. Both are presses of their own, and
+        // the gap between a bounce and a tap is what the cadence is for.
+        val cadence = TapCadence()
+        assertTrue(cadence.accept(1_000))
+        assertFalse("a bounce inside 40 ms is the same press", cadence.accept(1_010))
+        assertTrue("a second tap of a double tap", cadence.accept(1_160))
+    }
+
+    @Test
+    fun aStuckFirstPressDoesNotSwallowTheNextTap() {
+        val cadence = TapCadence()
+        assertTrue(cadence.accept(0))
+        assertTrue(cadence.accept(40))
+        cadence.reset()
+        assertTrue("a reset pad lets the first press of a new gesture through", cadence.accept(60))
+    }
+
+    // ---- the skill wheel -----------------------------------------------------
+
+    @Test
+    fun theWheelOpensOnAHoldAndNotOnATap() {
+        assertFalse(TrickWheel.isHold(0))
+        assertFalse(TrickWheel.isHold(TrickWheel.HOLD_MS - 1))
+        assertTrue(TrickWheel.isHold(TrickWheel.HOLD_MS))
+        assertTrue(TrickWheel.isHold(TrickWheel.HOLD_MS + 500))
+    }
+
+    @Test
+    fun everySectorIsFortyFiveDegrees() {
+        val radius = 100f
+        val r = 50f
+        val d = r * 0.70710678f
+        // 0 right, then anticlockwise: up is screen-negative y.
+        assertEquals(0, TrickWheel.sector(r, 0f, radius))
+        assertEquals(1, TrickWheel.sector(d, -d, radius))
+        assertEquals(2, TrickWheel.sector(0f, -r, radius))
+        assertEquals(3, TrickWheel.sector(-d, -d, radius))
+        assertEquals(4, TrickWheel.sector(-r, 0f, radius))
+        assertEquals(5, TrickWheel.sector(-d, d, radius))
+        assertEquals(6, TrickWheel.sector(0f, r, radius))
+        assertEquals(7, TrickWheel.sector(d, d, radius))
+    }
+
+    @Test
+    fun theDeadzoneChosesNothing() {
+        assertEquals(-1, TrickWheel.sector(0f, 0f, 100f))
+        assertEquals(-1, TrickWheel.sector(20f, 0f, 100f))
+        assertEquals(-1, TrickWheel.sector(0f, 0f, 0f))
+        assertEquals(0, "just outside the deadzone is a choice", TrickWheel.sector(30f, 0f, 100f))
+    }
+
+    @Test
+    fun aSectorEdgeFallsOnTheNearerSide() {
+        val radius = 100f
+        val r = 50.0
+        val justBelow = Math.toRadians(22.4)
+        val justAbove = Math.toRadians(22.6)
+        assertEquals(0, TrickWheel.sector((r * Math.cos(justBelow)).toFloat(),
+            (-r * Math.sin(justBelow)).toFloat(), radius))
+        assertEquals(1, TrickWheel.sector((r * Math.cos(justAbove)).toFloat(),
+            (-r * Math.sin(justAbove)).toFloat(), radius))
+    }
 }

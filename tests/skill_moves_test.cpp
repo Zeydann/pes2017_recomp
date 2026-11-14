@@ -61,7 +61,7 @@ int main()
 {
     // ---- the table itself ----------------------------------------------------
 
-    Check(skill::kMoveCount == 5, "the palette has the five moves the app places");
+    Check(skill::kMoveCount == 8, "the wheel has the eight moves the app binds");
     Check(skill::At(-1) == nullptr, "a negative index is refused");
     Check(skill::At(skill::kMoveCount) == nullptr, "one past the end is refused");
     Check(skill::At(0) != nullptr, "the first is there");
@@ -91,16 +91,27 @@ int main()
         for (int i = 0; i < skill::kMoveCount; i++)
         {
             const skill::Move& move = skill::kMoves[i];
-            if (move.count < 1 || move.count > 10) sane = false;
+            if (move.count < 0 || move.count > 10) sane = false;
+            if (move.buttonCount < 0 || move.buttonCount > 6) sane = false;
+            // A move drives the stick, the buttons, or both -- the rainbow is
+            // clicks only -- but never neither.
+            if (move.count == 0 && move.buttonCount == 0) sane = false;
             bool anyDirection = false;
             for (int s = 0; s < move.count; s++)
             {
                 if (move.steps[s].frames == 0) sane = false;
                 if (move.steps[s].x || move.steps[s].y) anyDirection = true;
             }
-            if (!anyDirection) sane = false;
+            bool anyClick = false;
+            for (int b = 0; b < move.buttonCount; b++)
+            {
+                if (move.buttons[b].frames == 0) sane = false;
+                if (move.buttons[b].buttons) anyClick = true;
+            }
+            if (move.count > 0 && !anyDirection) sane = false;
+            if (move.buttonCount > 0 && !anyClick) sane = false;
         }
-        Check(sane, "every move is a non-empty script with at least one direction");
+        Check(sane, "every move is a non-empty script of stick frames, clicks, or both");
     }
 
     {
@@ -138,17 +149,14 @@ int main()
     }
 
     {
-        // Double Touch: two directions with a frame of nothing between them.
+        // Double Touch: one flick up, then the window the player's exit lands
+        // in. It used to be left-then-right, the same script as the body feint.
         const skill::Move* move = skill::At(0);
         const auto frames = PlayOut(*move);
-        size_t gaps = 0;
-        for (size_t i = 0; i < LastNonZero(frames); i++) if (!NonZero(frames[i])) gaps++;
         Check(move->leavesExitToPlayer, "the Double Touch leaves the exit to the player");
-        Check(gaps == 1, "and its two halves are separated by exactly one frame of nothing");
-        Check(frames[0].first < 0, "starting to the left");
-        bool sawRight = false;
-        for (const auto& frame : frames) if (frame.first > 0) sawRight = true;
-        Check(sawRight, "and finishing to the right");
+        Check(frames[0].first == 0 && frames[0].second > 0, "it flicks the stick up");
+        Check(NonZero(frames[1]) && !NonZero(frames[2]),
+              "and then holds a neutral window for the exit");
     }
 
     {
@@ -177,12 +185,34 @@ int main()
     {
         // Rainbow Flick: the same direction twice, which only reads as two if
         // the gap is there.
+        //
+        // The rainbow is not a stick gesture any more: it is the sheet's 2x R3,
+        // played as button clicks, so it deflects nothing.
         const skill::Move* move = skill::At(2);
-        const auto frames = PlayOut(*move);
-        size_t gaps = 0;
-        for (size_t i = 0; i < LastNonZero(frames); i++) if (!NonZero(frames[i])) gaps++;
-        Check(gaps == 1, "the rainbow flick has one gap, between its two flicks");
-        Check(frames[0].second > 0, "both of them upward");
+        Check(move->count == 0, "the rainbow flick leaves the stick alone");
+        Check(move->buttonCount == 4, "and is four button frames long");
+
+        skill::ButtonSeq clicks;
+        clicks.Play(move->buttons, move->buttonCount);
+        std::vector<std::uint16_t> sent;
+        for (int i = 0; i < 40; i++)
+        {
+            std::uint16_t bits = 0;
+            const bool active = clicks.Sample(bits);
+            sent.push_back(bits);
+            if (!active) break;
+        }
+        int presses = 0;
+        int gaps = 0;
+        for (size_t i = 0; i < sent.size(); i++)
+        {
+            if (sent[i] == skill::ButtonSeq::kR3) presses++;
+            if (sent[i] == 0 && i + 1 < sent.size()) gaps++;
+        }
+        Check(presses == 2, "the rainbow is two R3 clicks");
+        Check(gaps >= 1, "with a release between them, so they read as two");
+        Check(sent.back() == 0, "and it ends with everything let go");
+        Check(!clicks.Active(), "and does not stay armed");
     }
 
     {
@@ -196,13 +226,54 @@ int main()
     }
 
     {
-        // Body Feint: left then right, and nothing expected afterwards.
+        // Body Feint: one flick down, and it is not the Double Touch's script.
         const skill::Move* move = skill::At(4);
         const auto frames = PlayOut(*move);
-        Check(!move->leavesExitToPlayer, "the body feint needs nothing of the player afterwards");
-        size_t gaps = 0;
-        for (size_t i = 0; i < LastNonZero(frames); i++) if (!NonZero(frames[i])) gaps++;
-        Check(gaps == 1, "and its two halves are separated too");
+        Check(move->leavesExitToPlayer, "the body feint leaves the exit to the player");
+        Check(frames[0].first == 0 && frames[0].second < 0, "it flicks the stick down");
+        Check(frames[0].second != PlayOut(*skill::At(0))[0].second,
+              "and so is a different press from the Double Touch");
+    }
+
+    {
+        // Step Over: a continuous quarter circle, right, up-right, up -- no
+        // frame of nothing in the middle, or the title would see three flicks.
+        const skill::Move* move = skill::At(5);
+        const auto frames = PlayOut(*move);
+        Check(move->count == 3, "the step over is three legs");
+        Check(frames[0].first > 0 && frames[0].second == 0, "starting to the right");
+        bool continuous = true;
+        for (size_t i = 0; i < LastNonZero(frames); i++) if (!NonZero(frames[i])) continuous = false;
+        Check(continuous, "with no gap between the legs");
+        Check(move->steps[2].x == 0 && move->steps[2].y > 0, "and finishing upward");
+    }
+
+    {
+        // Ronaldo Chop: one flick right.
+        const skill::Move* move = skill::At(6);
+        const auto frames = PlayOut(*move);
+        Check(frames[0].first > 0 && frames[0].second == 0, "the chop flicks the stick right");
+        Check(frames.size() <= 5, "once, and not for long");
+    }
+
+    {
+        // Elastico: one flick down-right.
+        const skill::Move* move = skill::At(7);
+        const auto frames = PlayOut(*move);
+        Check(frames[0].first > 0 && frames[0].second < 0, "the elastico flicks down-right");
+        Check(move->leavesExitToPlayer, "and leaves the exit to the player");
+    }
+
+    {
+        // A button script is ignored until it is played, and letting go of it
+        // early sends nothing more: the pad must not keep an R3 held.
+        skill::ButtonSeq clicks;
+        std::uint16_t bits = 0;
+        Check(!clicks.Sample(bits), "an empty button sequence has no opinion");
+        clicks.Play(skill::kMoves[2].buttons, skill::kMoves[2].buttonCount);
+        clicks.Sample(bits);
+        clicks.Clear();
+        Check(!clicks.Sample(bits), "and clearing it stops it at once");
     }
 
     // ---- the lockout a palette tap inherits ---------------------------------

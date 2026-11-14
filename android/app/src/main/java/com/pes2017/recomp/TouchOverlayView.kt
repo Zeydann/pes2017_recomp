@@ -127,6 +127,24 @@ class TouchOverlayView @JvmOverloads constructor(
     private var skillOriginX = 0f
     private var skillOriginY = 0f
 
+    // The skill wheel: a hold, then a sector, then the move on the lift. The
+    // origin is where the thumb landed, not where the button is drawn, so the
+    // ring comes to the thumb rather than making it reach for a circle.
+    private var trickPointer = -1
+    private var trickDownAt = 0L
+    private var trickOriginX = 0f
+    private var trickOriginY = 0f
+    private var trickSector = -1
+    private var trickOpen = false
+    private val trickOpenTask = Runnable {
+        trickOpen = true
+        invalidate()
+    }
+
+    // Sprint's press pulse is gated: two taps are the speed burst, a bounce of
+    // one tap is not. The hold itself is never gated.
+    private val burstCadence = TapCadence()
+
     /**
      * The flick reading, and only when this build's runtime has it. The apk
      * packages a libpes17.so built elsewhere, and an older one has no
@@ -135,9 +153,10 @@ class TouchOverlayView @JvmOverloads constructor(
      */
     private val flicking get() = prefs.flickSkillStick && NativeBridge.skillStick
 
-    /** A palette button needs the runtime that plays moves; without it, it is not there. */
+    /** A palette button or the wheel needs the runtime that plays moves. */
     private fun available(element: ControlElement) =
-        element.kind != ControlKind.SKILL || NativeBridge.skillStick
+        (element.kind != ControlKind.SKILL && element.kind != ControlKind.TRICK) ||
+            NativeBridge.skillStick
 
     /** The eFootball-style floating movement stick, unless the player fixed it. */
     private val floatingStick get() = prefs.stickMode == Prefs.STICK_MOVE
@@ -356,6 +375,7 @@ class TouchOverlayView @JvmOverloads constructor(
                 }
                 ControlKind.SWIPE -> Unit   // sent when the finger lifts, as a pulse
                 ControlKind.SKILL -> Unit   // fires once on the press, not as state
+                ControlKind.TRICK -> Unit   // fires once on the lift, not as state
                 ControlKind.LOOK -> Unit    // sent as deltas, not as a stick
             }
         }
@@ -461,6 +481,11 @@ class TouchOverlayView @JvmOverloads constructor(
         pendingSwipes = 0
         lookPointers.clear()
         skillPointer = -1
+        removeCallbacks(trickOpenTask)
+        trickPointer = -1
+        trickOpen = false
+        trickSector = -1
+        burstCadence.reset()
         // Everything up means everything: a trigger does not outlive the pad,
         // and neither does a tap still riding out its frame or an arm the stick
         // was holding down.
@@ -568,6 +593,22 @@ class TouchOverlayView @JvmOverloads constructor(
                                 changed = true
                             }
                         }
+                        ControlKind.TRICK -> {
+                            if (id != trickPointer) continue
+                            // The sector follows the thumb from the moment it
+                            // lands, so the ring is already showing the right
+                            // move when it opens; only a change after that is
+                            // worth a tick.
+                            val sector = TrickWheel.sector(
+                                x - trickOriginX, y - trickOriginY, radius(element),
+                            )
+                            if (sector != trickSector) {
+                                val tick = trickOpen && sector >= 0
+                                trickSector = sector
+                                if (tick) triggerHaptic()
+                                changed = true
+                            }
+                        }
                         else -> Unit
                     }
                 }
@@ -610,9 +651,13 @@ class TouchOverlayView @JvmOverloads constructor(
         pressAt[pointerId] = floatArrayOf(x, y)
         // Pressed again inside its grace, a trigger is held, not released.
         if (element.kind == ControlKind.TRIGGER) triggerReleaseAt.remove(element.id)
+        // A bounce of the sprint button is still a hold; it just does not need
+        // a pulse as well, which is what a double tap is built out of.
+        val pulse = element.kind != ControlKind.BUTTON || element.value != NativeBridge.RB ||
+            burstCadence.accept(SystemClock.uptimeMillis())
         // Recorded, not assigned: a second finger on the same control must not
         // take it from the first, and the control stays down until both lift.
-        claims.press(pointerId, element)
+        claims.press(pointerId, element, pulse)
         when (element.kind) {
             ControlKind.STICK -> when {
                 // The movement stick, floating: its socket is the thumb's
@@ -652,6 +697,18 @@ class TouchOverlayView @JvmOverloads constructor(
             // One tap, one move: the runtime plays it on the skill stick and
             // holds the stick until its last frame, so nothing here has to.
             ControlKind.SKILL -> if (NativeBridge.skillStick) NativeBridge.nativeSkillPlay(element.value)
+            // The wheel opens on a hold, and the move is chosen by where the
+            // thumb is when it lifts: nothing to send while it is down.
+            ControlKind.TRICK -> {
+                trickPointer = pointerId
+                trickDownAt = SystemClock.uptimeMillis()
+                trickOriginX = x
+                trickOriginY = y
+                trickSector = -1
+                trickOpen = false
+                postDelayed(trickOpenTask, TrickWheel.HOLD_MS)
+                invalidate()
+            }
             else -> Unit
         }
         return true
@@ -700,6 +757,23 @@ class TouchOverlayView @JvmOverloads constructor(
             }
             val action = released.element.swipeAction(direction)
             if (SwipePriority.sendsSwipe(faked = false, action)) emitSwipe(action)
+        }
+        if (released.element.kind == ControlKind.TRICK) {
+            removeCallbacks(trickOpenTask)
+            if (pointerId == trickPointer) {
+                val held = SystemClock.uptimeMillis() - trickDownAt
+                val sector = trickSector
+                trickPointer = -1
+                trickOpen = false
+                trickSector = -1
+                // A tap does nothing at all: only a wheel that was actually
+                // held and pointed at a sector plays a move.
+                if (TrickWheel.isHold(held)) {
+                    val move = released.element.trickMove(sector)
+                    if (move >= 0 && NativeBridge.skillStick) NativeBridge.nativeSkillPlay(move)
+                }
+                invalidate()
+            }
         }
         // Another finger still on the stick keeps its deflection; the last one
         // to lift centres it.
@@ -1041,9 +1115,67 @@ class TouchOverlayView @JvmOverloads constructor(
                 ControlKind.SWIPE -> drawSwipe(canvas, element, alpha, faded)
                 ControlKind.BUTTON, ControlKind.TRIGGER, ControlKind.SKILL ->
                     drawButton(canvas, element, alpha, faded)
+                ControlKind.TRICK -> {
+                    drawButton(canvas, element, alpha, faded)
+                    if (trickOpen && trickPointer >= 0 &&
+                        claims.elementFor(trickPointer) === element
+                    ) {
+                        drawTrickRing(canvas, element, alpha)
+                    }
+                }
             }
             if (editing && element === selected) drawSelection(canvas, element)
         }
+    }
+
+    /**
+     * The wheel itself: eight wedges around the thumb that opened it, the one
+     * under the thumb lit, each labelled with its move's short name. Drawn
+     * around the landing point rather than the control, so the ring comes to the
+     * thumb and the thumb never has to find a circle.
+     */
+    private fun drawTrickRing(canvas: Canvas, element: ControlElement, alpha: Float) {
+        val cx = trickOriginX
+        val cy = trickOriginY
+        val r = radius(element)
+        val outer = r * 1.95f
+        val inner = r * 0.72f
+        val previousAlign = text.textAlign
+        val previousSize = text.textSize
+        text.textAlign = Paint.Align.CENTER
+        text.textSize = max(8f, r * 0.30f)
+        for (sector in 0 until TrickWheel.SECTORS) {
+            // Canvas angles run clockwise from the right and the wheel's
+            // sectors run the other way, so this is squarely on the wedge.
+            val start = -22.5f - 45f * sector
+            val chosen = sector == trickSector
+            tempRect.set(cx - outer, cy - outer, cx + outer, cy + outer)
+            fill.color = if (chosen) {
+                Color.argb((alpha * 205f).toInt().coerceIn(0, 255), 56, 189, 248)
+            } else {
+                Color.argb((alpha * 130f).toInt().coerceIn(0, 255), 15, 23, 42)
+            }
+            canvas.drawArc(tempRect, start, 45f, true, fill)
+            if (chosen) {
+                stroke.color = Color.argb(235, 224, 242, 254)
+                stroke.strokeWidth = max(1.5f, density * 1.5f)
+                canvas.drawArc(tempRect, start, 45f, true, stroke)
+            }
+            // An empty sector says nothing rather than showing a wrong name.
+            val move = element.trickMove(sector)
+            if (move < 0) continue
+            val radians = Math.toRadians(-45.0 * sector)
+            val labelRadius = (inner + outer) * 0.5f
+            val lx = cx + (Math.cos(radians) * labelRadius).toFloat()
+            val ly = cy + (Math.sin(radians) * labelRadius).toFloat()
+            text.color = if (chosen) Color.WHITE else Color.argb(225, 226, 232, 240)
+            canvas.drawText(SkillMoves.short(move), lx, ly - (text.descent() + text.ascent()) * 0.5f, text)
+        }
+        // The deadzone is drawn too: a thumb inside it has chosen nothing.
+        fill.color = Color.argb((alpha * 200f).toInt().coerceIn(0, 255), 9, 12, 18)
+        canvas.drawCircle(cx, cy, inner, fill)
+        text.textAlign = previousAlign
+        text.textSize = previousSize
     }
 
     private fun shade(alpha: Float, pressed: Boolean, faded: Boolean): Int {

@@ -47,14 +47,17 @@ internal class TouchClaims {
      * A finger went down on [element]. Returns whether the guest's buttons or
      * triggers changed; a stick's deflection is the caller's to compute.
      */
-    fun press(pointerId: Int, element: ControlElement): Boolean {
+    fun press(pointerId: Int, element: ControlElement, pulse: Boolean = true): Boolean {
         // A pointer cannot press twice without lifting; drop whatever it had,
         // so a lost ACTION_UP cannot leave a count that never comes back down.
         release(pointerId)
-        // A stick deflects instead of holding a bit, and a skill palette button
-        // fires its move on the press and holds nothing either: its `value` is a
-        // move index, not a button mask, so it must never reach newPresses.
-        if (element.kind == ControlKind.STICK || element.kind == ControlKind.SKILL) {
+        // A stick deflects instead of holding a bit; a skill palette button
+        // fires its move on the press and holds nothing; and the wheel holds
+        // nothing at all until the thumb lifts. None of their `value`s is a
+        // button mask, so none may reach newPresses.
+        if (element.kind == ControlKind.STICK || element.kind == ControlKind.SKILL ||
+            element.kind == ControlKind.TRICK
+        ) {
             byPointer[pointerId] = Claim(element, holds = false)
             if (element.kind == ControlKind.STICK) {
                 stickOwners[element.id] = (stickOwners[element.id] ?: 0) + 1
@@ -70,7 +73,12 @@ internal class TouchClaims {
             // press: the holds merge, the tap must not. Triggers are left out
             // -- they are held by their release grace instead, and their value
             // is not a button bit.
-            if (element.kind == ControlKind.BUTTON) newPresses = newPresses or element.value
+            // A second press of the same control from another thumb merges
+            // into the hold; [pulse] is false only when the caller has decided
+            // this press was a bounce of the one before it.
+            if (element.kind == ControlKind.BUTTON && pulse) {
+                newPresses = newPresses or element.value
+            }
         }
         return true
     }

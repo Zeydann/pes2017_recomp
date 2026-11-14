@@ -134,6 +134,85 @@ between them. While latched the pad's RB bit (`0x0200`, R1) is OR'd into every
 state push and the socket rim lights. Menus never sprint; every cancellation
 resets the latch.
 
+## Dribbling on the ball
+
+The ball-carrying controls are the pad's own, so most of them need no new
+button and are listed here so nobody adds one:
+
+- **Standard dribble.** The movement stick.
+- **Sprint dribble.** Hold RB, or push the stick past the latch (0.92 press,
+  0.82 release) while RB is held or alone on the rim.
+- **Knock ball ahead / speed burst (2x RB).** Not a new control: it is two taps
+  of the Sprint button, and the pad already sends each tap as its own press
+  edge, so the title sees two presses. `TouchClaims` gives every new press a
+  pulse for the next poll; the only guard is `TapCadence` (40 ms), which drops
+  the *pulse* of a press that is a bounce of the one before it and never the
+  hold, so two real taps (a fifth of a second apart) are untouched while a
+  chattering switch cannot make one press look like two.
+- **Close control (hold RT + LS).** Hold the RT control while steering. RT stays
+  down for as long as the finger does; the 80 ms trigger grace only delays the
+  *release*, so the ball stays close through a tap on another button. A player
+  who wants it latched can turn RT's existing **toggle** switch on in the
+  editor; no separate control exists, because a second RT would be the same bit
+  twice.
+- **Stop and face goal (LS centred, tap/hold RT).** RT with the stick at zero.
+  Nothing extra: the stick's own neutral is the stop.
+- **Let the ball run / dummy (hold RB, no LS).** Hold Sprint with the stick
+  centred. The rim latch cannot fire without a throw, so it does not fight the
+  hold, and lifting returns the pad to normal.
+
+## The skill wheel
+
+The skill palette is one button per move and is still there, but it is hidden by
+default. The default is one **wheel** control (`id: "trick"`, 64 dp, above the
+action diamond and clear of both the shoot-to-pass drag and the skill stick,
+match only), because eight named buttons beside the shoot diamond is a lot of
+screen for something used a few times a match.
+
+- **How it fires.** Hold the control. After `TrickWheel.HOLD_MS` (120 ms) a ring
+  of eight sectors opens **around the thumb's landing point**, not around the
+drawn button, so the ring comes to the thumb. Slide to a sector (25% of the
+radius is a deadzone that chooses nothing; each change ticks if vibration is
+on) and **lift**: the move bound to that sector plays. A quick tap does
+**nothing** -- it is deliberately not a shortcut for a move.
+- **What it plays.** The move index goes to `nativeSkillPlay`, and the runtime
+  plays it from `runtime/skill_moves.h` one guest frame at a time: the right
+  stick only, or buttons (the rainbow is two R3 clicks), and never the left
+  stick. The wheel picks; the runtime owns the input until the last frame.
+- **Exit direction.** Several moves end by asking for a left-stick direction
+  the player chooses ("then push left stick"). The wheel plays the first half
+  and stops; the left thumb supplies the exit. The editor says so beside the
+  move's name, and the ring does not drive LS at all, so movement is never
+  frozen by a skill.
+- **Defaults.** One move per sector, all eight moves reachable out of the box:
+
+  | Sector | Direction | Move (index) |
+  |---|---|---|
+  | 0 | right | Ronaldo Chop (6) |
+  | 1 | up-right | Elastico (7) |
+  | 2 | up | Body Feint (4) |
+  | 3 | up-left | Rainbow Flick (2) |
+  | 4 | left | Drag Back (3) |
+  | 5 | down-left | Step Over (5) |
+  | 6 | down | Double Touch (0) |
+  | 7 | down-right | Roulette (1) |
+
+- **Table order is a contract.** `runtime/skill_moves.h` may be appended to and
+  never reordered: a saved layout stores the indices, and the C++ side refuses
+  an index it does not know. Indices 0 and 4 used to be the same script (left
+  then right, which made the palette's double touch and body feint the same
+  press); they are now distinct -- double touch flicks up, body feint down --
+  which the sheet allows for both.
+- **Rainbow Flick is the pad's 2x R3.** The move is a button script
+  (`ButtonSeq`), not a stick deflection: R3, release, R3, release, played in
+  whole frames and merged into whatever the pad is already holding. A mirror of
+  the right stick is therefore not involved.
+- **Persistence and safety.** The sectors are saved as an additive `trick`
+  array in `controls.json`; a layout from before the wheel keeps its defaults.
+  Nothing is held while the wheel is open, so lift, `ACTION_CANCEL`, pause,
+  focus loss and the editor all just close it; the runtime's own scripts end in
+  a released frame.
+
 ## Camera (LOOK)
 
 A LOOK region turns the view: drags become pixel deltas (`nativeLookDelta`) and
@@ -155,9 +234,16 @@ or the pause menu (`Prefs.defendingPad`).
 
 ## Verification
 
-- `PadGesturesTest`: sprint latch and fake-shot arming, plus every compound
-  sequence (modifier lead, trigger axis, double tap, ending clear, mid-sequence
-  clear, fake-shot priority).
+- `PadGesturesTest`: sprint latch and fake-shot arming, every compound sequence
+  (modifier lead, trigger axis, double tap, ending clear, mid-sequence clear,
+  fake-shot priority), the wheel's hold and sector arithmetic, and the sprint
+  tap cadence behind the 2x RB speed burst.
+- `SkillWheelTest`: the eight moves in the table, the exit hints, every default
+  sector bound and unique, the default wheel's sector order, and that a bad
+  index is not stored.
+- `tests/skill_moves_test.cpp` (host, passing): eight moves, every move ends,
+  the two feints are distinct, the step over is continuous, the rainbow is two
+  R3 clicks with a release between them, and the button sequencer clears.
 - `SwipeBindingsTest`: all 16 default combinations, the primary bits behind
   them, independence and unbound cases.
 - `StickVectorTest`: normalisation for both stick modes.

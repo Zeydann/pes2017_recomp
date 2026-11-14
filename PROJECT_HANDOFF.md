@@ -31,7 +31,9 @@ ISO importing and the Bluetooth/USB gamepad path were not modified.
 | Camera / LOOK region with sensitivity, smoothing, saturation, invert | Input path traced to the right stick; not device-tested; no separate user deadzone (see docs) |
 | Layout editor: move, resize, opacity, visibility, toggle, snap, keep-apart, reset, arrangement, per-button swipes | Implemented; add/remove of new controls is **not** implemented (controls can be hidden/shown) |
 | Manual attacking/defending pads | Implemented (editor arrangement, Settings and pause-menu switch); automatic switching is **not** implemented and must not be claimed |
-| Skill palette and flick skill stick with native capability probes | Previously implemented; unchanged |
+| Skill palette and flick skill stick with native capability probes | Previously implemented; palette kept, hidden by default |
+| Skill wheel (hold, 8 sectors, native playback) | Implemented; pure geometry unit-tested; not device-tested |
+| Dribbling: close control, dummy, 2x RB speed burst, stop and face | Mapped onto existing controls; no new buttons; only the tap cadence is new code |
 | Multitouch and cancellation safety | Counted claims, per-pointer gestures, `ACTION_CANCEL`/pause clearing; unchanged and extended for the fake shot |
 | Bluetooth/USB controller | Previously implemented; unchanged |
 
@@ -58,6 +60,15 @@ ISO importing and the Bluetooth/USB gamepad path were not modified.
    window focus loss, editor) clears the combo, so no modifier or trigger can
    stick. The fake shot keeps strict priority over the Shoot swipe towards
    Pass (`SwipePriority`).
+5. **Skill wheel, eight moves and the real rainbow.** The palette was five
+   hidden buttons; the default is now one wheel control: hold 120 ms, slide to
+   one of eight sectors, lift to play, with a quick tap doing nothing. The
+   native table grew from five moves to eight (step over, Ronaldo chop,
+   elastico appended at 5-7), indices 0 and 4 were made distinct scripts
+   (double touch flicks up, body feint down), and the rainbow is the sheet's
+   **2x R3** via a new frame-based `skill::ButtonSeq` rather than a stick flick.
+   The wheel only chooses an index: the runtime still owns the stick, and the
+   left stick is always the player's exit.
 
 ## Tests actually executed
 
@@ -72,7 +83,7 @@ checks are standalone `main()` programs, so no CMake is needed here):
 | `input_pulses_test` | 9 checks, 0 failed |
 | `log_repeat_test` | 19 checks, 0 failures |
 | `look_scale_test` | 7 checks, 0 failed |
-| `skill_moves_test` | 26 checks, 0 failed |
+| `skill_moves_test` | 40 checks, 0 failed (eight moves, distinct feints, R3 rainbow, button sequencer) |
 | `skill_stick_test` | 47 checks, 0 failed |
 | `stick_arrows_test` | 15 checks, 0 failed |
 | `stick_curve_test` | 25 checks, 0 failed |
@@ -81,11 +92,13 @@ checks are standalone `main()` programs, so no CMake is needed here):
 | `texture_store_test` | all checks passed |
 | `version_test` | 97 checks passed |
 
-That is the previous 281 checks plus 196 + 97 and the texture store. Not run:
+That is the previous 281 checks plus 196 + 97 and the texture store, with
+`skill_moves_test` re-run at 40 checks after the wheel work. Not run:
 `bc_decoder_test` (needs Vulkan headers, absent here), `durable_test` (pulls in
 `ppc_recomp_shared.h`, which only the recompiled guest build generates), and
 every Kotlin/JUnit test, including the new `PadGesturesTest`,
-`StickVectorTest`, `SwipeBindingsTest` and the existing `TouchClaimsTest`,
+`StickVectorTest`, `SwipeBindingsTest`, `SkillWheelTest` and the existing
+`TouchClaimsTest`,
 `SwipeClassifierTest`, `TouchMathTest`, `ControlLayoutPhaseTest` and
 `GamepadInputTest` -- this workspace has no JDK 17 and no Android SDK, and large
 downloads were deliberately not started.
@@ -108,13 +121,20 @@ Static checks done: every modified Kotlin file balances its delimiters; every
    unchanged.
 6. The compound timing on a real title poll: 30 ms modifier lead, 120 ms hold,
    90 ms double-tap gap; adjust `SwipeSequence` from what the match does.
-7. Camera region turns the view and does not steal touches.
-8. The defending pad appears from Settings and from the pause menu.
+7. The wheel on a real thumb: 120 ms hold opens it reliably without opening on
+   ordinary presses, 25% deadzone is comfortable, and each of the eight moves
+   is recognised by the title. Adjust `TrickWheel` and `skill_moves.h` from
+   what the match does, not from the sheet.
+8. Close control with RT held while steering, the RB dummy with the stick
+   centred, and the 2x RB speed burst (two taps must read as two presses).
+9. Camera region turns the view and does not steal touches.
+10. The defending pad appears from Settings and from the pause menu.
 
 ## Suggested next steps
 
 1. Run the two Gradle commands on CI (it has the SDK and the signing secret) and
    fix any compile findings; the Kotlin here was written without a compiler.
-2. Device-test items 2-8 above and record the results here.
-3. Tune the compound sequence timings if the title misses a modifier or a
-   double tap; they live in one place (`SwipeSequence`, `PadGestures.kt`).
+2. Device-test items 2-10 above and record the results here.
+3. Tune the compound and wheel timings if the title misses a modifier, a double
+   tap or a move; they live in two places (`SwipeSequence`/`TrickWheel` in
+   `PadGestures.kt`, and the frame counts in `runtime/skill_moves.h`).

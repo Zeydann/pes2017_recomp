@@ -76,6 +76,16 @@ class ControlEditPanel(
         setOnClickListener { showSwipeBindings() }
     }
 
+    /** Shown while the skill wheel is selected: what each of its eight sectors plays. */
+    private val wheel: Button = Button(activity).apply {
+        setText(R.string.skill_wheel)
+        textSize = 12f
+        minWidth = 0
+        minimumWidth = 0
+        visibility = View.GONE
+        setOnClickListener { showSkillWheel() }
+    }
+
     /** Which pad the selected control belongs to: both, the menus, or one stance. */
     private val arrangement: Button = Button(activity).apply {
         setText(R.string.arrangement)
@@ -95,6 +105,9 @@ class ControlEditPanel(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
         ).apply { marginStart = (6 * dp).roundToInt() })
         actions.addView(swipes, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+        ).apply { marginStart = (6 * dp).roundToInt() })
+        actions.addView(wheel, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
         ).apply { marginStart = (6 * dp).roundToInt() })
         size.max = 100
@@ -270,6 +283,69 @@ class ControlEditPanel(
         element.setSwipeAction(swipe, action)
     }
 
+    // ---- what the skill wheel plays ------------------------------------------
+
+    /** The eight sectors, in the wheel's own order, so the list reads like the ring. */
+    private fun showSkillWheel() {
+        val element = current ?: return
+        val labels = Array(TrickWheel.SECTORS) { sector ->
+            val move = element.trickMove(sector)
+            activity.getString(
+                R.string.skill_wheel_sector,
+                sectorName(sector),
+                if (move < 0) activity.getString(R.string.button_none) else SkillMoves.name(move),
+            )
+        }
+        AlertDialog.Builder(activity)
+            .setTitle(R.string.skill_wheel)
+            .setItems(labels) { _, which -> pickSkillMove(element, which) }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    /**
+     * One sector's move: none, or any move the runtime's table carries. The
+     * hint is part of the name because the wheel deliberately stops where the
+     * player's left stick takes over.
+     */
+    private fun pickSkillMove(element: ControlElement, sector: Int) {
+        val labels = Array(SkillMoves.COUNT + 1) { index ->
+            if (index == 0) activity.getString(R.string.button_none)
+            else {
+                val name = SkillMoves.name(index - 1)
+                if (SkillMoves.leavesExit(index - 1)) {
+                    name + " (" + activity.getString(R.string.skill_wheel_exit) + ")"
+                } else {
+                    name
+                }
+            }
+        }
+        AlertDialog.Builder(activity)
+            .setTitle(R.string.skill_wheel_sector_title)
+            .setItems(labels) { _, which ->
+                element.setTrickMove(sector, if (which == 0) -1 else which - 1)
+                overlay.refresh()
+                show(element)
+                save()
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    /** 0 right, then anticlockwise, the way [TrickWheel] numbers them. */
+    private fun sectorName(sector: Int): String = activity.getString(
+        when (sector) {
+            0 -> R.string.swipe_right
+            1 -> R.string.skill_sector_up_right
+            2 -> R.string.swipe_up
+            3 -> R.string.skill_sector_up_left
+            4 -> R.string.swipe_left
+            5 -> R.string.skill_sector_down_left
+            6 -> R.string.swipe_down
+            else -> R.string.skill_sector_down_right
+        },
+    )
+
     /** How one swipe binding reads in the editor: "LB + A", "B ×2", "A". */
     private fun actionName(action: SwipeAction): String = when {
         !action.bound -> activity.getString(R.string.button_none)
@@ -348,7 +424,10 @@ class ControlEditPanel(
         idle.visibility = if (element == null) View.VISIBLE else View.GONE
         resetOne.isEnabled = element != null
         arrangement.isEnabled = element != null
-        if (element == null) swipes.visibility = View.GONE
+        if (element == null) {
+            swipes.visibility = View.GONE
+            wheel.visibility = View.GONE
+        }
         val wantTop = element != null && element.yFrac > 0.55f
         if (attached && wantTop != atTop) {
             view.layoutParams = params(wantTop)
@@ -369,6 +448,7 @@ class ControlEditPanel(
             } else {
                 View.GONE
             }
+        wheel.visibility = if (element.kind == ControlKind.TRICK) View.VISIBLE else View.GONE
         size.isEnabled = true
         opacity.isEnabled = true
         visible.isEnabled = true
