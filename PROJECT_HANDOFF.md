@@ -1,101 +1,109 @@
 # PES 2017 Android — Project Handoff
 
-Last updated: 2026-11-14
+Last updated: 2026-11-14 (verification pass)
 
 ## Repository and branch
 
 - Repository: `typhon-op/pes2017-recomp`
-- Branch carried over from the previous session: `freebuff/938b1b2d294d57d7251b2bb3`
-- Baseline given in the brief: `29d4c391a6c1348325ea1ca248bab9b2c73198a2`
-- HEAD at recovery: `29d4c391a6c1348325ea1ca248bab9b2c73198a2` (identical to the baseline)
-- Working tree at recovery: clean; no staged, unstaged or untracked work
-- `PROJECT_HANDOFF.md` before this file: did not exist
-- Previous session checkpoint commit: none. The previous branch is at the baseline
-  commit itself, so no implementation was lost or left behind — everything that
-  was committed previously is the baseline, and nothing else existed.
+- Continuation branch: `freebuff/938b1b2d294d57d7251b2bb3`
+- Previous baseline: `29d4c391a6c1348325ea1ca248bab9b2c73198a2`
+- Implementation checkpoint: `0ac04d5` (present locally and on the remote branch)
+- Later commits on this branch: the fake-shot / stick / sprint corrections and
+  the touch-controls documentation (see `git log` on the branch)
+- `docs/touch-controls.md` is the reference for every control and all sixteen
+  swipe slots.
 
-Nothing was reset, reverted, cleaned or overwritten. The permanent signing key
-(`PES17_KEYSTORE`, external) was not touched, no key was generated, and the ISO
-importing path was not modified.
-
-## What exists in the baseline (verified in source)
-
-- `android/app/src/main/java/com/pes2017/recomp/ControlLayout.kt` — pad model,
-  phases, per-control swipe bindings, defaults, JSON persistence.
-- `TouchOverlayView.kt` — play/edit touch handling, per-finger claims, look
-  deltas, d-pad, swipes, skill palette, trigger release grace, tap pulses.
-- `TouchClaims.kt`, `TouchMath.kt`, `SwipeClassifier.kt` — unit-tested logic.
-- `GamepadInput.kt` — physical pad (Bluetooth/USB) input, player 2 aid.
-- `runtime/skill_stick.h`, `runtime/skill_moves.h`, `runtime/input_pulses.h`,
-  `runtime/input_merge.h`, `runtime/look_scale.h` — native side, capability-probed
-  from `NativeBridge`.
-- Tests: `TouchClaimsTest`, `SwipeClassifierTest`, `ControlLayoutPhaseTest`,
-  `TouchMathTest`, `GamepadInputTest`, plus native tests under `tests/`.
+Nothing was reset, reverted or discarded. The signing key (`PES17_KEYSTORE`,
+external, never in the repository) was not touched and no key was generated.
+ISO importing and the Bluetooth/USB gamepad path were not modified.
 
 ## Implementation status
 
-| # | Requirement | Status |
-|---|---|---|
-| 1 | eFootball-style floating/movable joystick | Completed (Move mode is default; socket appears under the thumb anywhere in the left half, base follows a thumb dragged past the rim, returns to its layout spot on release) |
-| 2 | Fixed joystick mode | Completed (Settings > Controls > Movement stick: Move / Fixed) |
-| 3 | Sprint by outer joystick threshold | Completed (raw throw >= 0.92 sets R1/RB; socket rim lights; can be turned off in Settings) |
-| 4 | Four independent directional swipes on each of the four action buttons | Completed (each face button classifies its own pointers; the editor binds four directions per button; unbound by default) |
-| 5 | Visible directional arrows and gesture feedback | Completed (four chevrons on any action button with bindings; the chevron the thumb is heading for lights white while dragging) |
-| 6 | Fake shot by dragging Shoot toward Pass | Completed (drag vector from shoot compared with the shoot->pass line, >= 0.70 cosine and 24 dp travel; pass bit sent on the lift) |
-| 7 | Camera/LOOK control | Completed (a LOOK region in the free band between the sticks, match only, invisible in play, outlined and adjustable in the editor) |
-| 8 | Layout editor improvements | Completed (drag, pinch, size, opacity, visibility, toggle, snap, keep-apart, reset one/all, plus Arrangement and per-button swipe bindings) |
-| 9 | Manual attacking/defending layouts | Completed (ATTACK/DEFEND masks, Arrangement button in the editor, Settings switch and pause-menu switch; the title does not report possession, so the switch is manual) |
-| 10 | Skill controls and native engine compatibility | Completed previously (SKILL palette, flick skill stick, per-entry-point capability probes with graceful fallbacks) |
-| 11 | Multitouch and cancellation safety | Completed previously (counted claims per control, per-finger gestures, ACTION_CANCEL and pause release, tap pulses) |
-| 12 | Bluetooth/USB controller compatibility | Completed previously (`GamepadInput`, key/motion dispatch, pad-vs-touch merge in `runtime/input_merge.h`) |
+| Requirement | Status |
+|---|---|
+| Move-mode floating joystick (socket under the thumb, fixed base, knob relative to it) | Implemented; arithmetic unit-tested; not device-tested |
+| Fixed-mode joystick (layout socket, knob inside it, centres on release) | Implemented; same shared arithmetic; not device-tested |
+| Sprint from the rim, press 0.92 / release 0.82, R1/RB, rim glow, reset on cancel | Implemented; latch unit-tested; mapping RB = sprint matches the PES 2017 manual; not device-tested |
+| Four-direction swipes on all four action buttons (16 independent slots) | Slots and classification unit-tested; editor binding implemented; all slots ship unbound; not device-tested |
+| Fake shot, Shoot → drag → Pass, cancelling the shot | Corrected to PES 2017's actual cancel rule (pass pressed while shoot is held); arming unit-tested; **not device-verified** |
+| Visible arrows and live direction feedback | Implemented; not device-tested |
+| Camera / LOOK region with sensitivity, smoothing, saturation, invert | Input path traced to the right stick; not device-tested; no separate user deadzone (see docs) |
+| Layout editor: move, resize, opacity, visibility, toggle, snap, keep-apart, reset, arrangement, per-button swipes | Implemented; add/remove of new controls is **not** implemented (controls can be hidden/shown) |
+| Manual attacking/defending pads | Implemented (editor arrangement, Settings and pause-menu switch); automatic switching is **not** implemented and must not be claimed |
+| Skill palette and flick skill stick with native capability probes | Previously implemented; unchanged |
+| Multitouch and cancellation safety | Counted claims, per-pointer gestures, `ACTION_CANCEL`/pause clearing; unchanged and extended for the fake shot |
+| Bluetooth/USB controller | Previously implemented; unchanged |
 
-## Changes made in this session
+## Corrections made in the verification pass
 
-- `ControlLayout.kt`: `PhaseMask.ATTACK`/`DEFEND`, `PadStance`, stance-aware
-  `shownIn`; semantic `sub` labels on the face buttons (PASS, CROSS, SHOOT,
-  THROUGH); a default `look` region.
-- `Prefs.kt`: `stickMode` (Move/Fixed, Move default), `sprintFromStick`,
-  `defendingPad`.
-- `SwipeClassifier.kt`: `peek()` for live arrow feedback, sharing `end()`'s
-  rules (the fake shot uses the landing point and the lift point instead).
-- `TouchOverlayView.kt`: floating stick origin and drag-follow, edge-zone hit
-  test that never steals a shoulder button, sprint from the raw throw with a rim
-  highlight, swipe classification on BUTTON pointers with per-button arrows and
-  live feedback, fake-shot detection, LOOK default, stance plumbing, and d-pad
-  synthesis stopped during a match.
-- `ControlEditPanel.kt`: swipe binding dialog for action buttons; new
-  Arrangement button (both pads / menus / both match pads / attacking /
-  defending).
-- `SettingsActivity` + `activity_settings.xml`: Movement stick, sprint-from-rim
-  switch, defending-pad switch.
-- `GameActivity.kt`: stance applied on create/resume, pause-menu pad switch.
-- `ControlsEditorActivity.kt`: stance applied from prefs.
-- `strings.xml`: the new labels and hints.
+1. **Fake shot.** The checkpoint sent shoot, released it (a real shot), then a
+   pass pulse. PES 2017's own manual lists cancel pass/shot as **B/X/Y then A**:
+   pass must go down while the shot's gauge is showing. The gesture now arms
+   during the drag, presses and holds pass while shoot is still down, sends
+   nothing at the lift, and suppresses the button's swipe bit for that gesture.
+   Pure rule in `PadGestures.kt` (`FakeShotGesture`).
+2. **Floating stick.** The checkpoint dragged the socket along with the thumb.
+   The spec is a fixed base at the touch-down point with the knob moving
+   relative to it; the base no longer follows. Shared vector in `TouchMath.kt`
+   (`StickVector`).
+3. **Sprint.** Was a single 0.92 threshold with the glow from a shaped value.
+   Now a latch (`SprintLatch`): press 0.92, release 0.82, on the raw throw, glow
+   only while latched, reset from every cancellation path.
 
-No native runtime file was changed, so `libpes17.so` does not need rebuilding.
-The changes are all in the app layer and use the existing `NativeBridge` calls.
+## Tests actually executed
 
-## Verification performed
+Host C++ checks, compiled directly with `g++ -std=c++20 -I runtime` (the repo's
+checks are standalone `main()` programs, so no CMake is needed here):
 
-- XML: every file under `android/app/src/main/res` parses; no duplicate string
-  names; every `R.string`/`R.id` reference from the Kotlin sources resolves
-  (the only unmatched names are `android.R.string.ok` and the Gradle-provided
-  `app_name`, both expected).
-- Kotlin: delimiter balance check over every modified file, plus a read-through
-  of each changed region.
-- **Not run:** Gradle build, `assembleDebug`/`assembleRelease`, JUnit tests and
-  any device/emulator test. This cloud workspace has no JDK and no Android SDK,
-  so the APK could not be compiled here. The next session (or CI, which has the
-  SDK and the signing key) must run `android/gradlew :app:assembleRelease` and
-  the unit tests before shipping.
+| Check | Result |
+|---|---|
+| `dynamic_scale_test` | 50 checks, 0 failures |
+| `game_phase_test` | 12 checks, 0 failed |
+| `input_merge_test` | 9 checks, 0 failed |
+| `input_pulses_test` | 9 checks, 0 failed |
+| `log_repeat_test` | 19 checks, 0 failures |
+| `look_scale_test` | 7 checks, 0 failed |
+| `skill_moves_test` | 26 checks, 0 failed |
+| `skill_stick_test` | 47 checks, 0 failed |
+| `stick_arrows_test` | 15 checks, 0 failed |
+| `stick_curve_test` | 25 checks, 0 failed |
+| `stick_pulses_test` | 62 checks, 0 failed |
+| `texture_volume_test` | 196 checks, 0 failures |
+| `texture_store_test` | all checks passed |
+| `version_test` | 97 checks passed |
+
+That is the previous 281 checks plus 196 + 97 and the texture store. Not run:
+`bc_decoder_test` (needs Vulkan headers, absent here), `durable_test` (pulls in
+`ppc_recomp_shared.h`, which only the recompiled guest build generates), and
+every Kotlin/JUnit test, including the new `PadGesturesTest`,
+`StickVectorTest`, `SwipeBindingsTest` and the existing `TouchClaimsTest`,
+`SwipeClassifierTest`, `TouchMathTest`, `ControlLayoutPhaseTest` and
+`GamepadInputTest` -- this workspace has no JDK 17 and no Android SDK, and large
+downloads were deliberately not started.
+
+Static checks done: every modified Kotlin file balances its delimiters; every
+`res/**/*.xml` parses; `R.string`/`R.id` references resolve.
+
+## Not verified — needs a device or CI
+
+1. `android/gradlew :app:assembleRelease` (JDK 17 + Android SDK) and
+   `android/gradlew :app:testDebugUnitTest`.
+2. Fake shot on a real match: shot swing cancels, no shot and no pass leave the
+   player, ordinary shoot and pass taps unchanged.
+3. Both stick modes on 16:9 and 20:9 screens; base does not move during a push;
+   simultaneous stick and buttons; lift/cancel resets.
+4. Sprint at 0.92 on, 0.85 held on, 0.82 off; no stuck R1 after pause or focus
+   loss; physical pad sprint unaffected.
+5. Swipes: bind one direction per button, confirm each arrow, each pulse, and
+   that a plain tap is unchanged.
+6. Camera region turns the view and does not steal touches.
+7. The defending pad appears from Settings and from the pause menu.
 
 ## Suggested next steps
 
-1. Build on CI or a machine with JDK 17 + Android SDK; fix any compile findings
-   (the changes were written without a compiler available).
-2. On a device: check Move vs Fixed feel, sprint at the rim, one bound swipe per
-   face button, fake shot, camera region, and switching the defending pad from
-   the pause menu.
-3. Optionally give the four action buttons default swipe bindings once the
-   behaviour is confirmed on device; they are deliberately unbound so no swipe
-   fires an unasked command on a pad that was not arranged for it.
+1. Run the two Gradle commands on CI (it has the SDK and the signing secret) and
+   fix any compile findings; the Kotlin here was written without a compiler.
+2. Device-test items 2-7 above and record the results here.
+3. If the 16 slots should ship with defaults, decide them from device results
+   rather than guessed PES semantics; `docs/touch-controls.md` explains why they
+   are unbound.
