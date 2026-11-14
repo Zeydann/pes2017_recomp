@@ -53,6 +53,21 @@ enum class PhaseMask {
     MENUS,
     /** A match in progress. */
     MATCH,
+    /** A match, with the attacking pad chosen (gamepad and touch alike). */
+    ATTACK,
+    /** A match, with the defending pad chosen. */
+    DEFEND,
+}
+
+/**
+ * Which of the player's two match pads is out, the attacking one or the
+ * defending one. The title does not tell the app who has the ball, so this is
+ * the player's own switch -- in Settings and in the pause menu -- and every
+ * control can be arranged for one of them.
+ */
+enum class PadStance {
+    ATTACK,
+    DEFEND,
 }
 
 /**
@@ -67,11 +82,16 @@ enum class GamePhase {
     MATCH,
     ;
 
-    /** Whether a control marked [mask] is on screen in this phase. */
-    fun shows(mask: PhaseMask): Boolean = when (mask) {
+    /** Whether a control marked [mask] is on screen in this phase and stance. */
+    fun shows(mask: PhaseMask, stance: PadStance = PadStance.ATTACK): Boolean = when (mask) {
         PhaseMask.ALWAYS -> true
         PhaseMask.MENUS -> this != GamePhase.MATCH
         PhaseMask.MATCH -> this == GamePhase.MATCH
+        // An attacking or defending control is a match control that only one
+        // of the two pads carries. An unknown phase keeps it, as it keeps the
+        // menus' controls: hiding it on a guess would be worse.
+        PhaseMask.ATTACK -> this != GamePhase.MENUS && stance == PadStance.ATTACK
+        PhaseMask.DEFEND -> this != GamePhase.MENUS && stance == PadStance.DEFEND
     }
 }
 
@@ -110,8 +130,9 @@ data class ControlElement(
     /** What a touch on it sends when it was not a swipe at all. */
     var swipeTap: Int = 0,
 ) {
-    /** Whether it is on screen at all: the player's switch and the phase, both. */
-    fun shownIn(phase: GamePhase): Boolean = visible && phase.shows(shownWhen)
+    /** Whether it is on screen at all: the player's switch, the phase and the pad, all three. */
+    fun shownIn(phase: GamePhase, stance: PadStance = PadStance.ATTACK): Boolean =
+        visible && phase.shows(shownWhen, stance)
 }
 
 /**
@@ -284,11 +305,11 @@ class ControlLayout private constructor(
             fun place(
                 id: String, kind: ControlKind, value: Int, label: String,
                 x: Float, y: Float, size: Float, alpha: Float = 0.45f, visible: Boolean = true,
-                shownWhen: PhaseMask = PhaseMask.ALWAYS,
+                shownWhen: PhaseMask = PhaseMask.ALWAYS, sub: String = "",
             ) = ControlElement(
                 id, kind, value, label,
                 (if (x >= 0f) x else w + x) / w, (if (y >= 0f) y else h + y) / h,
-                size, alpha, visible, shownWhen = shownWhen,
+                size, alpha, visible, shownWhen = shownWhen, sub = sub,
             )
 
             val centre = w / 2f
@@ -297,11 +318,13 @@ class ControlLayout private constructor(
                     // Left thumb: movement.
                     place("stick", ControlKind.STICK, 0, "LS", 95f, -95f, 150f, 0.40f),
 
-                    // Right thumb: the four actions as the pad's diamond.
-                    place("a", ControlKind.BUTTON, NativeBridge.A, "A", -110f, -52f, 68f),
-                    place("b", ControlKind.BUTTON, NativeBridge.B, "B", -52f, -110f, 68f),
-                    place("x", ControlKind.BUTTON, NativeBridge.X, "X", -168f, -110f, 68f),
-                    place("y", ControlKind.BUTTON, NativeBridge.Y, "Y", -110f, -168f, 68f),
+                    // Right thumb: the four actions as the pad's diamond. `sub`
+                    // is what the control does on the ball; the fake shot and
+                    // the editor read it, so the words matter.
+                    place("a", ControlKind.BUTTON, NativeBridge.A, "A", -110f, -52f, 68f, sub = "PASS"),
+                    place("b", ControlKind.BUTTON, NativeBridge.B, "B", -52f, -110f, 68f, sub = "CROSS"),
+                    place("x", ControlKind.BUTTON, NativeBridge.X, "X", -168f, -110f, 68f, sub = "SHOOT"),
+                    place("y", ControlKind.BUTTON, NativeBridge.Y, "Y", -110f, -168f, 68f, sub = "THROUGH"),
 
                     // The shoulders where a pad has them: L2 / L1 along the top left,
                     // R1 / R2 along the top right, triggers outermost.
@@ -332,8 +355,21 @@ class ControlLayout private constructor(
 
                     // Four-way swipes, hidden until the player binds a direction:
                     // an unbound swipe stays out of the way rather than
-                    // duplicating an action button.
+                    // duplicating an action button. The four action buttons take
+                    // their own swipes as well; this patch is for a gesture the
+                    // player wants off the buttons altogether.
                     place("swipe", ControlKind.SWIPE, 0, "SWIPE", -215f, -52f, 96f, 0.40f, visible = false),
+
+                    // The camera: a region, not a control, so it is invisible in
+                    // play and only outlined in the editor. It lies under
+                    // everything (the overlay looks for it last), so it turns the
+                    // view on an empty stretch of screen without ever taking a
+                    // touch from a button or the stick. It sits in the free band
+                    // between the left stick and the skill stick, clear of every
+                    // control that is on screen by default; the editor can move
+                    // it, resize it, or turn it off.
+                    place("look", ControlKind.LOOK, 0, "LOOK", 330f, 200f, 300f, 0f,
+                        shownWhen = PhaseMask.MATCH),
 
                     // The menus' d-pad, above where the left thumb rests. It is
                     // on screen only while the title is in its menus (the app's

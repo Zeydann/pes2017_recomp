@@ -66,7 +66,7 @@ class ControlEditPanel(
             ).apply { marginStart = (6 * dp).roundToInt() })
         }
     }
-    /** Shown only while a swipe control is selected: what each direction sends. */
+    /** Shown while a swipe control or an action button is selected: what each direction sends. */
     private val swipes: Button = Button(activity).apply {
         setText(R.string.swipe_bindings)
         textSize = 12f
@@ -76,12 +76,24 @@ class ControlEditPanel(
         setOnClickListener { showSwipeBindings() }
     }
 
+    /** Which pad the selected control belongs to: both, the menus, or one stance. */
+    private val arrangement: Button = Button(activity).apply {
+        setText(R.string.arrangement)
+        textSize = 12f
+        minWidth = 0
+        minimumWidth = 0
+        setOnClickListener { pickArrangement() }
+    }
+
     private var current: ControlElement? = null
     private var attached = false
     private var atTop = false
 
     init {
         val dp = activity.resources.displayMetrics.density
+        actions.addView(arrangement, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+        ).apply { marginStart = (6 * dp).roundToInt() })
         actions.addView(swipes, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
         ).apply { marginStart = (6 * dp).roundToInt() })
@@ -156,6 +168,38 @@ class ControlEditPanel(
     }
 
     private fun save() = overlay.layout.save(activity)
+
+    // ---- which pad a control belongs to --------------------------------------
+
+    /**
+     * Both pads, the menus, or one of the two match layouts. The title does not
+     * report possession, so the attacking and defending pads are the player's
+     * own switch (Prefs.defendingPad, Settings and the pause menu), and this is
+     * how a control is put on one of them.
+     */
+    private fun pickArrangement() {
+        val element = current ?: return
+        val masks = arrayOf(PhaseMask.ALWAYS, PhaseMask.MENUS, PhaseMask.MATCH,
+            PhaseMask.ATTACK, PhaseMask.DEFEND)
+        val labels = arrayOf(
+            activity.getString(R.string.arrangement_always),
+            activity.getString(R.string.arrangement_menus),
+            activity.getString(R.string.arrangement_match),
+            activity.getString(R.string.arrangement_attack),
+            activity.getString(R.string.arrangement_defend),
+        )
+        AlertDialog.Builder(activity)
+            .setTitle(R.string.arrangement)
+            .setSingleChoiceItems(labels, masks.indexOf(element.shownWhen)) { dialog, which ->
+                element.shownWhen = masks[which]
+                overlay.refresh()
+                show(element)
+                save()
+                dialog.dismiss()
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
 
     // ---- what a swipe sends -------------------------------------------------
 
@@ -271,6 +315,7 @@ class ControlEditPanel(
         view.visibility = if (element == null) View.GONE else View.VISIBLE
         idle.visibility = if (element == null) View.VISIBLE else View.GONE
         resetOne.isEnabled = element != null
+        arrangement.isEnabled = element != null
         if (element == null) swipes.visibility = View.GONE
         val wantTop = element != null && element.yFrac > 0.55f
         if (attached && wantTop != atTop) {
@@ -286,7 +331,12 @@ class ControlEditPanel(
             return
         }
         title.text = activity.getString(R.string.edit_selected, ControlLayout.labelFor(element, overlay.playStation))
-        swipes.visibility = if (element.kind == ControlKind.SWIPE) View.VISIBLE else View.GONE
+        swipes.visibility =
+            if (element.kind == ControlKind.SWIPE || element.kind == ControlKind.BUTTON) {
+                View.VISIBLE
+            } else {
+                View.GONE
+            }
         size.isEnabled = true
         opacity.isEnabled = true
         visible.isEnabled = true

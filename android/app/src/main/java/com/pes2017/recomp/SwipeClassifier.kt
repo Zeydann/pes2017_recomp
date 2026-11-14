@@ -66,6 +66,26 @@ internal class SwipeClassifier(
         }
     }
 
+    /**
+     * What the gesture would read as right now, without ending it. This is the
+     * drawing's feedback -- the arrow a thumb is heading for lights up under
+     * it -- and it is deliberately the same rule as [end]: a gesture that
+     * would not fire must not look as if it will.
+     */
+    fun peek(pointerId: Int): Swipe {
+        val gesture = gestures[pointerId] ?: return Swipe.NONE
+        val dx = gesture.lastX - gesture.startX
+        val dy = gesture.lastY - gesture.startY
+        val ax = abs(dx)
+        val ay = abs(dy)
+        if (max(ax, ay) < minTravelPx) return Swipe.NONE
+        return when {
+            ax >= ay * dominance -> if (dx > 0f) Swipe.RIGHT else Swipe.LEFT
+            ay >= ax * dominance -> if (dy > 0f) Swipe.DOWN else Swipe.UP
+            else -> Swipe.NONE
+        }
+    }
+
     /** The gesture was taken away (another finger claimed it, or the pad hid). */
     fun cancel(pointerId: Int) {
         gestures.remove(pointerId)

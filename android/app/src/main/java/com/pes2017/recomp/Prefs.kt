@@ -352,6 +352,38 @@ class Prefs(context: Context) {
         get() = store.getBoolean(KEY_STICK_TRAVEL_KNOB, true)
         set(value) = store.edit().putBoolean(KEY_STICK_TRAVEL_KNOB, value).apply()
 
+    /**
+     * Where the movement stick lives. [STICK_MOVE] is the eFootball-style
+     * floating stick: the socket appears under the thumb anywhere in the left
+     * half of the screen and follows a thumb that drags past its rim, so the
+     * player never has to find a fixed circle. [STICK_FIXED] keeps the socket
+     * where the layout put it, which is what players who rest their thumb on a
+     * known spot ask for.
+     */
+    var stickMode: String
+        get() = store.getString(KEY_STICK_MODE, STICK_MOVE) ?: STICK_MOVE
+        set(value) = store.edit()
+            .putString(KEY_STICK_MODE, if (value == STICK_FIXED) STICK_FIXED else STICK_MOVE)
+            .apply()
+
+    /**
+     * Sprint from the stick's rim: push the movement stick all the way out and
+     * the player runs, the way a pad's R1 does. Off leaves sprinting to the
+     * button alone.
+     */
+    var sprintFromStick: Boolean
+        get() = store.getBoolean(KEY_SPRINT_STICK, true)
+        set(value) = store.edit().putBoolean(KEY_SPRINT_STICK, value).apply()
+
+    /**
+     * Which of the two match pads is out: the attacking layout or the defending
+     * one. The title does not report possession, so this is the player's own
+     * switch (Settings > Controls, and the pause menu).
+     */
+    var defendingPad: Boolean
+        get() = store.getBoolean(KEY_DEFENDING_PAD, false)
+        set(value) = store.edit().putBoolean(KEY_DEFENDING_PAD, value).apply()
+
     // ---- the graphics driver ------------------------------------------------
 
     /** The folder of the driver the player picked, or "" for the system's. */
@@ -462,6 +494,15 @@ class Prefs(context: Context) {
         private const val KEY_RIGHT_STICK_CURVE = "rightStickCurve"
         private const val KEY_FLICK_SKILL_STICK = "flickSkillStick"
         private const val KEY_STICK_TRAVEL_KNOB = "stickTravelMatchesKnob"
+        private const val KEY_STICK_MODE = "stickMode"
+        private const val KEY_SPRINT_STICK = "sprintFromStick"
+        private const val KEY_DEFENDING_PAD = "defendingPad"
+
+        /** The movement stick under the thumb, anywhere in its half of the screen. */
+        const val STICK_MOVE = "move"
+
+        /** The movement stick where the layout put it. */
+        const val STICK_FIXED = "fixed"
         private const val KEY_DRIVER_DIR = "driverDirectory"
         private const val KEY_DRIVER_LIB = "driverLibrary"
         private const val KEY_GAME_DIR = "gameDirectory"

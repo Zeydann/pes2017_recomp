@@ -47,6 +47,7 @@ class ControlsEditorActivity : AppCompatActivity() {
 
         overlay = TouchOverlayView(this)
         overlay.layout = ControlLayout.load(this)
+        overlay.stance = if (prefs.defendingPad) PadStance.DEFEND else PadStance.ATTACK
         overlay.playStation = prefs.playStationButtons
         overlay.onLayoutEdited = { overlay.layout.save(this) }
         overlay.onSelectionChanged = { panel.show(it) }

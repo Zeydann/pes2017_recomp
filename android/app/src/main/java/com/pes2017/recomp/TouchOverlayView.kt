@@ -83,6 +83,22 @@ class TouchOverlayView @JvmOverloads constructor(
     private val claims = TouchClaims()
     private val stickPositions = HashMap<String, FloatArray>()   // id -> normalised x, y
 
+    // The floating movement stick (Prefs.stickMode): the socket is wherever the
+    // thumb landed, and it follows a thumb that keeps going. Only the movement
+    // stick floats -- the skill stick is a flick (runtime/skill_stick.h) and the
+    // rest of the pad is aimed at, not found.
+    private var floatPointer = -1
+    private var floatOriginX = 0f
+    private var floatOriginY = 0f
+
+    // Where each finger landed: the fake shot is a drag from shoot towards
+    // pass, so the vector between the landing point and the lift is the test.
+    private val pressAt = HashMap<Int, FloatArray>()
+
+    // The direction a thumb on an action button is heading for right now, for
+    // the arrows under it. The gesture itself is read on the lift, as ever.
+    private val liveSwipes = HashMap<Int, Swipe>()
+
     // Look is a gesture rather than a hold, so each finger on it is sampled on
     // its own: with one slot for "the look pointer", a second thumb landing on
     // the look area re-based the first one and the view jumped.
@@ -108,6 +124,9 @@ class TouchOverlayView @JvmOverloads constructor(
     /** A palette button needs the runtime that plays moves; without it, it is not there. */
     private fun available(element: ControlElement) =
         element.kind != ControlKind.SKILL || NativeBridge.skillStick
+
+    /** The eFootball-style floating movement stick, unless the player fixed it. */
+    private val floatingStick get() = prefs.stickMode == Prefs.STICK_MOVE
 
     // A trigger stays down for a moment after the finger leaves. Lifting RT for
     // the beat it takes to tap a button used to drop the sprint on exactly the
@@ -151,6 +170,19 @@ class TouchOverlayView @JvmOverloads constructor(
      * first, so a menu cannot keep a direction held into a match.
      */
     var gamePhase: GamePhase = GamePhase.UNKNOWN
+        set(value) {
+            if (field == value) return
+            field = value
+            releaseEverything()
+            invalidate()
+        }
+
+    /**
+     * Which of the player's two match pads is out (Prefs.defendingPad). A control
+     * arranged for one stance comes and goes with it; one arranged for both is
+     * unaffected.
+     */
+    var stance: PadStance = PadStance.ATTACK
         set(value) {
             if (field == value) return
             field = value
@@ -244,12 +276,21 @@ class TouchOverlayView @JvmOverloads constructor(
         for (element in layout.elements) {
             if (element.kind == ControlKind.LOOK) continue
             if (!available(element)) continue
-            if (!showAll && !element.shownIn(gamePhase)) continue
+            if (!showAll && !element.shownIn(gamePhase, stance)) continue
             if (hit(element, x, y)) return element
+        }
+        // A floating movement stick is where the thumb lands, not where it was
+        // drawn: in play its half of the screen is its own. Every control that
+        // shares that half has been looked for already, so a shoulder button at
+        // the top of it still wins.
+        if (!showAll && floatingStick && x < width * FLOAT_ZONE) {
+            layout.elements.firstOrNull {
+                it.kind == ControlKind.STICK && it.value == 0 && it.shownIn(gamePhase, stance)
+            }?.let { return it }
         }
         for (element in layout.elements) {
             if (element.kind != ControlKind.LOOK) continue
-            if (!showAll && !element.shownIn(gamePhase)) continue
+            if (!showAll && !element.shownIn(gamePhase, stance)) continue
             if (hit(element, x, y)) return element
         }
         return null
@@ -272,7 +313,7 @@ class TouchOverlayView @JvmOverloads constructor(
         triggerReleaseAt.entries.removeAll { it.value <= now }
 
         for (element in layout.elements) {
-            if (!element.shownIn(gamePhase)) continue
+            if (!element.shownIn(gamePhase, stance)) continue
             val on = claims.isOn(element.id)
             when (element.kind) {
                 ControlKind.BUTTON -> if (on) buttons = buttons or element.value
@@ -333,10 +374,23 @@ class TouchOverlayView @JvmOverloads constructor(
             val right = StickShape.apply(rx, ry, prefs.rightStickDeadzone, prefs.rightStickCurve)
             rx = right[0]; ry = right[1]
         }
+        // Sprint from the rim: a thumb all the way out runs. The raw throw
+        // decides, so the shaped curve cannot make a jog a sprint by squeezing
+        // the top of its range. The menus keep the stick for the d-pad, where
+        // R1 is a menu button, so this is a match gesture.
+        if (prefs.sprintFromStick && gamePhase != GamePhase.MENUS &&
+            hypot(rawLx, rawLy) >= SPRINT_THRESHOLD
+        ) {
+            buttons = buttons or NativeBridge.RB
+        }
+
         if (!NativeBridge.dpadSynthesis) {
-            if (dpadOnScreen()) {
-                // The player's own d-pad is on screen: the same four bits from
-                // two places is how a menu scrolls twice per press.
+            if (dpadOnScreen() || gamePhase == GamePhase.MATCH) {
+                // The player's own d-pad is on screen, or there is a match in
+                // progress and nothing left to navigate: the same four bits
+                // from two places is how a menu scrolls twice per press, and
+                // an arrow pressed by a sprinting thumb is a tactic nobody
+                // asked for.
                 stickArrows.clear()
             } else {
                 // The raw throw, not the shaped one: the press point is 0.60 of
@@ -368,6 +422,9 @@ class TouchOverlayView @JvmOverloads constructor(
     /** Everything up: called when the pad is hidden, edited, or paused. */
     fun releaseEverything() {
         stickPositions.clear()
+        floatPointer = -1
+        pressAt.clear()
+        liveSwipes.clear()
         // Toggles survive a pause -- a player who was aiming down sights
         // before the phone rang is still aiming when they come back -- but
         // not the editor, which would otherwise leave a bit stuck down.
@@ -410,7 +467,7 @@ class TouchOverlayView @JvmOverloads constructor(
 
     /** Whether a d-pad of the player's own is on screen in this phase. */
     private fun dpadOnScreen(): Boolean =
-        layout.elements.any { it.kind == ControlKind.DPAD && it.shownIn(gamePhase) }
+        layout.elements.any { it.kind == ControlKind.DPAD && it.shownIn(gamePhase, stance) }
 
     // ---- touches --------------------------------------------------------------
 
@@ -454,7 +511,7 @@ class TouchOverlayView @JvmOverloads constructor(
                                 }
                                 sendSkill(x, y)
                             } else {
-                                moveStick(element, x, y)
+                                moveStick(element, x, y, id)
                                 changed = true
                             }
                         }
@@ -462,7 +519,17 @@ class TouchOverlayView @JvmOverloads constructor(
                             val arm = dpadArm(element, x, y)
                             if (dpadBits[id] != arm) { dpadBits[id] = arm; changed = true }
                         }
-                        ControlKind.SWIPE -> swipeClassifier.move(id, x, y)
+                        ControlKind.SWIPE -> {
+                            swipeClassifier.move(id, x, y)
+                            liveSwipes[id] = swipeClassifier.peek(id)
+                        }
+                        ControlKind.BUTTON -> {
+                            // The same four directions, on the button the thumb
+                            // is already on. Only the drawing reads the peek;
+                            // the bit is sent when the finger lifts.
+                            swipeClassifier.move(id, x, y)
+                            liveSwipes[id] = swipeClassifier.peek(id)
+                        }
                         else -> Unit
                     }
                 }
@@ -470,7 +537,11 @@ class TouchOverlayView @JvmOverloads constructor(
 
             MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> {
                 val index = event.actionIndex
-                changed = release(event.getPointerId(index))
+                changed = release(
+                    event.getPointerId(index),
+                    event.getX(index),
+                    event.getY(index),
+                )
             }
 
             MotionEvent.ACTION_CANCEL -> {
@@ -502,14 +573,27 @@ class TouchOverlayView @JvmOverloads constructor(
             return false
         }
         triggerHaptic()
+        pressAt[pointerId] = floatArrayOf(x, y)
         // Pressed again inside its grace, a trigger is held, not released.
         if (element.kind == ControlKind.TRIGGER) triggerReleaseAt.remove(element.id)
         // Recorded, not assigned: a second finger on the same control must not
         // take it from the first, and the control stays down until both lift.
         claims.press(pointerId, element)
         when (element.kind) {
-            ControlKind.STICK -> {
-                if (element.value != 0 && flicking) {
+            ControlKind.STICK -> when {
+                // The movement stick, floating: its socket is the thumb's
+                // landing point, and it starts centred under it.
+                element.value == 0 && floatingStick -> {
+                    // A second thumb on the stick shares the socket the first
+                    // one placed, rather than teleporting it out from under it.
+                    if (floatPointer < 0) {
+                        floatPointer = pointerId
+                        floatOriginX = x
+                        floatOriginY = y
+                    }
+                    stickPositions[element.id] = floatArrayOf(0f, 0f)
+                }
+                element.value != 0 && flicking -> {
                     // The flick is measured from here: wherever the thumb found
                     // the glass is the origin, so there is no centre to hunt for
                     // between one move and the next.
@@ -517,12 +601,14 @@ class TouchOverlayView @JvmOverloads constructor(
                     skillOriginX = x
                     skillOriginY = y
                     if (NativeBridge.skillStick) NativeBridge.nativeSkillTouch(0f, 0f)
-                } else {
-                    moveStick(element, x, y)
                 }
+                else -> moveStick(element, x, y, pointerId)
             }
             ControlKind.DPAD -> dpadBits[pointerId] = dpadArm(element, x, y)
             ControlKind.SWIPE -> swipeClassifier.begin(pointerId, x, y, SystemClock.uptimeMillis())
+            ControlKind.BUTTON -> if (!element.toggle) {
+                swipeClassifier.begin(pointerId, x, y, SystemClock.uptimeMillis())
+            }
             // One tap, one move: the runtime plays it on the skill stick and
             // holds the stick until its last frame, so nothing here has to.
             ControlKind.SKILL -> if (NativeBridge.skillStick) NativeBridge.nativeSkillPlay(element.value)
@@ -531,7 +617,7 @@ class TouchOverlayView @JvmOverloads constructor(
         return true
     }
 
-    private fun release(pointerId: Int): Boolean {
+    private fun release(pointerId: Int, upX: Float, upY: Float): Boolean {
         if (lookPointers.remove(pointerId) != null) {
             // A turn ends when the last finger on the look area lifts.
             if (lookPointers.isEmpty()) NativeBridge.nativeLookEnd()
@@ -539,6 +625,25 @@ class TouchOverlayView @JvmOverloads constructor(
         }
         val released = claims.release(pointerId) ?: return false
         dpadBits.remove(pointerId)
+        // Where the finger actually left the glass, which can differ from its
+        // last move sample: the fake shot is a drag, and the lift is its end.
+        val lift = floatArrayOf(upX, upY)
+        val start = pressAt.remove(pointerId)
+        liveSwipes.remove(pointerId)
+        if (released.element.kind == ControlKind.BUTTON) {
+            // A swipe on the button the thumb is already on: the held bit has
+            // been sent all along, and a bound direction is one more bit at the
+            // lift. Unbound directions stay silent, as on the swipe patch.
+            val direction = if (released.lastClaim) {
+                swipeClassifier.end(pointerId, SystemClock.uptimeMillis())
+            } else {
+                swipeClassifier.cancel(pointerId)
+                Swipe.NONE
+            }
+            var bits = released.element.swipeBit(direction)
+            if (start != null) bits = bits or fakeShot(released.element, start, lift)
+            if (bits != 0) pendingSwipes = pendingSwipes or bits
+        }
         if (released.element.kind == ControlKind.SWIPE) {
             // One gesture, one bit. Another finger still on the patch keeps its
             // own gesture, but this one is over and must not fire on top of it.
@@ -555,6 +660,9 @@ class TouchOverlayView @JvmOverloads constructor(
         // to lift centres it.
         if (released.element.kind == ControlKind.STICK) {
             if (released.lastClaim) stickPositions.remove(released.element.id)
+            // The socket goes back to where the layout put it when the last
+            // floating thumb lifts.
+            if (pointerId == floatPointer) floatPointer = -1
             // A flick belongs to the finger that made it, not to the control: a
             // second thumb left on the stick must not inherit the gesture.
             if (pointerId == skillPointer) {
@@ -626,17 +734,67 @@ class TouchOverlayView @JvmOverloads constructor(
     private fun throwRadius(element: ControlElement) =
         radius(element) * if (prefs.travelMatchesKnob) stickTravel else 1f
 
-    private fun moveStick(element: ControlElement, x: Float, y: Float) {
+    /** Whether this stick is the movement stick held by a floating thumb. */
+    private fun isFloating(element: ControlElement): Boolean =
+        floatingStick && element.value == 0 && floatPointer >= 0 &&
+            claims.elementFor(floatPointer)?.id == element.id
+
+    /** Where a stick's socket is drawn, and measured from. */
+    private fun stickBaseX(element: ControlElement): Float =
+        if (isFloating(element)) floatOriginX else centreX(element)
+
+    private fun stickBaseY(element: ControlElement): Float =
+        if (isFloating(element)) floatOriginY else centreY(element)
+
+    private fun moveStick(element: ControlElement, x: Float, y: Float, pointerId: Int = -1) {
         // The knob's own travel is the throw: pushing it to its rim is full
         // speed, which is the travel the hand can see. The longer throw is kept
         // for players who learned on it (Prefs.travelMatchesKnob).
         val r = throwRadius(element)
-        var dx = (x - centreX(element)) / r
+        val baseX = stickBaseX(element)
+        val baseY = stickBaseY(element)
+        var dx = (x - baseX) / r
         // The guest's Y points up; the screen's points down.
-        var dy = -(y - centreY(element)) / r
+        var dy = -(y - baseY) / r
         val length = hypot(dx, dy)
-        if (length > 1f) { dx /= length; dy /= length }
+        if (length > 1f) {
+            if (isFloating(element) && pointerId == floatPointer) {
+                // A floating socket follows the thumb rather than letting the
+                // thumb pin at its rim: the deflection stays at full while the
+                // base is dragged along, which is the eFootball feel. A second
+                // thumb deflects from the same socket but does not move it.
+                floatOriginX = x - (x - baseX) / length * r
+                floatOriginY = y - (y - baseY) / length * r
+            }
+            dx /= length
+            dy /= length
+        }
         stickPositions[element.id] = floatArrayOf(dx, dy)
+    }
+
+    /**
+     * The fake shot: shoot, drag towards pass, let go. PES reads a shot
+     * cancelled into a pass; the shot's own bit has been held and is released
+     * with the finger, and the pass is the pulse this lift carries. The two
+     * controls are found by what they do on the ball (ControlLayout's `sub`),
+     * so a pad with them somewhere else keeps the gesture.
+     */
+    private fun fakeShot(element: ControlElement, start: FloatArray, lift: FloatArray): Int {
+        if (element.sub != "SHOOT") return 0
+        val pass = layout.elements.firstOrNull {
+            it.sub == "PASS" && it.kind == ControlKind.BUTTON && it.shownIn(gamePhase, stance)
+        } ?: return 0
+        val towardX = centreX(pass) - centreX(element)
+        val towardY = centreY(pass) - centreY(element)
+        val toward = hypot(towardX, towardY)
+        if (toward < 1f) return 0
+        val dx = lift[0] - start[0]
+        val dy = lift[1] - start[1]
+        val travel = hypot(dx, dy)
+        if (travel < FAKE_SHOT_TRAVEL * density) return 0
+        // Within about 45 degrees of the line to pass: a drag, not a swipe.
+        val cosine = (dx * towardX + dy * towardY) / (travel * toward)
+        return if (cosine >= 0.70f) pass.value else 0
     }
 
     /**
@@ -811,8 +969,8 @@ class TouchOverlayView @JvmOverloads constructor(
             // In the editor everything is drawn, faded when it is not on screen
             // in play -- a control that belongs to the menus has to be findable
             // over the pitch.
-            if (!editing && !element.shownIn(gamePhase)) continue
-            val faded = editing && !element.shownIn(gamePhase)
+            if (!editing && !element.shownIn(gamePhase, stance)) continue
+            val faded = editing && !element.shownIn(gamePhase, stance)
             val alpha = if (editing) max(0.28f, element.alpha) else element.alpha
             when (element.kind) {
                 ControlKind.LOOK -> drawLook(canvas, element, faded)
@@ -835,6 +993,18 @@ class TouchOverlayView @JvmOverloads constructor(
     private fun isOn(element: ControlElement): Boolean = claims.isOn(element.id)
 
     companion object {
+        /** How much of the screen's width, from the left, the floating stick owns. */
+        private const val FLOAT_ZONE = 0.5f
+
+        /** The raw throw at which the movement stick is running, not jogging. */
+        private const val SPRINT_THRESHOLD = 0.92f
+
+        /** The shaped deflection at which the socket's rim lights for a sprint. */
+        private const val SPRINT_RING = 0.80f
+
+        /** How far a drag has to go to count as a fake shot, in dp. */
+        private const val FAKE_SHOT_TRAVEL = 24f
+
         // The Xbox 360 pad colours, because the game's own prompts use them
         private const val COLOR_A = 0xFF107C10.toInt()      // Emerald Green
         private const val COLOR_A_GLOW = 0xFF22C55E.toInt()
@@ -984,6 +1154,11 @@ class TouchOverlayView @JvmOverloads constructor(
                 subText.color = Color.argb((alpha * fadeFactor * 220).toInt().coerceIn(0, 255), 241, 245, 249)
                 canvas.drawText(actionSubtitle, cx, subY, subText)
             }
+
+            // The four directions this button can swipe, on its rim. Nothing is
+            // drawn for a button with no bindings, so no arrow promises a
+            // gesture that does nothing.
+            drawSwipeArrows(canvas, element, cx, cy, r, alpha * fadeFactor)
         } else if (isRT || isLT) {
             // Xbox Ergonomic Trigger (RT / LT)
             val fillA = (alpha * fadeFactor * (if (pressed) 190 else 95)).toInt().coerceIn(0, 255)
@@ -1079,6 +1254,59 @@ class TouchOverlayView @JvmOverloads constructor(
         }
     }
 
+    /** Whether any of this control's four directions sends something. */
+    private fun hasSwipeBindings(element: ControlElement): Boolean =
+        element.swipeUp != 0 || element.swipeDown != 0 ||
+            element.swipeLeft != 0 || element.swipeRight != 0
+
+    /** The direction a thumb on this control is heading for right now. */
+    private fun liveSwipe(element: ControlElement): Swipe {
+        for ((pointerId, direction) in liveSwipes) {
+            if (direction != Swipe.NONE && claims.elementFor(pointerId)?.id == element.id) return direction
+        }
+        return Swipe.NONE
+    }
+
+    /**
+     * Four chevrons on an action button's rim, one per direction: a faint tick
+     * where nothing is bound, a solid one where something is, and white under
+     * the thumb that is travelling that way. This is the gesture feedback -- the
+     * bit itself is still sent only when the finger lifts (SwipeClassifier).
+     */
+    private fun drawSwipeArrows(
+        canvas: Canvas, element: ControlElement, cx: Float, cy: Float, r: Float, alpha: Float,
+    ) {
+        if (!hasSwipeBindings(element)) return
+        val live = liveSwipe(element)
+        val inset = r * 0.74f
+        val arm = max(5f * density, r * 0.16f)
+        notchPaint.strokeWidth = max(1.5f, r * 0.05f)
+        for (swipe in intArrayOf(0, 1, 2, 3)) {
+            val direction = when (swipe) {
+                0 -> Swipe.UP
+                1 -> Swipe.DOWN
+                2 -> Swipe.LEFT
+                else -> Swipe.RIGHT
+            }
+            val bound = element.swipeBit(direction) != 0
+            val lit = live == direction
+            val dx = when (direction) { Swipe.LEFT -> -1f; Swipe.RIGHT -> 1f; else -> 0f }
+            val dy = when (direction) { Swipe.UP -> -1f; Swipe.DOWN -> 1f; else -> 0f }
+            val level = when { lit -> 255; bound -> 205; else -> 60 }
+            notchPaint.color = Color.argb((alpha * level).toInt().coerceIn(0, 255), 255, 255, 255)
+            val tipX = cx + dx * inset
+            val tipY = cy + dy * inset
+            val backX = tipX - dx * arm
+            val backY = tipY - dy * arm
+            canvas.drawLine(backX, backY, tipX, tipY, notchPaint)
+            // Barbs, so it reads as an arrow rather than a tick.
+            val barbX = -dy * arm * 0.8f
+            val barbY = dx * arm * 0.8f
+            canvas.drawLine(tipX, tipY, backX + barbX, backY + barbY, notchPaint)
+            canvas.drawLine(tipX, tipY, backX - barbX, backY - barbY, notchPaint)
+        }
+    }
+
     /** The PlayStation face symbol for a face button's id, drawn as lines so no font is needed. */
     private fun drawPsSymbol(canvas: Canvas, id: String, cx: Float, cy: Float, size: Float, color: Int) {
         highlightPaint.color = color
@@ -1103,8 +1331,9 @@ class TouchOverlayView @JvmOverloads constructor(
 
     private fun drawStick(canvas: Canvas, element: ControlElement, alpha: Float, faded: Boolean) {
         val r = radius(element)
-        val cx = centreX(element)
-        val cy = centreY(element)
+        // A floating stick is drawn where the thumb is holding it.
+        val cx = stickBaseX(element)
+        val cy = stickBaseY(element)
         val fadeFactor = if (faded) 0.45f else 1f
         val position = stickPositions[element.id]
         val isDeflected = position != null
@@ -1117,6 +1346,14 @@ class TouchOverlayView @JvmOverloads constructor(
         stroke.color = Color.argb((alpha * fadeFactor * 130).toInt().coerceIn(0, 255), 45, 55, 70)
         stroke.strokeWidth = max(1.5f, r * 0.035f)
         canvas.drawCircle(cx, cy, r - stroke.strokeWidth * 0.5f, stroke)
+
+        // The rim lights when the throw is a sprint: the stick itself says what
+        // it is doing, rather than a separate button lighting up somewhere.
+        if (prefs.sprintFromStick && position != null && hypot(position[0], position[1]) >= SPRINT_RING) {
+            stroke.color = Color.argb((alpha * fadeFactor * 235).toInt().coerceIn(0, 255), 34, 197, 94)
+            stroke.strokeWidth = max(2f, r * 0.07f)
+            canvas.drawCircle(cx, cy, r - stroke.strokeWidth * 0.5f, stroke)
+        }
 
         // 4 Cardinal Guide Notches on the outer socket perimeter (Xbox stick housing style)
         val notchLen = r * 0.10f

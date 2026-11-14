@@ -104,6 +104,13 @@ class SettingsActivity : AppCompatActivity() {
         switch(R.id.gamepad, prefs.gamepadEnabled) { prefs.gamepadEnabled = it }
         switch(R.id.vibration, prefs.vibration) { prefs.vibration = it }
         switch(R.id.flick_skill_stick, prefs.flickSkillStick) { prefs.flickSkillStick = it }
+        switch(R.id.sprint_from_stick, prefs.sprintFromStick) { prefs.sprintFromStick = it }
+        switch(R.id.defending_pad, prefs.defendingPad) { prefs.defendingPad = it }
+        val stickMode: android.widget.RadioGroup = findViewById(R.id.stick_mode)
+        stickMode.check(if (prefs.stickMode == Prefs.STICK_FIXED) R.id.stick_mode_fixed else R.id.stick_mode_move)
+        stickMode.setOnCheckedChangeListener { _, id ->
+            prefs.stickMode = if (id == R.id.stick_mode_fixed) Prefs.STICK_FIXED else Prefs.STICK_MOVE
+        }
         val buttonStyle: android.widget.RadioGroup = findViewById(R.id.button_style)
         buttonStyle.check(if (prefs.playStationButtons) R.id.button_style_playstation else R.id.button_style_xbox)
         buttonStyle.setOnCheckedChangeListener { _, id -> prefs.playStationButtons = id == R.id.button_style_playstation }

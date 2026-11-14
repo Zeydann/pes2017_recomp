@@ -518,6 +518,68 @@
                         style="@style/SettingLabel"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:text="@string/stick_mode" />
+
+                    <RadioGroup
+                        android:id="@+id/stick_mode"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:paddingStart="6dp">
+
+                        <RadioButton
+                            android:id="@+id/stick_mode_move"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/stick_mode_move"
+                            android:textColor="@color/pes_text" />
+
+                        <RadioButton
+                            android:id="@+id/stick_mode_fixed"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/stick_mode_fixed"
+                            android:textColor="@color/pes_text" />
+                    </RadioGroup>
+
+                    <TextView
+                        style="@style/SettingHint"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/stick_mode_hint" />
+
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/sprint_from_stick"
+                        style="@style/SettingSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/sprint_from_stick" />
+
+                    <TextView
+                        style="@style/SettingHint"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/sprint_from_stick_hint" />
+
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/defending_pad"
+                        style="@style/SettingSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/defending_pad" />
+
+                    <TextView
+                        style="@style/SettingHint"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/defending_pad_hint" />
+
+                    <TextView
+                        style="@style/SettingLabel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
                         android:text="@string/button_style" />
 
                     <RadioGroup

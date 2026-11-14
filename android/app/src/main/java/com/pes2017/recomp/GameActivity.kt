@@ -456,6 +456,7 @@ class GameActivity : AppCompatActivity(), NativeListener {
 
         overlay = TouchOverlayView(this)
         overlay.layout = ControlLayout.load(this)
+        overlay.stance = if (prefs.defendingPad) PadStance.DEFEND else PadStance.ATTACK
         overlay.visibility = if (prefs.touchControls) View.VISIBLE else View.GONE
         overlay.onLayoutEdited = { overlay.layout.save(this) }
         overlay.onSelectionChanged = { editPanel?.show(it) }
@@ -929,6 +930,9 @@ class GameActivity : AppCompatActivity(), NativeListener {
         }
         labels.add(getString(if (prefs.touchControls) R.string.hide_touch_controls else R.string.show_touch_controls) to { _: android.content.DialogInterface -> setTouchControls(!prefs.touchControls) })
         labels.add(getString(if (prefs.gamepadEnabled) R.string.disable_gamepad else R.string.enable_gamepad) to { _: android.content.DialogInterface -> setGamepad(!prefs.gamepadEnabled) })
+        // Which pad is out is the player's call: the title does not report
+        // possession, so the app cannot switch by itself.
+        labels.add(getString(if (prefs.defendingPad) R.string.switch_to_attacking_pad else R.string.switch_to_defending_pad) to { _: android.content.DialogInterface -> setDefendingPad(!prefs.defendingPad) })
         labels.add(getString(R.string.qg_menu) to { _: android.content.DialogInterface ->
             QuickGraphics.show(this, prefs, onApply = { quit() }, onClose = { goFullscreen() })
         })
@@ -974,6 +978,11 @@ class GameActivity : AppCompatActivity(), NativeListener {
     private fun setGamepad(on: Boolean) {
         prefs.gamepadEnabled = on
         pads.setEnabled(on)
+    }
+
+    private fun setDefendingPad(defending: Boolean) {
+        prefs.defendingPad = defending
+        overlay.stance = if (defending) PadStance.DEFEND else PadStance.ATTACK
     }
 
     /** Off / Minimal / Normal / Complete, as in Settings > Performance. */
@@ -1096,6 +1105,7 @@ class GameActivity : AppCompatActivity(), NativeListener {
         // The pad may have been arranged in Settings meanwhile (ControlsEditorActivity,
         // another process): this run saved its own copy on the way out, so read it back.
         if (!overlay.editing) overlay.layout = ControlLayout.load(this)
+        overlay.stance = if (prefs.defendingPad) PadStance.DEFEND else PadStance.ATTACK
         overlay.playStation = prefs.playStationButtons
         hudContainer.visibility = if (prefs.showStats) View.VISIBLE else View.GONE
         applyDeveloperTools()
