@@ -1127,7 +1127,15 @@ class GameActivity : AppCompatActivity(), NativeListener {
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
-        if (hasFocus) goFullscreen()
+        if (hasFocus) {
+            goFullscreen()
+        } else if (::overlay.isInitialized) {
+            // A dialog, the notification shade or a system panel takes the
+            // window away without pausing us on every phone. Every finger is
+            // gone, so nothing may stay held -- a fake shot's pass or a
+            // swipe's modifier included.
+            overlay.releaseEverything()
+        }
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {

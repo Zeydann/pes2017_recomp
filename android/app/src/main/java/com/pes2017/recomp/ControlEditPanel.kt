@@ -208,28 +208,42 @@ class ControlEditPanel(
         val directions = intArrayOf(R.string.swipe_up, R.string.swipe_down,
             R.string.swipe_left, R.string.swipe_right)
         val labels = Array(directions.size) { index ->
-            activity.getString(directions[index]) + ": " + bitName(swipeBinding(element, index))
+            activity.getString(directions[index]) + ": " + actionName(swipeBinding(element, index))
         }
         AlertDialog.Builder(activity)
             .setTitle(R.string.swipe_bindings)
-            .setItems(labels) { _, which -> pickSwipeBit(element, which) }
+            .setItems(labels) { _, which -> pickSwipeAction(element, which) }
             .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
-    private fun pickSwipeBit(element: ControlElement, direction: Int) {
-        val options = intArrayOf(0, NativeBridge.A, NativeBridge.B, NativeBridge.X, NativeBridge.Y,
+    /**
+     * One list of everything a direction can be: a plain bit, a modifier held
+     * before a face button (PES's L1/L2/R1/R2 combinations), or a double tap
+     * of a face button. The four starting swipes are just the first entries a
+     * player will see already chosen.
+     */
+    private fun pickSwipeAction(element: ControlElement, direction: Int) {
+        val primary = intArrayOf(NativeBridge.A, NativeBridge.B, NativeBridge.X, NativeBridge.Y)
+        val options = mutableListOf(SwipeAction.NONE)
+        for (bit in intArrayOf(NativeBridge.A, NativeBridge.B, NativeBridge.X, NativeBridge.Y,
             NativeBridge.LB, NativeBridge.RB, NativeBridge.START, NativeBridge.BACK,
             NativeBridge.L3, NativeBridge.R3, NativeBridge.UP, NativeBridge.DOWN,
             NativeBridge.LEFT, NativeBridge.RIGHT)
-        val labels = Array(options.size) { bitName(options[it]) }
+        ) options.add(SwipeAction.of(bit))
+        for (modifier in arrayOf(SwipeModifier.LB, SwipeModifier.LT,
+            SwipeModifier.RB, SwipeModifier.RT)
+        ) for (bit in primary) options.add(SwipeAction.held(modifier, bit))
+        for (bit in primary) options.add(SwipeAction.double(bit))
+
+        val labels = Array(options.size) { actionName(options[it]) }
         AlertDialog.Builder(activity)
             .setTitle(R.string.swipe_direction)
             .setItems(labels) { _, which ->
                 setSwipeBinding(element, direction, options[which])
                 // Shown straight away: an unbound swipe stays hidden, and a
                 // player who has just bound one expects to see it.
-                if (options[which] != 0 && !element.visible) element.visible = true
+                if (options[which].bound && !element.visible) element.visible = true
                 overlay.refresh()
                 show(element)
                 save()
@@ -239,20 +253,38 @@ class ControlEditPanel(
     }
 
     /** 0 up, 1 down, 2 left, 3 right: the order the dialog lists them in. */
-    private fun swipeBinding(element: ControlElement, direction: Int): Int = when (direction) {
-        0 -> element.swipeUp
-        1 -> element.swipeDown
-        2 -> element.swipeLeft
-        else -> element.swipeRight
+    private fun swipeBinding(element: ControlElement, direction: Int): SwipeAction = when (direction) {
+        0 -> element.swipeAction(Swipe.UP)
+        1 -> element.swipeAction(Swipe.DOWN)
+        2 -> element.swipeAction(Swipe.LEFT)
+        else -> element.swipeAction(Swipe.RIGHT)
     }
 
-    private fun setSwipeBinding(element: ControlElement, direction: Int, bit: Int) {
-        when (direction) {
-            0 -> element.swipeUp = bit
-            1 -> element.swipeDown = bit
-            2 -> element.swipeLeft = bit
-            else -> element.swipeRight = bit
+    private fun setSwipeBinding(element: ControlElement, direction: Int, action: SwipeAction) {
+        val swipe = when (direction) {
+            0 -> Swipe.UP
+            1 -> Swipe.DOWN
+            2 -> Swipe.LEFT
+            else -> Swipe.RIGHT
         }
+        element.setSwipeAction(swipe, action)
+    }
+
+    /** How one swipe binding reads in the editor: "LB + A", "B ×2", "A". */
+    private fun actionName(action: SwipeAction): String = when {
+        !action.bound -> activity.getString(R.string.button_none)
+        action.doubleTap -> bitName(action.bit) + " ×2"
+        action.modifier != SwipeModifier.NONE ->
+            modifierName(action.modifier) + " + " + bitName(action.bit)
+        else -> bitName(action.bit)
+    }
+
+    private fun modifierName(modifier: SwipeModifier): String = when (modifier) {
+        SwipeModifier.LB -> "LB"
+        SwipeModifier.RB -> "RB"
+        SwipeModifier.LT -> "LT"
+        SwipeModifier.RT -> "RT"
+        SwipeModifier.NONE -> ""
     }
 
     /** The name printed for a pad bit, as the console's own face names mark them. */

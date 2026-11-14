@@ -24,7 +24,8 @@ ISO importing and the Bluetooth/USB gamepad path were not modified.
 | Move-mode floating joystick (socket under the thumb, fixed base, knob relative to it) | Implemented; arithmetic unit-tested; not device-tested |
 | Fixed-mode joystick (layout socket, knob inside it, centres on release) | Implemented; same shared arithmetic; not device-tested |
 | Sprint from the rim, press 0.92 / release 0.82, R1/RB, rim glow, reset on cancel | Implemented; latch unit-tested; mapping RB = sprint matches the PES 2017 manual; not device-tested |
-| Four-direction swipes on all four action buttons (16 independent slots) | Slots and classification unit-tested; editor binding implemented; all slots ship unbound; not device-tested |
+| Four-direction swipes on all four action buttons (16 independent slots) | Slots and classification unit-tested; every slot now ships with a PES 2017 default (modifier + button or double tap); editor binds all forms; not device-tested |
+| Compound swipes: modifier + button, double tap, plain bit | Implemented (`SwipeAction`, `SwipeSequence`, `ComboHold`); timing unit-tested; every cancellation clears them; not device-tested |
 | Fake shot, Shoot → drag → Pass, cancelling the shot | Corrected to PES 2017's actual cancel rule (pass pressed while shoot is held); arming unit-tested; **not device-verified** |
 | Visible arrows and live direction feedback | Implemented; not device-tested |
 | Camera / LOOK region with sensitivity, smoothing, saturation, invert | Input path traced to the right stick; not device-tested; no separate user deadzone (see docs) |
@@ -49,6 +50,14 @@ ISO importing and the Bluetooth/USB gamepad path were not modified.
 3. **Sprint.** Was a single 0.92 threshold with the glow from a shaped value.
    Now a latch (`SprintLatch`): press 0.92, release 0.82, on the raw throw, glow
    only while latched, reset from every cancellation path.
+4. **Compound swipes and defaults.** A slot can now be a modifier + button
+   (LB/LT/RB/RT held before the bit) or a double tap, and all sixteen slots
+   ship with the requested PES 2017 default. The modifier leads by 30 ms, the
+   pair is held 120 ms, a double tap is 90 ms apart, and every sequence ends
+   clear. `releaseEverything` (lift of the next swipe, ACTION_CANCEL, pause,
+   window focus loss, editor) clears the combo, so no modifier or trigger can
+   stick. The fake shot keeps strict priority over the Shoot swipe towards
+   Pass (`SwipePriority`).
 
 ## Tests actually executed
 
@@ -94,16 +103,18 @@ Static checks done: every modified Kotlin file balances its delimiters; every
    simultaneous stick and buttons; lift/cancel resets.
 4. Sprint at 0.92 on, 0.85 held on, 0.82 off; no stuck R1 after pause or focus
    loss; physical pad sprint unaffected.
-5. Swipes: bind one direction per button, confirm each arrow, each pulse, and
-   that a plain tap is unchanged.
-6. Camera region turns the view and does not steal touches.
-7. The defending pad appears from Settings and from the pause menu.
+5. Swipes: confirm each of the sixteen default combinations (modifier lead,
+   trigger axis, low cross double tap), each arrow, and that a plain tap is
+   unchanged.
+6. The compound timing on a real title poll: 30 ms modifier lead, 120 ms hold,
+   90 ms double-tap gap; adjust `SwipeSequence` from what the match does.
+7. Camera region turns the view and does not steal touches.
+8. The defending pad appears from Settings and from the pause menu.
 
 ## Suggested next steps
 
 1. Run the two Gradle commands on CI (it has the SDK and the signing secret) and
    fix any compile findings; the Kotlin here was written without a compiler.
-2. Device-test items 2-7 above and record the results here.
-3. If the 16 slots should ship with defaults, decide them from device results
-   rather than guessed PES semantics; `docs/touch-controls.md` explains why they
-   are unbound.
+2. Device-test items 2-8 above and record the results here.
+3. Tune the compound sequence timings if the title misses a modifier or a
+   double tap; they live in one place (`SwipeSequence`, `PadGestures.kt`).

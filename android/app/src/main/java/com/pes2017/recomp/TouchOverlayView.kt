@@ -104,6 +104,11 @@ class TouchOverlayView @JvmOverloads constructor(
     // Sprint from the rim, with separate press and release points.
     private val sprintLatch = SprintLatch()
 
+    // A compound swipe's held modifier and button, and the steps still to run.
+    // One at a time: a new swipe cancels whatever the last one was holding.
+    private val combo = ComboHold()
+    private val comboTasks = ArrayList<Runnable>()
+
     // The direction a thumb on an action button is heading for right now, for
     // the arrows under it. The gesture itself is read on the lift, as ever.
     private val liveSwipes = HashMap<Int, Swipe>()
@@ -398,6 +403,9 @@ class TouchOverlayView @JvmOverloads constructor(
         // The pass pressed by a fake shot is held while its shoot thumb is
         // down (the title cancels the shot on that press), and let go with it.
         buttons = buttons or fakeHeld
+        buttons = buttons or combo.buttons
+        if (combo.leftTrigger) leftTrigger = 255
+        if (combo.rightTrigger) rightTrigger = 255
 
         if (!NativeBridge.dpadSynthesis) {
             if (dpadOnScreen() || gamePhase == GamePhase.MATCH) {
@@ -443,6 +451,7 @@ class TouchOverlayView @JvmOverloads constructor(
         fakeShots.clear()
         fakeHeld = 0
         sprintLatch.reset()
+        cancelCombo()
         // Toggles survive a pause -- a player who was aiming down sights
         // before the phone rang is still aiming when they come back -- but
         // not the editor, which would otherwise leave a bit stuck down.
@@ -661,39 +670,36 @@ class TouchOverlayView @JvmOverloads constructor(
         if (released.element.kind == ControlKind.BUTTON) {
             val gesture = fakeShots.remove(pointerId)
             val faked = gesture?.armed == true
+            // A swipe on the button the thumb is already on: the held bit has
+            // been sent all along, and a bound direction is what the lift adds.
+            // A fake shot owns the gesture, so its direction does not also fire.
+            val direction = if (!faked && released.lastClaim) {
+                swipeClassifier.end(pointerId, SystemClock.uptimeMillis())
+            } else {
+                swipeClassifier.cancel(pointerId)
+                Swipe.NONE
+            }
+            val action = released.element.swipeAction(direction)
             if (faked) {
                 // The pass pressed at arming is let go with the shoot: nothing
                 // is sent at the lift, so the gesture is one cancelled shot and
                 // not a shot followed by a pass. A second thumb still faking
                 // keeps its own pass down.
-                swipeClassifier.cancel(pointerId)
                 if (fakeShots.values.none { it.armed }) fakeHeld = 0
-            } else {
-                // A swipe on the button the thumb is already on: the held bit
-                // has been sent all along, and a bound direction is one more
-                // bit at the lift. Unbound directions stay silent, as on the
-                // swipe patch.
-                val direction = if (released.lastClaim) {
-                    swipeClassifier.end(pointerId, SystemClock.uptimeMillis())
-                } else {
-                    swipeClassifier.cancel(pointerId)
-                    Swipe.NONE
-                }
-                val bits = released.element.swipeBit(direction)
-                if (bits != 0) pendingSwipes = pendingSwipes or bits
             }
+            if (SwipePriority.sendsSwipe(faked, action)) emitSwipe(action)
         }
         if (released.element.kind == ControlKind.SWIPE) {
-            // One gesture, one bit. Another finger still on the patch keeps its
-            // own gesture, but this one is over and must not fire on top of it.
+            // One gesture, one action. Another finger still on the patch keeps
+            // its own gesture, but this one is over and must not fire on top.
             val direction = if (released.lastClaim) {
                 swipeClassifier.end(pointerId, SystemClock.uptimeMillis())
             } else {
                 swipeClassifier.cancel(pointerId)
                 Swipe.NONE
             }
-            val bit = released.element.swipeBit(direction)
-            if (bit != 0) pendingSwipes = pendingSwipes or bit
+            val action = released.element.swipeAction(direction)
+            if (SwipePriority.sendsSwipe(faked = false, action)) emitSwipe(action)
         }
         // Another finger still on the stick keeps its deflection; the last one
         // to lift centres it.
@@ -739,6 +745,44 @@ class TouchOverlayView @JvmOverloads constructor(
         } else {
             if (dy > 0f) NativeBridge.DOWN else NativeBridge.UP
         }
+    }
+
+    /**
+     * Sends one bound swipe. A plain bit rides the existing press pulse, which
+     * is one poll wide. A modifier or a double tap is a short sequence of held
+     * states (SwipeSequence): each step is scheduled, applied to [combo] and
+     * pushed, and the last step clears everything.
+     */
+    private fun emitSwipe(action: SwipeAction) {
+        if (!action.bound) return
+        if (action.modifier == SwipeModifier.NONE && !action.doubleTap) {
+            pendingSwipes = pendingSwipes or action.bit
+            return
+        }
+        cancelCombo()
+        for (step in SwipeSequence.steps(action)) {
+            lateinit var task: Runnable
+            task = Runnable {
+                comboTasks.remove(task)
+                combo.apply(step)
+                if (NativeBridge.isLoaded()) pushState()
+                invalidate()
+            }
+            comboTasks.add(task)
+            if (step.delayMs <= 0L) post(task) else postDelayed(task, step.delayMs)
+        }
+    }
+
+    /**
+     * Stops a compound swipe and lets go of everything it was holding. Called by
+     * every cancellation path -- lift of the next swipe, ACTION_CANCEL, pause,
+     * focus loss, the editor, the pad being hidden -- so a modifier or trigger
+     * can never be left down.
+     */
+    private fun cancelCombo() {
+        for (task in comboTasks) removeCallbacks(task)
+        comboTasks.clear()
+        combo.clear()
     }
 
     /** The arms every finger on this d-pad is holding. */

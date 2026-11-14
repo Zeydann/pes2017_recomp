@@ -1,5 +1,6 @@
 package com.pes2017.recomp
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -128,5 +129,109 @@ class PadGesturesTest {
         val gesture = fake()
         assertFalse(gesture.moved(100f, 100f, 200f, 100f, 100f, 100f, 100f, 100f))
         assertFalse(gesture.armed)
+    }
+
+    // ---- compound swipe sequences --------------------------------------------
+
+    @Test
+    fun aModifierGoesDownBeforeItsButtonAndBothAreLetGo() {
+        val steps = SwipeSequence.steps(SwipeAction.held(SwipeModifier.LB, NativeBridge.A))
+
+        // The modifier alone first: a hand holds the shoulder, then presses.
+        assertTrue(steps[0].buttons == NativeBridge.LB)
+        assertTrue(steps[1].buttons == (NativeBridge.LB or NativeBridge.A))
+        assertEquals(0, steps.last().buttons)
+        assertTrue(steps[0].delayMs < steps[1].delayMs)
+        assertTrue(steps[1].delayMs < steps.last().delayMs)
+    }
+
+    @Test
+    fun aTriggerModifierHoldsTheTriggerAxisWithTheButton() {
+        val steps = SwipeSequence.steps(SwipeAction.held(SwipeModifier.RT, NativeBridge.X))
+
+        assertTrue("the trigger leads", steps[0].rightTrigger)
+        assertEquals(0, steps[0].buttons)
+        assertTrue("the button is pressed while it is held", steps[1].rightTrigger)
+        assertEquals(NativeBridge.X, steps[1].buttons)
+        val end = steps.last()
+        assertFalse(end.rightTrigger)
+        assertFalse(end.leftTrigger)
+        assertEquals(0, end.buttons)
+    }
+
+    @Test
+    fun theTwoTriggersAreNotInterchangeable() {
+        val left = SwipeSequence.steps(SwipeAction.held(SwipeModifier.LT, NativeBridge.A))
+        assertTrue(left[1].leftTrigger)
+        assertFalse(left[1].rightTrigger)
+    }
+
+    @Test
+    fun aDoubleTapPressesTheButtonTwiceWithAClearingGap() {
+        val steps = SwipeSequence.steps(SwipeAction.double(NativeBridge.B))
+
+        assertEquals(4, steps.size)
+        assertEquals(NativeBridge.B, steps[0].buttons)
+        assertEquals(0, steps[1].buttons)
+        assertEquals(NativeBridge.B, steps[2].buttons)
+        assertEquals(0, steps.last().buttons)
+        assertTrue(steps[1].delayMs > 0L)
+        assertTrue(steps[3].delayMs > steps[2].delayMs)
+    }
+
+    @Test
+    fun aPlainBindingIsStillOnePressAndOneRelease() {
+        val steps = SwipeSequence.steps(SwipeAction.of(NativeBridge.Y))
+
+        assertEquals(2, steps.size)
+        assertEquals(NativeBridge.Y, steps[0].buttons)
+        assertEquals(0, steps.last().buttons)
+    }
+
+    @Test
+    fun everySequenceEndsWithNothingHeld() {
+        val actions = listOf(
+            SwipeAction.of(NativeBridge.A),
+            SwipeAction.double(NativeBridge.B),
+            SwipeAction.held(SwipeModifier.LB, NativeBridge.A),
+            SwipeAction.held(SwipeModifier.LT, NativeBridge.Y),
+            SwipeAction.held(SwipeModifier.RB, NativeBridge.X),
+            SwipeAction.held(SwipeModifier.RT, NativeBridge.B),
+        )
+        for (action in actions) {
+            val end = SwipeSequence.steps(action).last()
+            assertEquals("buttons after $action", 0, end.buttons)
+            assertFalse(end.leftTrigger)
+            assertFalse(end.rightTrigger)
+        }
+    }
+
+    @Test
+    fun anUnboundActionHasNoSequenceAtAll() {
+        assertTrue(SwipeSequence.steps(SwipeAction.NONE).isEmpty())
+    }
+
+    @Test
+    fun clearingMidSequenceLetsGoOfTheModifierAndTrigger() {
+        val hold = ComboHold()
+        hold.apply(SwipeSequence.steps(SwipeAction.held(SwipeModifier.LT, NativeBridge.A))[1])
+        assertTrue(hold.any)
+
+        hold.clear()
+
+        assertEquals(0, hold.buttons)
+        assertFalse(hold.leftTrigger)
+        assertFalse(hold.rightTrigger)
+        assertFalse(hold.any)
+    }
+
+    @Test
+    fun aFakeShotOwnsItsGesture() {
+        // Even a bound direction must not also fire when the drag was a fake
+        // shot: one gesture, one action.
+        val bound = SwipeAction.held(SwipeModifier.RB, NativeBridge.X)
+        assertTrue(SwipePriority.sendsSwipe(faked = false, bound))
+        assertFalse(SwipePriority.sendsSwipe(faked = true, bound))
+        assertFalse(SwipePriority.sendsSwipe(faked = false, SwipeAction.NONE))
     }
 }

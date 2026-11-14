@@ -129,6 +129,18 @@ data class ControlElement(
     var swipeRight: Int = 0,
     /** What a touch on it sends when it was not a swipe at all. */
     var swipeTap: Int = 0,
+    // What each direction also holds or repeats. The bits above stay the primary
+    // button, which is what a layout file written before this carried and what a
+    // plain binding still uses; these add PES's held-modifier combinations
+    // (LB + pass) and the title's double taps (the low cross).
+    var swipeUpMod: SwipeModifier = SwipeModifier.NONE,
+    var swipeDownMod: SwipeModifier = SwipeModifier.NONE,
+    var swipeLeftMod: SwipeModifier = SwipeModifier.NONE,
+    var swipeRightMod: SwipeModifier = SwipeModifier.NONE,
+    var swipeUpDouble: Boolean = false,
+    var swipeDownDouble: Boolean = false,
+    var swipeLeftDouble: Boolean = false,
+    var swipeRightDouble: Boolean = false,
 ) {
     /** Whether it is on screen at all: the player's switch, the phase and the pad, all three. */
     fun shownIn(phase: GamePhase, stance: PadStance = PadStance.ATTACK): Boolean =
@@ -146,6 +158,34 @@ data class ControlElement(
         Swipe.RIGHT -> swipeRight
         // A touch that was not a swipe; unbound unless the player asked for it.
         Swipe.NONE -> swipeTap
+    }
+
+    /** Everything one swipe direction sends: its bit, its modifier, its tap count. */
+    internal fun swipeAction(direction: Swipe): SwipeAction = when (direction) {
+        Swipe.UP -> SwipeAction(swipeUp, swipeUpMod, swipeUpDouble)
+        Swipe.DOWN -> SwipeAction(swipeDown, swipeDownMod, swipeDownDouble)
+        Swipe.LEFT -> SwipeAction(swipeLeft, swipeLeftMod, swipeLeftDouble)
+        Swipe.RIGHT -> SwipeAction(swipeRight, swipeRightMod, swipeRightDouble)
+        Swipe.NONE -> SwipeAction(swipeTap)
+    }
+
+    /** Replaces one direction whole: bit, modifier and double tap together. */
+    internal fun setSwipeAction(direction: Swipe, action: SwipeAction) {
+        when (direction) {
+            Swipe.UP -> {
+                swipeUp = action.bit; swipeUpMod = action.modifier; swipeUpDouble = action.doubleTap
+            }
+            Swipe.DOWN -> {
+                swipeDown = action.bit; swipeDownMod = action.modifier; swipeDownDouble = action.doubleTap
+            }
+            Swipe.LEFT -> {
+                swipeLeft = action.bit; swipeLeftMod = action.modifier; swipeLeftDouble = action.doubleTap
+            }
+            Swipe.RIGHT -> {
+                swipeRight = action.bit; swipeRightMod = action.modifier; swipeRightDouble = action.doubleTap
+            }
+            Swipe.NONE -> swipeTap = action.bit
+        }
     }
 }
 
@@ -194,6 +234,27 @@ class ControlLayout private constructor(
                 item.put("swipes", JSONArray(listOf(element.swipeUp, element.swipeDown,
                     element.swipeLeft, element.swipeRight, element.swipeTap)))
             }
+            // The compound half is written only when it is used, so a layout
+            // of plain bits stays the file it always was. An older build reads
+            // the `swipes` array above and ignores this; this build reads both.
+            if (element.swipeUpMod != SwipeModifier.NONE ||
+                element.swipeDownMod != SwipeModifier.NONE ||
+                element.swipeLeftMod != SwipeModifier.NONE ||
+                element.swipeRightMod != SwipeModifier.NONE ||
+                element.swipeUpDouble || element.swipeDownDouble ||
+                element.swipeLeftDouble || element.swipeRightDouble
+            ) {
+                val actions = JSONArray()
+                for (direction in DIRECTIONS) {
+                    val action = element.swipeAction(direction)
+                    val entry = JSONObject()
+                    entry.put("b", action.bit)
+                    if (action.modifier != SwipeModifier.NONE) entry.put("m", action.modifier.name)
+                    if (action.doubleTap) entry.put("d", true)
+                    actions.put(entry)
+                }
+                item.put("swipeActions", actions)
+            }
             array.put(item)
         }
         val root = JSONObject()
@@ -223,6 +284,9 @@ class ControlLayout private constructor(
     companion object {
         private const val FILE_NAME = "controls.json"
         private const val FORMAT_VERSION = 6
+
+        /** The four directions, in the order the file and the editor list them. */
+        private val DIRECTIONS = arrayOf(Swipe.UP, Swipe.DOWN, Swipe.LEFT, Swipe.RIGHT)
 
         fun load(context: Context): ControlLayout {
             // The whole screen (the match is full screen, into the cutout), in
@@ -281,6 +345,34 @@ class ControlLayout private constructor(
                         element.swipeLeft = swipes.optInt(2, element.swipeLeft)
                         element.swipeRight = swipes.optInt(3, element.swipeRight)
                         element.swipeTap = swipes.optInt(4, element.swipeTap)
+                        // A file written before compound bindings held plain
+                        // bits only: the defaults' modifiers and double taps
+                        // must not attach themselves to the player's bits. A
+                        // file with `swipeActions` re-applies them below.
+                        element.swipeUpMod = SwipeModifier.NONE
+                        element.swipeDownMod = SwipeModifier.NONE
+                        element.swipeLeftMod = SwipeModifier.NONE
+                        element.swipeRightMod = SwipeModifier.NONE
+                        element.swipeUpDouble = false
+                        element.swipeDownDouble = false
+                        element.swipeLeftDouble = false
+                        element.swipeRightDouble = false
+                    }
+                    // Optional and additive: a player's saved layout keeps its
+                    // plain bits, and the compound half is read over the top
+                    // when this build wrote it.
+                    item.optJSONArray("swipeActions")?.let { actions ->
+                        for (index in 0 until min(DIRECTIONS.size, actions.length())) {
+                            val entry = actions.optJSONObject(index) ?: continue
+                            val modifier = runCatching {
+                                SwipeModifier.valueOf(entry.optString("m", SwipeModifier.NONE.name))
+                            }.getOrDefault(SwipeModifier.NONE)
+                            element.setSwipeAction(
+                                DIRECTIONS[index],
+                                SwipeAction(entry.optInt("b", element.swipeBit(DIRECTIONS[index])),
+                                    modifier, entry.optBoolean("d", false)),
+                            )
+                        }
                     }
                 }
             } catch (_: Throwable) {
@@ -327,7 +419,7 @@ class ControlLayout private constructor(
             )
 
             val centre = w / 2f
-            return ControlLayout(
+            val pad = ControlLayout(
                 mutableListOf(
                     // Left thumb: movement.
                     place("stick", ControlKind.STICK, 0, "LS", 95f, -95f, 150f, 0.40f),
@@ -404,6 +496,62 @@ class ControlLayout private constructor(
                     place("back", ControlKind.BUTTON, NativeBridge.BACK, "SELECT", centre - 40f, 37f, 54f, 0.75f),
                 ),
                 widthDp, heightDp,
+            )
+            applyDefaultSwipes(pad)
+            return pad
+        }
+
+        /**
+         * The sixteen starting swipes.
+         *
+         * PES 2017 plays each command as a base button plus a held modifier:
+         * L1 (LB) is the lobbed or early variant, L2 (LT) the manual one, R1
+         * (RB) the driven one and R2 (RT) the controlled or finesse one. The
+         * cross's low ball is the title's own double tap. Shoot's right swipe
+         * (RB + shoot) points at pass, which is also the fake-shot drag; the
+         * fake shot wins that gesture (see SwipePriority), so the swipe fires
+         * only when the drag is not towards pass.
+         */
+        private fun applyDefaultSwipes(pad: ControlLayout) {
+            fun bind(id: String, up: SwipeAction, down: SwipeAction, left: SwipeAction, right: SwipeAction) {
+                val element = pad.find(id) ?: return
+                element.setSwipeAction(Swipe.UP, up)
+                element.setSwipeAction(Swipe.DOWN, down)
+                element.setSwipeAction(Swipe.LEFT, left)
+                element.setSwipeAction(Swipe.RIGHT, right)
+            }
+
+            // Pass: one-two, manual, driven ground, controlled.
+            bind(
+                "a",
+                SwipeAction.held(SwipeModifier.LB, NativeBridge.A),
+                SwipeAction.held(SwipeModifier.LT, NativeBridge.A),
+                SwipeAction.held(SwipeModifier.RB, NativeBridge.A),
+                SwipeAction.held(SwipeModifier.RT, NativeBridge.A),
+            )
+            // Through pass: chipped, manual, lofted, controlled.
+            bind(
+                "y",
+                SwipeAction.held(SwipeModifier.LB, NativeBridge.Y),
+                SwipeAction.held(SwipeModifier.LT, NativeBridge.Y),
+                SwipeAction.held(SwipeModifier.RB, NativeBridge.Y),
+                SwipeAction.held(SwipeModifier.RT, NativeBridge.Y),
+            )
+            // Cross: early/deep, low (double tap), manual, controlled curl.
+            bind(
+                "b",
+                SwipeAction.held(SwipeModifier.LB, NativeBridge.B),
+                SwipeAction.double(NativeBridge.B),
+                SwipeAction.held(SwipeModifier.LT, NativeBridge.B),
+                SwipeAction.held(SwipeModifier.RT, NativeBridge.B),
+            )
+            // Shoot: chip, finesse, manual, driven.
+            bind(
+                "x",
+                SwipeAction.held(SwipeModifier.LB, NativeBridge.X),
+                SwipeAction.held(SwipeModifier.RT, NativeBridge.X),
+                SwipeAction.held(SwipeModifier.LT, NativeBridge.X),
+                SwipeAction.held(SwipeModifier.RB, NativeBridge.X),
             )
         }
 
