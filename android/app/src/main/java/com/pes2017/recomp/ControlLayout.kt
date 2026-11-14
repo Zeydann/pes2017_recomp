@@ -133,6 +133,20 @@ data class ControlElement(
     /** Whether it is on screen at all: the player's switch, the phase and the pad, all three. */
     fun shownIn(phase: GamePhase, stance: PadStance = PadStance.ATTACK): Boolean =
         visible && phase.shows(shownWhen, stance)
+
+    /**
+     * What one swipe direction sends on this control: its own pad bit, or 0 for
+     * a direction the player has not bound. Each of the four is independent, so
+     * the same call answers for an action button and for the swipe patch.
+     */
+    internal fun swipeBit(direction: Swipe): Int = when (direction) {
+        Swipe.UP -> swipeUp
+        Swipe.DOWN -> swipeDown
+        Swipe.LEFT -> swipeLeft
+        Swipe.RIGHT -> swipeRight
+        // A touch that was not a swipe; unbound unless the player asked for it.
+        Swipe.NONE -> swipeTap
+    }
 }
 
 /**
