@@ -60,6 +60,36 @@ object StickShape {
 }
 
 /**
+ * A thumb's offset from a stick's socket, as the pad's -1..1 vector.
+ *
+ * Both stick modes are this one piece of arithmetic: Fixed measures from the
+ * socket the layout drew, Move from the point the thumb landed on. The throw is
+ * the socket's visible travel, so a thumb on the rim is full deflection and a
+ * thumb past it is still full deflection rather than an out-of-range value the
+ * shaping would have to fix. A second thumb uses the same base; nothing here
+ * moves the base, which is the point -- a base that follows the thumb turns a
+ * push into a drag and makes the deflection depend on how fast the thumb moved.
+ */
+object StickVector {
+
+    /** The guest's Y points up; the screen's points down. */
+    fun of(baseX: Float, baseY: Float, x: Float, y: Float, radius: Float): FloatArray {
+        if (radius <= 0f) return floatArrayOf(0f, 0f)
+        var dx = (x - baseX) / radius
+        var dy = -(y - baseY) / radius
+        val length = hypot(dx, dy)
+        if (length > 1f) {
+            dx /= length
+            dy /= length
+        }
+        // Below this the thumb is resting, not pushing: a residual of 0.002 is
+        // not a direction the title should act on.
+        if (hypot(dx, dy) < 0.002f) return floatArrayOf(0f, 0f)
+        return floatArrayOf(dx, dy)
+    }
+}
+
+/**
  * The left stick standing in for the d-pad (runtime/input_stick_arrows.h),
  * which is how a screen that only accepts the d-pad is reached with a thumb.
  *
