@@ -279,7 +279,11 @@ class TouchOverlayView @JvmOverloads constructor(
      */
     fun switchStance(value: PadStance) {
         if (stance == value) return
+        // A flip is a new pad: a latch set on the attacking pad must not keep a
+        // bit down on the defending one, where it may not even be drawn.
+        claims.clearLatches()
         stance = value
+        if (NativeBridge.isLoaded()) pushState()
         prefs.defendingPad = value == PadStance.DEFEND
         stanceToast?.cancel()
         stanceToast = Toast.makeText(
@@ -535,6 +539,15 @@ class TouchOverlayView @JvmOverloads constructor(
                 ControlKind.TRICK -> Unit   // fires once on the lift, not as state
                 ControlKind.STANCE -> Unit  // just swaps labels, never a bit
                 ControlKind.CUSTOM -> Unit  // a spare: only its swipes send
+                // A latched toggle holds its command with no finger on it, so
+                // its bits are read from the latch rather than from a hold.
+                ControlKind.LATCH -> if (on) {
+                    val hold = claims.latchedHold(element.id)
+                    buttons = buttons or hold.buttons
+                    if (hold.leftTrigger) leftTrigger = 255
+                    if (hold.rightTrigger) rightTrigger = 255
+                }
+                ControlKind.TACTICAL -> Unit  // a five-way button: swipes send
                 ControlKind.LOOK -> Unit    // sent as deltas, not as a stick
             }
         }
@@ -629,10 +642,11 @@ class TouchOverlayView @JvmOverloads constructor(
         skillReleaseUntil.clear()
         sprintLatch.reset()
         cancelCombo()
-        // Toggles survive a pause -- a player who was aiming down sights
-        // before the phone rang is still aiming when they come back -- but
-        // not the editor, which would otherwise leave a bit stuck down.
-        if (editing) claims.clearAll() else claims.clearMomentary()
+        // Everything up is everything up, latches included. A pause, a reset or
+        // the editor is exactly when a held bit would be invisible to the player
+        // and stuck in the game, so a latch does not outlive the pad it was set
+        // on: the jockey button starts off again on the next kick-off.
+        claims.clearAll()
         dpadBits.clear()
         swipeClassifier.clear()
         pendingSwipes = 0
@@ -789,7 +803,7 @@ class TouchOverlayView @JvmOverloads constructor(
                             swipeClassifier.move(id, x, y)
                             liveSwipes[id] = swipeClassifier.peek(id)
                         }
-                        ControlKind.BUTTON, ControlKind.CUSTOM -> {
+                        ControlKind.BUTTON, ControlKind.CUSTOM, ControlKind.TACTICAL -> {
                             // The same four directions, on the control the thumb
                             // is already on. Only the drawing reads the peek;
                             // the bit is sent when the finger lifts.
@@ -914,6 +928,13 @@ class TouchOverlayView @JvmOverloads constructor(
             // A spare button holds no bit of its own: its centre tap and its four
             // swipes are all read on the lift, like any other swipe.
             ControlKind.CUSTOM -> swipeClassifier.begin(pointerId, x, y, SystemClock.uptimeMillis())
+            // The tactical button reads its four arms on the lift, like the
+            // patch does; its centre tap is the fifth action and is bound the
+            // same way, so nothing is sent while the thumb is down.
+            ControlKind.TACTICAL -> swipeClassifier.begin(pointerId, x, y, SystemClock.uptimeMillis())
+            // A toggle latches in TouchClaims itself, so there is nothing to
+            // send here: its command is held from the next push onwards.
+            ControlKind.LATCH -> Unit
             // One tap, one move: the runtime plays it on the skill stick and
             // holds the stick until its last frame, so nothing here has to.
             ControlKind.SKILL -> if (NativeBridge.skillStick) NativeBridge.nativeSkillPlay(element.value)
@@ -966,10 +987,12 @@ class TouchOverlayView @JvmOverloads constructor(
             // been sent all along, and a bound direction is what the lift adds.
             finishSwipe(pointerId, released.element, released.lastClaim)
         }
-        if (released.element.kind == ControlKind.CUSTOM) {
+        if (released.element.kind == ControlKind.CUSTOM ||
+            released.element.kind == ControlKind.TACTICAL
+        ) {
             // Nothing was held, so the tap itself is the fifth action: an unbound
-            // direction on a spare sends `swipeTap`, which is how one press of a
-            // spare button plays a command.
+            // direction on a spare or a tactical button sends `swipeTap`, which
+            // is how one press of it plays a command.
             finishSwipe(pointerId, released.element, released.lastClaim)
         }
         if (released.element.kind == ControlKind.SWIPE) {
@@ -1036,7 +1059,11 @@ class TouchOverlayView @JvmOverloads constructor(
                 if (NativeBridge.skillStick) NativeBridge.nativeSkillEnd()
             }
         }
-        if (released.element.kind == ControlKind.TRIGGER && released.lastClaim) {
+        // A latched trigger is not waiting to be let go: its latch owns it, and
+        // a release grace here would fight the second tap that unlatches it.
+        if (released.element.kind == ControlKind.TRIGGER && released.lastClaim &&
+            !released.element.toggle
+        ) {
             val id = released.element.id
             val until = SystemClock.uptimeMillis() + triggerGraceMs
             triggerReleaseAt[id] = until
@@ -1465,8 +1492,9 @@ class TouchOverlayView @JvmOverloads constructor(
                 ControlKind.STICK -> drawStick(canvas, element, alpha, faded)
                 ControlKind.DPAD -> drawDpad(canvas, element, alpha * dpadFade, faded)
                 ControlKind.SWIPE -> drawSwipe(canvas, element, alpha, faded)
-                ControlKind.BUTTON, ControlKind.TRIGGER, ControlKind.SKILL, ControlKind.CUSTOM ->
-                    drawButton(canvas, element, alpha, faded)
+                ControlKind.TACTICAL -> drawTactical(canvas, element, alpha, faded)
+                ControlKind.BUTTON, ControlKind.TRIGGER, ControlKind.SKILL, ControlKind.CUSTOM,
+                ControlKind.LATCH -> drawButton(canvas, element, alpha, faded)
                 ControlKind.STANCE -> drawStance(canvas, element, alpha, faded)
                 ControlKind.TRICK -> {
                     drawButton(canvas, element, alpha, faded)
@@ -1588,6 +1616,9 @@ class TouchOverlayView @JvmOverloads constructor(
         private const val COLOR_LT = 0xFF0EA5E9.toInt()     // Left trigger
         private const val COLOR_LT_GLOW = 0xFF38BDF8.toInt()
         private const val COLOR_BUMPER_GLOW = 0xFF94A3B8.toInt()
+
+        /** The latch halo: the one colour that means "this is on and holding". */
+        private const val COLOR_LATCH = 0xFF38BDF8.toInt()
 
         // The PlayStation symbol colours: blue cross, red circle, pink square, green triangle
         private const val PS_CROSS = 0xFF3B5BA9.toInt()
@@ -1818,10 +1849,7 @@ class TouchOverlayView @JvmOverloads constructor(
             text.color = Color.WHITE
             canvas.drawText(label, cx, cy - (text.descent() + text.ascent()) * 0.5f, text)
 
-            if (element.toggle && claims.isToggled(element.id)) {
-                fill.color = Color.argb(255, 56, 189, 248)
-                canvas.drawCircle(cx, cy - r * 0.55f, 3.5f * density, fill)
-            }
+
         } else if (isBumper) {
             // Xbox Bumper (LB / RB)
             val fillA = (alpha * fadeFactor * (if (pressed) 180 else 85)).toInt().coerceIn(0, 255)
@@ -1897,7 +1925,73 @@ class TouchOverlayView @JvmOverloads constructor(
             )
             canvas.drawText(element.label, cx, cy - (text.descent() + text.ascent()) * 0.5f, text)
         }
+        // A latched control that is on says so with a ring as well as a fill:
+        // no thumb is on it, so the fill alone would read as an ordinary button
+        // with a dark face rather than as one that is holding a bit down.
+        // Never for a control the player has switched off: the OFF state is
+        // 0.30 and no glow, and a halo is a glow. An off control sends nothing
+        // either, so the ring would be the only thing still claiming it works.
+        if (claims.isToggled(element.id) && !drawingOff) {
+            drawLatchRing(canvas, element, cx, cy, r, alpha * fadeFactor)
+        }
         if (scaled) canvas.restore()
+    }
+
+    /**
+     * The latch halo: a bright ring just outside the control and a dot on its
+     * shoulder, drawn for as long as a toggle is engaged.
+     *
+     * It has to be louder than a press, because nothing is touching it: the
+     * ring is what tells the player, from across the pad, that the jockey button
+     * is still on. Drawn outside the rim so it never hides the label, and in the
+     * same accent for every toggle so "on" always looks the same.
+     */
+    private fun drawLatchRing(
+        canvas: Canvas, element: ControlElement, cx: Float, cy: Float, r: Float, alpha: Float,
+    ) {
+        stroke.color = Color.argb(
+            (alpha * 235f).toInt().coerceIn(0, 255),
+            Color.red(COLOR_LATCH), Color.green(COLOR_LATCH), Color.blue(COLOR_LATCH),
+        )
+        stroke.strokeWidth = max(2f, r * 0.10f)
+        canvas.drawCircle(cx, cy, r + stroke.strokeWidth * 1.1f, stroke)
+        fill.color = Color.argb(
+            255, Color.red(COLOR_LATCH), Color.green(COLOR_LATCH), Color.blue(COLOR_LATCH),
+        )
+        canvas.drawCircle(cx + r * 0.70f, cy - r * 0.70f, max(3f * density, r * 0.15f), fill)
+    }
+
+    /**
+     * A five-way tactical button: a ring with four arms and a centre dot, the
+     * arms lit where they send something and white under the thumb travelling
+     * that way, and the button's name under the dot.
+     *
+     * It holds nothing itself, so nothing is lit while a thumb merely rests on
+     * it; the directions are sent on the lift, exactly as the swipe patch sends
+     * them, and the trail that follows is the same one every other swipe draws.
+     */
+    private fun drawTactical(canvas: Canvas, element: ControlElement, alpha: Float, faded: Boolean) {
+        val r = radius(element)
+        val cx = centreX(element)
+        val cy = centreY(element)
+        val fade = if (faded) 0.45f else 1f
+
+        fill.color = Color.argb((alpha * fade * 55).toInt().coerceIn(0, 255), 16, 20, 26)
+        canvas.drawCircle(cx, cy, r, fill)
+        stroke.color = Color.argb((alpha * fade * 140).toInt().coerceIn(0, 255), 100, 116, 139)
+        stroke.strokeWidth = max(1.5f, r * 0.045f)
+        canvas.drawCircle(cx, cy, r - stroke.strokeWidth * 0.5f, stroke)
+
+        // The centre dot: where the custom tap goes, so a thumb can find the
+        // middle of the control without reading anything.
+        fill.color = Color.argb((alpha * fade * 200).toInt().coerceIn(0, 255), 226, 232, 240)
+        canvas.drawCircle(cx, cy, max(2.5f, r * 0.12f), fill)
+
+        text.textSize = fitText(text, element.label, r * 1.0f, r * 0.32f)
+        text.color = Color.argb((alpha * fade * 225).toInt().coerceIn(0, 255), 241, 245, 249)
+        canvas.drawText(element.label, cx, cy + r * 0.60f, text)
+
+        drawSwipeArrows(canvas, element, cx, cy, r, alpha * fade)
     }
 
     /** Whether any of this control's four directions sends something. */

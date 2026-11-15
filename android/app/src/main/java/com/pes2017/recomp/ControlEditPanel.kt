@@ -210,6 +210,9 @@ class ControlEditPanel(
         actions.findViewById<Button>(R.id.edit_reset_one).setOnClickListener {
             val element = current ?: return@setOnClickListener
             remember()
+            // A reset is a new control: a latch left on the old one must not
+            // keep holding its bit over the top of the fresh one.
+            overlay.releaseEverything()
             overlay.layout.reset(element.id)
             val fresh = overlay.layout.find(element.id)
             if (fresh != null) overlay.keepApart(fresh)
@@ -225,6 +228,7 @@ class ControlEditPanel(
                 .setNegativeButton(R.string.cancel, null)
                 .setPositiveButton(R.string.reset) { _, _ ->
                     remember()
+                    overlay.releaseEverything()
                     overlay.layout.resetAll()
                     overlay.select(null)
                     overlay.refresh()
@@ -275,7 +279,7 @@ class ControlEditPanel(
     private fun showSwipeBindings() {
         val element = current ?: return
         val directions = intArrayOf(R.string.swipe_up, R.string.swipe_down,
-            R.string.swipe_left, R.string.swipe_right)
+            R.string.swipe_left, R.string.swipe_right, R.string.swipe_center)
         val labels = Array(directions.size) { index ->
             activity.getString(directions[index]) + ": " + actionName(swipeBinding(element, index))
         }
@@ -328,12 +332,18 @@ class ControlEditPanel(
             .show()
     }
 
-    /** 0 up, 1 down, 2 left, 3 right: the order the dialog lists them in. */
+    /**
+     * 0 up, 1 down, 2 left, 3 right, 4 the centre tap: the order the dialog
+     * lists them in. The centre is the fifth action -- a spare's or a tactical
+     * button's custom slot -- and is read on the lift when the thumb did not
+     * travel far enough to be a direction.
+     */
     private fun swipeBinding(element: ControlElement, direction: Int): SwipeAction = when (direction) {
         0 -> element.swipeAction(Swipe.UP)
         1 -> element.swipeAction(Swipe.DOWN)
         2 -> element.swipeAction(Swipe.LEFT)
-        else -> element.swipeAction(Swipe.RIGHT)
+        3 -> element.swipeAction(Swipe.RIGHT)
+        else -> element.swipeAction(Swipe.NONE)
     }
 
     private fun setSwipeBinding(element: ControlElement, direction: Int, action: SwipeAction) {
@@ -341,7 +351,8 @@ class ControlEditPanel(
             0 -> Swipe.UP
             1 -> Swipe.DOWN
             2 -> Swipe.LEFT
-            else -> Swipe.RIGHT
+            3 -> Swipe.RIGHT
+            else -> Swipe.NONE
         }
         element.setSwipeAction(swipe, action)
     }
@@ -493,7 +504,9 @@ class ControlEditPanel(
      * than from a flick that did nothing.
      */
     private fun showClearance(element: ControlElement) {
-        if (element.kind != ControlKind.BUTTON && element.kind != ControlKind.SWIPE) {
+        if (element.kind != ControlKind.BUTTON && element.kind != ControlKind.SWIPE &&
+            element.kind != ControlKind.TACTICAL
+        ) {
             clearance.visibility = View.GONE
             return
         }
@@ -512,7 +525,7 @@ class ControlEditPanel(
         val element = current ?: return
         val labels = ArrayList<String>(8)
         val actions = ArrayList<() -> Unit>(8)
-        if (element.kind == ControlKind.BUTTON) {
+        if (element.kind == ControlKind.BUTTON || element.kind == ControlKind.LATCH) {
             labels.add(activity.getString(R.string.edit_bind))
             actions.add { pickBinding(element) }
         }
@@ -957,7 +970,7 @@ class ControlEditPanel(
         title.text = activity.getString(R.string.edit_selected, ControlLayout.labelFor(element, overlay.playStation))
         swipes.visibility =
             if (element.kind == ControlKind.SWIPE || element.kind == ControlKind.BUTTON ||
-                element.kind == ControlKind.CUSTOM
+                element.kind == ControlKind.CUSTOM || element.kind == ControlKind.TACTICAL
             ) {
                 View.VISIBLE
             } else {

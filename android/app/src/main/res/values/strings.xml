@@ -395,6 +395,7 @@
     <string name="skill_sector_down_right">Down-right</string>
     <string name="swipe_direction">What should this swipe send?</string>
     <string name="swipe_up">Up</string>
+    <string name="swipe_center">Centre tap</string>
     <string name="swipe_down">Down</string>
     <string name="swipe_left">Left</string>
     <string name="swipe_right">Right</string>

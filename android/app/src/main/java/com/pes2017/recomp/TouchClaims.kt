@@ -29,15 +29,21 @@ internal class TouchClaims {
     private val byPointer = HashMap<Int, Claim>()
     private val holds = HashMap<String, Int>()        // momentary buttons: element id -> fingers
     private val stickOwners = HashMap<String, Int>()  // sticks: element id -> fingers
-    private val toggled = HashSet<String>()
+    // A latch is kept with the command it holds, not just its name: a toggle
+    // bound to LB + down holds both, one bound to the left trigger holds that,
+    // and pushState has to know which without asking the layout again.
+    private val latched = LinkedHashMap<String, LatchHold>()
     private var newPresses = 0                       // button bits that went down since the last take
 
     fun elementFor(pointerId: Int): ControlElement? = byPointer[pointerId]?.element
 
     /** Whether the guest should see this control as down. */
-    fun isOn(id: String): Boolean = (holds[id] ?: 0) > 0 || toggled.contains(id)
+    fun isOn(id: String): Boolean = (holds[id] ?: 0) > 0 || latched.containsKey(id)
 
-    fun isToggled(id: String): Boolean = toggled.contains(id)
+    fun isToggled(id: String): Boolean = latched.containsKey(id)
+
+    /** What this control is holding with its latch, or [LatchHold.NONE]. */
+    fun latchedHold(id: String): LatchHold = latched[id] ?: LatchHold.NONE
 
     fun holdCount(id: String): Int = holds[id] ?: 0
 
@@ -56,7 +62,8 @@ internal class TouchClaims {
         // nothing at all until the thumb lifts. None of their `value`s is a
         // button mask, so none may reach newPresses.
         if (element.kind == ControlKind.STICK || element.kind == ControlKind.SKILL ||
-            element.kind == ControlKind.TRICK || element.kind == ControlKind.STANCE
+            element.kind == ControlKind.TRICK || element.kind == ControlKind.STANCE ||
+            element.kind == ControlKind.TACTICAL
         ) {
             byPointer[pointerId] = Claim(element, holds = false)
             if (element.kind == ControlKind.STICK) {
@@ -64,9 +71,13 @@ internal class TouchClaims {
             }
             return false
         }
-        byPointer[pointerId] = Claim(element, holds = !element.toggle)
-        if (element.toggle) {
-            if (!toggled.remove(element.id)) toggled.add(element.id)
+        val latching = element.latches()
+        byPointer[pointerId] = Claim(element, holds = !latching)
+        if (latching) {
+            // One tap on, the next off. The hold is read from the control as it
+            // is now, so a toggle the editor has just rebound engages with the
+            // new command rather than the one it was latched with last time.
+            if (latched.remove(element.id) == null) latched[element.id] = element.latchHold()
         } else {
             holds[element.id] = (holds[element.id] ?: 0) + 1
             // A press on a control another finger already holds is still a
@@ -124,9 +135,14 @@ internal class TouchClaims {
         newPresses = 0
     }
 
-    /** Every finger up and every toggle let go: the editor uses this. */
+    /** Every latch let go, leaving the fingers where they are. */
+    fun clearLatches() {
+        latched.clear()
+    }
+
+    /** Every finger up and every toggle let go: a pause, a reset or the editor. */
     fun clearAll() {
         clearMomentary()
-        toggled.clear()
+        latched.clear()
     }
 }

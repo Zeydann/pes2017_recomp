@@ -515,3 +515,49 @@ exactly 30% (`ControlOffState.OFF_ALPHA`), with its press glow forced to none,
 and with a red `#D32F2F` rounded **OFF** pill under it — the badge is above the
 selection ring, so a selected off control still reads as off. The visibility
 switch is labelled **On/Off**.
+
+## Latches: the jockey button and the two toggles
+
+A hold ends when the thumb lifts; a latch does not. Three controls latch, and
+all three do it through the same state ([TouchClaims]): what is down is kept
+beside the control's id, so no finger has to stay on it.
+
+- **JCK (jockey)** is a left trigger with a switch on it: one tap holds LT, the
+  next lets go. It draws as LT does, and carries the latch halo while it is on.
+  Hidden until the editor turns it on.
+- **TG1 / TG2** are custom latches: bind one to any bit with **Change binding**
+  and it holds that bit until the second tap. Unbound, they hold nothing, which
+  is why they ship hidden and empty.
+
+While a latch is engaged the control keeps a bright ring just outside its rim
+and a dot on its shoulder, in one accent colour for every toggle, so "on" looks
+the same wherever it is. Everything lets go together: a pause, a reset, a control
+being reset, and a stance flip all clear the latches, so a held trigger can never
+outlive the pad it was set on and be invisible to the player. The OFF state is
+unchanged -- an off control is still drawn at 0.30 with no glow and its badge,
+latch or no latch -- and the halo is not drawn for an off control at all, since a
+ring is a glow and an off control sends nothing to justify one.
+
+## The two tactical five-way buttons (SW1, SW2)
+
+Same five actions as a spare -- four swipes and a centre tap -- on a control
+sized for a thumb, with the title's tactical commands already bound:
+
+| | SW1 (tactics) | SW2 (instructions) |
+|---|---|---|
+| Up | D-pad up: next preset tactic | LT + D-pad up: attack 1 |
+| Down | LB + D-pad down: quick tactics | LT + D-pad down: attack 2 |
+| Left | double-tap D-pad down: level down | LT + D-pad left: defence 1 |
+| Right | double-tap D-pad up: level up | LT + D-pad right: defence 2 |
+| Centre | custom slot (unbound) | custom slot (unbound) |
+
+Quick tactics has no arm of its own in the title's pad, so it rides the nearest
+one that does -- LB with the down arm, the modifier family the rest of the pad
+uses -- and is one tap in the editor to move. The centre tap is the fifth row of
+the swipe-binding dialog (**Centre tap**) and starts empty on both.
+
+They inherit everything the pad's swipes already do: the rim chevrons (faint
+where nothing is bound, solid where something is, white under the thumb that is
+travelling that way), the tapered trail with its arrowhead, the direction-lock
+haptic, and the corridor warning in the editor. They hold nothing themselves, so
+nothing is sent until the thumb lifts.

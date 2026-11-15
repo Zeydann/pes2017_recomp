@@ -82,6 +82,23 @@ enum class ControlKind {
      * resting on an unbound one sends nothing at all.
      */
     CUSTOM,
+
+    /**
+     * A latching toggle (tg1, tg2): one tap engages the command bound to it and
+     * holds it down until a second tap lets go, so a player who has to hold two
+     * things at once has one thumb free. Unbound until the editor gives it a
+     * bit; a toggle with nothing bound latches nothing at all.
+     */
+    LATCH,
+
+    /**
+     * A five-way tactical button (sw1, sw2): four swipes and a centre tap, with
+     * nothing held in between. It is the same gesture the swipe patch has, sized
+     * and named for a thumb, and the directions carry the title's quick tactical
+     * commands -- preset tactics, the attack/defence level, the advanced
+     * instructions under LT.
+     */
+    TACTICAL,
 }
 
 /** When a control belongs on screen. */
@@ -119,6 +136,13 @@ enum class ControlRole {
     SHOOT,
     CROSS,
     THROUGH,
+
+    /**
+     * The jockey button: it holds the left trigger, which is how the title's
+     * contain/jockey stance is kept, and it latches so the thumb that would be
+     * holding it can tackle instead.
+     */
+    JOCKEY,
     ;
 
     companion object {
@@ -378,6 +402,14 @@ class ControlLayout private constructor(
     /** Ids the player took off the pad, so a reload does not put them back. */
     private val removed = LinkedHashSet<String>()
 
+    /**
+     * The bit each id ships with, so a rebound control can be written without
+     * every other control paying for a field it does not use.
+     */
+    private val factoryBits: Map<String, Int> by lazy {
+        defaults(widthDp, heightDp, profile).elements.associate { it.id to it.value }
+    }
+
     fun find(id: String): ControlElement? = elements.firstOrNull { it.id == id }
 
     /** Puts a control back on the pad; a second copy of one id is refused. */
@@ -444,6 +476,12 @@ class ControlLayout private constructor(
             item.put("when", element.shownWhen.name)
             item.put("role", element.role.name)
             item.put("label", element.label)
+            // What the control is bound to, when the editor has rebound it. A
+            // value is otherwise implied by the control's id, so only a changed
+            // one is written and a pad that was never rebound stays the file it
+            // always was. Without this a rebound toggle or button came back
+            // holding the factory bit after a restart.
+            if (element.value != factoryBits[element.id]) item.put("value", element.value)
             if (element.sub.isNotEmpty()) item.put("sub", element.sub)
             if (element.sub2.isNotEmpty()) item.put("sub2", element.sub2)
             // Only a control the player has given a separate defending pad
@@ -638,6 +676,10 @@ class ControlLayout private constructor(
                     .toFloat().coerceIn(0.05f, 1f)
                 element.visible = item.optBoolean("visible", element.visible)
                 element.toggle = item.optBoolean("toggle", element.toggle)
+                // Read before the role: a rebound button's role is the title's
+                // binding for the bit it now holds, and a file with no role
+                // derives one from this value.
+                if (item.has("value")) element.value = item.optInt("value", element.value)
                 if (item.has("label")) element.label = item.optString("label", element.label).take(8)
                 if (item.has("sub")) element.sub = item.optString("sub", element.sub).take(8)
                 if (item.has("sub2")) element.sub2 = item.optString("sub2", element.sub2).take(8)
@@ -866,11 +908,12 @@ class ControlLayout private constructor(
                 id: String, kind: ControlKind, value: Int, label: String,
                 x: Float, y: Float, size: Float, alpha: Float = 0.45f, visible: Boolean = true,
                 shownWhen: PhaseMask = PhaseMask.ALWAYS, sub: String = "", sub2: String = "",
+                toggle: Boolean = false, role: ControlRole = ControlRole.of(value),
             ) = ControlElement(
                 id, kind, value, label,
                 (if (x >= 0f) x else w + x) / w, (if (y >= 0f) y else h + y) / h,
-                size, alpha, visible, shownWhen = shownWhen, sub = sub, sub2 = sub2,
-                role = ControlRole.of(value),
+                size, alpha, visible, toggle, shownWhen = shownWhen, sub = sub, sub2 = sub2,
+                role = role,
             )
 
             val centre = w / 2f
@@ -999,12 +1042,37 @@ class ControlLayout private constructor(
                     place("c8", ControlKind.CUSTOM, 0, "C8", 452f, 60f, 48f, 0.40f, visible = false),
                     place("c9", ControlKind.CUSTOM, 0, "C9", 508f, 60f, 48f, 0.40f, visible = false),
                     place("c10", ControlKind.CUSTOM, 0, "C10", 564f, 60f, 48f, 0.40f, visible = false),
+
+                    // The jockey button: the left trigger, latched. Holding LT
+                    // with a thumb is how a defender contains a runner, and a
+                    // thumb that is holding it cannot tackle; tapping it on
+                    // leaves both thumbs for the tackle and the player switch.
+                    // A trigger, so it draws and reads exactly like LT does.
+                    place("jockey", ControlKind.TRIGGER, 0, "JCK", 176f, 76f, 56f, 0.45f,
+                        visible = false, toggle = true, role = ControlRole.JOCKEY),
+
+                    // Two custom toggles, hidden and unbound: a latch the player
+                    // binds to whatever the pad is missing, one command each.
+                    place("tg1", ControlKind.LATCH, 0, "TG1", 60f, 150f, 52f, 0.40f, visible = false),
+                    place("tg2", ControlKind.LATCH, 0, "TG2", 120f, 150f, 52f, 0.40f, visible = false),
+
+                    // Two tactical five-way buttons, hidden until the player
+                    // wants them. sw1 carries the quick tactics and the
+                    // attack/defence level, sw2 the advanced instructions under
+                    // LT; both take a custom command on the centre tap.
+                    // They are parked on the empty stretch the camera band
+                    // covers -- the one place a 88 dp control's four corridors
+                    // reach nothing -- and move wherever the player wants them
+                    // once they are on.
+                    place("sw1", ControlKind.TACTICAL, 0, "SW1", 230f, 300f, 88f, 0.40f, visible = false),
+                    place("sw2", ControlKind.TACTICAL, 0, "SW2", 340f, 300f, 88f, 0.40f, visible = false),
                 ),
                 widthDp, heightDp, profile,
             )
             if (profile == PROFILE_CLASSIC) applyClassicSpacing(pad, w, h)
             applyDefaultSwipes(pad)
             applyDefaultTrick(pad)
+            applyDefaultTactics(pad)
             return pad
         }
 
@@ -1082,6 +1150,46 @@ class ControlLayout private constructor(
         }
 
         /**
+         * The two tactical five-way buttons' starting commands.
+         *
+         * The title's tactics live on the d-pad, and its advanced instructions
+         * are the same arms under LT (docs/touch-controls.md). So sw1 is the
+         * d-pad's tactical half -- up and down cycle the preset tactics, and the
+         * left and right arms are the double taps that lower and raise the
+         * attack/defence level -- and sw2 is the four instructions LT + d-pad
+         * arms. The centre tap of each is left unbound: it is the custom slot,
+         * and a command nobody asked for is worse than one more binding.
+         *
+         * Quick tactics has no key of its own in the title's pad, so it rides
+         * the nearest thing that does: LB + d-pad down, the modifier family the
+         * rest of the pad already uses for the same arm. It is one tap in the
+         * editor to move it.
+         */
+        private fun applyDefaultTactics(pad: ControlLayout) {
+            fun bind(id: String, up: SwipeAction, down: SwipeAction, left: SwipeAction, right: SwipeAction) {
+                val element = pad.find(id) ?: return
+                element.setSwipeAction(Swipe.UP, up)
+                element.setSwipeAction(Swipe.DOWN, down)
+                element.setSwipeAction(Swipe.LEFT, left)
+                element.setSwipeAction(Swipe.RIGHT, right)
+            }
+            bind(
+                "sw1",
+                SwipeAction.of(NativeBridge.UP),
+                SwipeAction.held(SwipeModifier.LB, NativeBridge.DOWN),
+                SwipeAction.double(NativeBridge.DOWN),
+                SwipeAction.double(NativeBridge.UP),
+            )
+            bind(
+                "sw2",
+                SwipeAction.held(SwipeModifier.LT, NativeBridge.UP),
+                SwipeAction.held(SwipeModifier.LT, NativeBridge.DOWN),
+                SwipeAction.held(SwipeModifier.LT, NativeBridge.LEFT),
+                SwipeAction.held(SwipeModifier.LT, NativeBridge.RIGHT),
+            )
+        }
+
+        /**
          * The wheel's eight starting moves, one per sector, in the wheel's own
          * order: right, up-right, up, up-left, left, down-left, down,
          * down-right. Every move in the table is reachable from the ring out
@@ -1111,6 +1219,11 @@ class ControlLayout private constructor(
                 "stick" -> "L"
                 "right_stick" -> "R"
                 "trick" -> "SKILL"
+                "jockey" -> "JCK"
+                "tg1" -> "TG1"
+                "tg2" -> "TG2"
+                "sw1" -> "SW1"
+                "sw2" -> "SW2"
                 "start" -> "START"
                 "back" -> "SELECT"
                 else -> element.label
