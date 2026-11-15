@@ -138,6 +138,36 @@ class LayoutSlotsTest {
     }
 
     @Test
+    fun aNamedSaveLandsInsideItsSlotRatherThanBelowTheList() {
+        // "Save current layout as…" must put the pad in a numbered slot with
+        // the typed name as its label ("1 · test"), not create a loose item
+        // that leaves the slot looking empty.
+        val store = store()
+        store.write("1", """{"name":"test"}""")
+
+        val slots = store.list(::nameFromJson)
+
+        val slot = slots.single()
+        assertEquals("1", slot.id)
+        assertTrue(slot.numbered)
+        assertEquals("test", slot.displayName)
+        assertFalse("no loose profile beside the slot", store.exists("test"))
+    }
+
+    @Test
+    fun aNamedSaveOverASlotKeepsTheSlotAndRenamesIt() {
+        val store = store()
+        store.write("3", """{"name":"Old"}""")
+        store.write("3", """{"name":"New"}""")
+
+        val slot = store.list(::nameFromJson).single()
+
+        assertEquals("3", slot.id)
+        assertEquals("New", slot.displayName)
+        assertEquals(1, store.saveChoices(::nameFromJson).count { it.occupied })
+    }
+
+    @Test
     fun anUnreadableSlotStillCountsAsTaken() {
         // A slot holding something this build cannot parse must still ask
         // before it is overwritten, rather than reading as empty.

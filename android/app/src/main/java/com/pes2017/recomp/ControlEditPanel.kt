@@ -830,10 +830,11 @@ class ControlEditPanel(
     }
 
     /**
-     * "Save Layout": the five numbered places, with the taken ones named, so the
-     * player picks where the pad goes instead of typing a name first.
+     * The five numbered places as a picker, each taken one shown with the name
+     * of the layout already in it. Every save path starts here: a layout only
+     * ever lives in a numbered slot, never as a file of its own below them.
      */
-    private fun pickSaveSlot() {
+    private fun showSlotPicker(titleRes: Int, onPick: (SaveSlotChoice) -> Unit) {
         val slots = ControlLayout.saveSlots(activity)
         val labels = Array(slots.size) { index ->
             val slot = slots[index]
@@ -844,11 +845,17 @@ class ControlEditPanel(
             }
         }
         AlertDialog.Builder(activity)
-            .setTitle(R.string.layout_save)
-            .setItems(labels) { _, which -> saveToChosenSlot(slots[which]) }
+            .setTitle(titleRes)
+            .setItems(labels) { _, which -> onPick(slots[which]) }
             .setNegativeButton(R.string.cancel, null)
             .show()
     }
+
+    /**
+     * "Save Layout": the five numbered places, with the taken ones named, so the
+     * player picks where the pad goes instead of typing a name first.
+     */
+    private fun pickSaveSlot() = showSlotPicker(R.string.layout_save) { saveToChosenSlot(it) }
 
     /**
      * Saves the pad into the chosen numbered slot. A slot that already holds a
@@ -946,25 +953,36 @@ class ControlEditPanel(
         save()
     }
 
-    /** Saves the current pad under a name the player types. */
+    /**
+     * "Save Current Layout As…": a numbered place first, then a name for the
+     * inside of it. The typed name is the slot's label ("1 · test"), never a
+     * file of its own, so a save can no longer land below the five slots as a
+     * loose profile while the slot the player meant stays empty. A slot that
+     * already holds a layout is only replaced after the player says so.
+     */
     private fun saveCurrentAs() {
-        nameDialog(activity.getString(R.string.profile_save_as), "") { name ->
-            val id = LayoutStore.sanitize(name)
-            if (ControlLayout.listSlots(activity).any { it.id == id }) {
-                confirmOverwrite(id, name)
-            } else {
-                writeSlot(id, name)
+        showSlotPicker(R.string.profile_save_as) { slot ->
+            if (!slot.occupied) {
+                askSlotName(slot) { name -> writeSlot(slot.id, name, reopen = false) }
+                return@showSlotPicker
             }
+            AlertDialog.Builder(activity)
+                .setTitle(R.string.profile_save_as)
+                .setMessage(R.string.slot_taken_confirm)
+                .setNegativeButton(R.string.no, null)
+                .setPositiveButton(R.string.yes) { _, _ ->
+                    askSlotName(slot) { name -> writeSlot(slot.id, name, reopen = false) }
+                }
+                .show()
         }
     }
 
-    private fun confirmOverwrite(id: String, name: String) {
-        AlertDialog.Builder(activity)
-            .setTitle(R.string.profile_overwrite)
-            .setMessage(activity.getString(R.string.profile_overwrite_confirm, name))
-            .setNegativeButton(R.string.cancel, null)
-            .setPositiveButton(R.string.profile_overwrite) { _, _ -> writeSlot(id, name) }
-            .show()
+    /** The name for the inside of [slot]: what it is called now, or "Slot N". */
+    private fun askSlotName(slot: SaveSlotChoice, onOk: (String) -> Unit) {
+        val suggested = slot.displayName.ifBlank {
+            activity.getString(R.string.profile_default_name, slot.id)
+        }
+        nameDialog(activity.getString(R.string.profile_save_as), suggested, onOk)
     }
 
     private fun writeSlot(id: String, name: String, reopen: Boolean = true) {
