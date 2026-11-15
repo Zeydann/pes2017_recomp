@@ -50,7 +50,7 @@ class ControlGuideActivity : AppCompatActivity() {
             setText(R.string.controls_guide)
             setTextColor(Color.WHITE)
             textSize = 20f
-            isFakeBoldText = true
+            paint.isFakeBoldText = true
             letterSpacing = 0.06f
         }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         header.addView(Button(this).apply {
@@ -107,7 +107,7 @@ class ControlGuideActivity : AppCompatActivity() {
             setText(title)
             setTextColor(accent)
             textSize = 14f
-            isFakeBoldText = true
+            paint.isFakeBoldText = true
             letterSpacing = 0.08f
         })
         card.addView(TextView(this).apply {

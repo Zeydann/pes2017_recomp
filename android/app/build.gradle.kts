@@ -184,4 +184,9 @@ dependencies {
     implementation("androidx.documentfile:documentfile:1.0.1")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.mockito:mockito-core:5.14.2")
+    // The android.jar on the unit-test classpath stubs org.json, and its
+    // JSONObject.toString(int) returns null: the serialization tests would
+    // fail on the stub rather than on the layout. The real implementation is
+    // put in front of it here.
+    testImplementation("org.json:json:20231013")
 }

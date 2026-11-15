@@ -124,7 +124,7 @@ class SettingsActivity : AppCompatActivity() {
         }
         findViewById<Button>(R.id.restore_defaults).setOnClickListener {
             AlertDialog.Builder(this)
-                .setTitle(R.string.restore_confirm_title)
+                .setTitle(R.string.restore_controls_confirm_title)
                 .setMessage(R.string.restore_confirm_text)
                 .setNegativeButton(R.string.cancel, null)
                 .setPositiveButton(R.string.restore_defaults) { _, _ ->

@@ -15,7 +15,7 @@ import kotlin.math.max
  * Pure geometry: no Android types, so the unit tests can walk every default
  * binding without a device.
  */
-object GestureCorridor {
+internal object GestureCorridor {
 
     /**
      * The run a flick is read over: the classifier's own minimum (18 dp) plus a

@@ -311,7 +311,7 @@
     <string name="gamepad_hint">Turn off to ignore controllers entirely. Some phones report an accessory as a gamepad with a stick that is not centred, which makes a player run on his own.</string>
     <string name="vibration">Vibration</string>
     <string name="dpad_auto_hide">Auto-hide D-Pad</string>
-    <string name="dpad_auto_hide_hint">During a match the d-pad fades out after four seconds without a touch, and comes back the moment you tap where it sits. In the title's menus it always stays visible. Turn this off to keep it on screen permanently.</string>
+    <string name="dpad_auto_hide_hint">During a match the d-pad fades out after four seconds without a touch, and comes back the moment you tap where it sits. In the title\'s menus it always stays visible. Turn this off to keep it on screen permanently.</string>
     <string name="control_fx">Touch effects</string>
     <string name="control_fx_hint">Soft glow and a short press animation on the pad. Turn off if the pad feels heavy or the phone runs warm.</string>
     <string name="flick_skill_stick">Flick the skill stick</string>
@@ -437,7 +437,7 @@
     <string name="restore_backup_hint">Brings back the pad from before the last reset or edit.</string>
     <string name="restore_backup_done">Backup restored</string>
     <string name="backup_missing">There is no backup yet</string>
-    <string name="restore_confirm_title">Restore default controls?</string>
+    <string name="restore_controls_confirm_title">Restore default controls?</string>
     <string name="restore_confirm_text">Every control goes back to the factory position, size and binding. The pad you have now is saved as a backup, and “Restore last backup” brings it back.</string>
 
     <!-- The control guide. -->

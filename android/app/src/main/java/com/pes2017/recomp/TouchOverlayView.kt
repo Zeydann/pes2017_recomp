@@ -263,7 +263,7 @@ class TouchOverlayView @JvmOverloads constructor(
      * `pushState` skips what is not on screen, and its claim goes when the
      * finger lifts.
      */
-    fun setStance(value: PadStance) {
+    fun switchStance(value: PadStance) {
         if (stance == value) return
         stance = value
         prefs.defendingPad = value == PadStance.DEFEND
@@ -884,7 +884,7 @@ class TouchOverlayView @JvmOverloads constructor(
             val tapSlop = 18f * density
             if (start == null || hypot(x - start[0], y - start[1]) <= tapSlop) {
                 triggerHaptic()
-                setStance(if (stance == PadStance.DEFEND) PadStance.ATTACK else PadStance.DEFEND)
+                switchStance(if (stance == PadStance.DEFEND) PadStance.ATTACK else PadStance.DEFEND)
             }
         }
         if (released.element.kind == ControlKind.BUTTON) {

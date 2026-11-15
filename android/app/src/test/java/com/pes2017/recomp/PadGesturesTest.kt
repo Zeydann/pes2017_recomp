@@ -287,7 +287,7 @@ class PadGesturesTest {
         assertEquals(-1, TrickWheel.sector(0f, 0f, 100f))
         assertEquals(-1, TrickWheel.sector(20f, 0f, 100f))
         assertEquals(-1, TrickWheel.sector(0f, 0f, 0f))
-        assertEquals(0, "just outside the deadzone is a choice", TrickWheel.sector(30f, 0f, 100f))
+        assertEquals("just outside the deadzone is a choice", 0, TrickWheel.sector(30f, 0f, 100f))
     }
 
     @Test
