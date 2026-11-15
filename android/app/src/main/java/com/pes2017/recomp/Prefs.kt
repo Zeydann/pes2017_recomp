@@ -273,9 +273,24 @@ class Prefs(context: Context) {
         get() = store.getBoolean(KEY_PAD_P2, false)
         set(value) = store.edit().putBoolean(KEY_PAD_P2, value).apply()
 
+    /**
+     * Every buzz the app makes: the pad's ticks, the compound commands and the
+     * match's own feedback. One switch, and one place that reads it
+     * (Haptics/HapticsPolicy) -- there used to be two paths both reading this
+     * value, which is how a setting can look off while something still buzzes.
+     *
+     * The old key is read until the player touches the new one, so an update
+     * never turns vibration back on behind their back.
+     */
+    var haptics: Boolean
+        get() = if (store.contains(KEY_HAPTICS)) store.getBoolean(KEY_HAPTICS, true)
+                else store.getBoolean(KEY_VIBRATION, true)
+        set(value) = store.edit().putBoolean(KEY_HAPTICS, value).apply()
+
+    /** The old name for [haptics], kept for callers written before the switch was unified. */
     var vibration: Boolean
-        get() = store.getBoolean(KEY_VIBRATION, true)
-        set(value) = store.edit().putBoolean(KEY_VIBRATION, value).apply()
+        get() = haptics
+        set(value) { haptics = value }
 
     /**
      * How much light and motion the touch pad draws: [ControlTheme.FX_OFF],
@@ -545,6 +560,7 @@ class Prefs(context: Context) {
         private const val KEY_RIGHT_STICK_CURVE = "rightStickCurve"
         private const val KEY_FLICK_SKILL_STICK = "flickSkillStick"
         private const val KEY_STICK_TRAVEL_KNOB = "stickTravelMatchesKnob"
+        private const val KEY_HAPTICS = "haptics"
         private const val KEY_STICK_MODE = "stickMode"
         private const val KEY_SPRINT_STICK = "sprintFromStick"
         private const val KEY_DEFENDING_PAD = "defendingPad"

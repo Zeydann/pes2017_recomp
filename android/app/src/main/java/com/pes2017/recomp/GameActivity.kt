@@ -79,6 +79,9 @@ class GameActivity : AppCompatActivity(), NativeListener {
     private val pads = GamepadInput()
     private val handler = Handler(Looper.getMainLooper())
     private var vibrator: Vibrator? = null
+
+    /** The shared haptics policy: the pad and this activity ask the same switch. */
+    private val haptics by lazy { Haptics(this, prefs) }
     private var lastRumble = 0
 
     private val statsValues = FloatArray(9)
@@ -1457,8 +1460,20 @@ class GameActivity : AppCompatActivity(), NativeListener {
         }
     }
 
+    /**
+     * The layout import picker's answer while the pad is being edited mid-match.
+     * The panel validates and applies; this only forwards.
+     */
+    @Deprecated("The panel's own document picker answers here")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        editPanel?.handleActivityResult(requestCode, resultCode, data)
+    }
+
     override fun onRumble(user: Int, lowFrequency: Int, highFrequency: Int) {
-        if (!prefs.vibration || user != 0) return
+        // One switch for every buzz in the app: the same policy the pad's own
+        // ticks go through, so turning haptics off silences the match too.
+        if (!haptics.allowed(HapticEvent.MATCH) || user != 0) return
         val strength = max(lowFrequency, highFrequency)
         // Only on a change, and the runtime only calls on a change, so this
         // is not a vibration started sixty times a second.

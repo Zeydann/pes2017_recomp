@@ -461,3 +461,57 @@ unchanged; this only changes when the control is drawn and hit-testable.
   workspace); the C++ host checks in `tests/` pass (see `PROJECT_HANDOFF.md`).
 - Not device-tested: the timing of the compound sequences, the double tap, the
   PES cancel window, and whether the title reads the trigger axis in time.
+
+## Fitting the pad to the screen
+
+`ScreenFit` (and `SafeAreaDp`) takes the window in dp and the system's
+`systemBars() | displayCutout()` insets, and answers two questions for every
+control: how big may it be, and where may its centre go. Fitting is a view of
+the layout, never a save — the file keeps its fractions and dp sizes, so a pad
+edited on a notched phone is the same pad on one without a notch.
+
+A control is only ever shrunk, never grown, and never below 44 dp. Positions
+are clamped so the whole circle (plus the touch slack) stays inside the safe
+rectangle, which is what stops a button landing under a punch-hole camera or
+the gesture bar.
+
+## Saved layouts (slots)
+
+Five numbered slots plus as many named layouts as the player makes, in
+`LayoutStore`. A slot's file name is derived and fixed
+(`controls_slot_3.json`); the name the player typed lives *inside* the layout
+file, so renaming never renames a file and the list shows what was typed. A name
+is sanitised only to derive an id, and the id can never contain a dot or a path
+separator.
+
+The old `controls_profile_*.json` files are folded into slots on first use, with
+the name recovered from the file name. Saving over an existing slot asks first;
+duplicating never lands on top of another pad.
+
+## Import and export
+
+`LayoutEnvelope` wraps a layout with `format: "pes17-controls"`, an envelope
+version, a name, the app version, the creation time and the device size. Import
+refuses: a file over 512 KB, anything that is not JSON, the wrong format tag, a
+newer envelope, a newer layout version, no controls, or more than 64 controls.
+A rejection names the reason and changes nothing.
+
+Export goes through the Share Sheet (a cache file handed out read-only by the
+app's `FileProvider`) or, on import, through the system document picker — the
+app never needs a path it does not have permission for.
+
+## One haptics switch
+
+`HapticsPolicy` is the only place that decides whether a buzz may happen, and
+`Haptics` is the only thing that buzzes. The pad's ticks, the compound
+commands, the skill wheel and the match's own rumble all read the same switch,
+which is why turning haptics off actually turns all of it off. A phone with no
+motor still gets control ticks (the view's haptic feedback) but not rumble.
+
+## OFF controls in the editor
+
+A control switched off is not drawn in play. In the editor it is drawn at
+exactly 30% (`ControlOffState.OFF_ALPHA`), with its press glow forced to none,
+and with a red `#D32F2F` rounded **OFF** pill under it — the badge is above the
+selection ring, so a selected off control still reads as off. The visibility
+switch is labelled **On/Off**.

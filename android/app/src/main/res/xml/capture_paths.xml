@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
     <external-files-path name="captures" path="captures/" />
+    <!-- A layout shared from the editor: written to the cache and granted
+         read-only to whichever app the player picks. -->
+    <cache-path name="layouts" path="layouts/" />
 </paths>

@@ -103,7 +103,8 @@ class SettingsActivity : AppCompatActivity() {
         // ---- controls and sound ----
         switch(R.id.touch, prefs.touchControls) { prefs.touchControls = it }
         switch(R.id.gamepad, prefs.gamepadEnabled) { prefs.gamepadEnabled = it }
-        switch(R.id.vibration, prefs.vibration) { prefs.vibration = it }
+        // One haptics switch for the pad and the match alike (Haptics).
+        switch(R.id.vibration, prefs.haptics) { prefs.haptics = it }
         switch(R.id.dpad_auto_hide, prefs.dpadAutoHide) { prefs.dpadAutoHide = it }
         switch(R.id.control_fx, prefs.controlFx != ControlTheme.FX_OFF) {
             prefs.controlFx = if (it) ControlTheme.FX_SUBTLE else ControlTheme.FX_OFF

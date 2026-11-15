@@ -543,7 +543,6 @@ class ControlLayout private constructor(
         private const val FILE_NAME = "controls.json"
         private const val BACKUP_NAME = "controls.backup.json"
         private const val BROKEN_NAME = "controls.broken.json"
-        private const val PROFILE_PREFIX = "controls_profile_"
 
         /**
          * The layout file's version. 8 folds the separate defending-pad copies
@@ -755,47 +754,80 @@ class ControlLayout private constructor(
             if (layout.elements.isEmpty()) layout.resetAll()
         }
 
-        // ---- profiles ------------------------------------------------------
+        // ---- saved layouts (slots) ------------------------------------------
 
-        private fun profileFile(context: Context, name: String): File? {
-            val safe = name.trim().lowercase().replace(Regex("[^a-z0-9_-]"), "_")
-            if (safe.isEmpty()) return null
-            return File(context.filesDir, PROFILE_PREFIX + safe + ".json")
+        private fun store(context: Context) = LayoutStore(context.filesDir)
+
+        /** The name a layout file carries, or "" for one that has none. */
+        private fun nameIn(text: String): String =
+            runCatching { JSONObject(text).optString("name", "") }.getOrDefault("")
+
+        /** The same layout text with its display name set. */
+        private fun withName(text: String, name: String): String = try {
+            val root = JSONObject(text)
+            root.put("name", name.trim().take(40))
+            root.toString(2)
+        } catch (_: Throwable) {
+            text
         }
 
-        /** Saves the pad as a named profile; false when the name is unusable. */
-        fun saveProfile(context: Context, layout: ControlLayout, name: String): Boolean {
-            val file = profileFile(context, name) ?: return false
-            return try {
-                file.writeText(layout.toJson())
-                true
-            } catch (_: Throwable) {
-                false
-            }
+        /**
+         * Every saved pad, numbered slots first.
+         *
+         * The old named profiles are folded in first: their file names held the
+         * name, so it is recovered into the file before the file stops being a
+         * profile. A player who saved "Away pad" on the old build finds
+         * "Away Pad" in the list rather than `away_pad`.
+         */
+        fun listSlots(context: Context): List<LayoutSlot> {
+            val store = store(context)
+            store.migrateLegacy { id, text -> withName(text, LayoutStore.prettyId(id)) }
+            return store.list { _, text -> nameIn(text) }
         }
 
-        fun listProfiles(context: Context): List<String> {
-            val files = context.filesDir.listFiles() ?: return emptyList()
-            return files
-                .filter { it.name.startsWith(PROFILE_PREFIX) && it.name.endsWith(".json") }
-                .map { it.name.removePrefix(PROFILE_PREFIX).removeSuffix(".json") }
-                .sorted()
+        /** Saves the pad into [id], under [name]; false when it could not be written. */
+        fun saveSlot(context: Context, layout: ControlLayout, id: String, name: String): Boolean =
+            store(context).write(id, withName(layout.toJson(), name.ifBlank { LayoutStore.prettyId(id) }))
+
+        /** Renames a saved pad without touching its controls. */
+        fun renameSlot(context: Context, id: String, name: String): Boolean {
+            val store = store(context)
+            val text = store.read(id) ?: return false
+            return store.write(id, withName(text, name.ifBlank { LayoutStore.prettyId(id) }))
         }
 
-        fun loadProfile(context: Context, name: String): ControlLayout? {
-            val file = profileFile(context, name) ?: return null
-            val text = try {
-                file.readText()
-            } catch (_: Throwable) {
-                return null
-            }
+        /** Copies one saved pad into another place, under a name of its own. */
+        fun duplicateSlot(context: Context, fromId: String, toId: String, name: String): Boolean {
+            val store = store(context)
+            val text = store.read(fromId) ?: return false
+            return store.write(toId, withName(text, name.ifBlank { LayoutStore.prettyId(toId) }))
+        }
+
+        /** The first numbered slot with nothing in it, or null when all five are used. */
+        fun freeSlot(context: Context): String? = store(context).freeNumberedId()
+
+        fun loadSlot(context: Context, id: String): ControlLayout? {
+            val text = store(context).read(id) ?: return null
             return parse(text)
         }
 
-        fun deleteProfile(context: Context, name: String): Boolean {
-            val file = profileFile(context, name) ?: return false
-            return file.delete()
-        }
+        fun deleteSlot(context: Context, id: String): Boolean = store(context).delete(id)
+
+        /**
+         * The old profile entry points, kept so a caller written before slots
+         * still works: a profile is a named slot, sanitised the same way.
+         */
+        fun saveProfile(context: Context, layout: ControlLayout, name: String): Boolean =
+            saveSlot(context, layout, LayoutStore.sanitize(name), name)
+
+        fun listProfiles(context: Context): List<String> =
+            listSlots(context).filter { !it.numbered }.map { it.id }
+
+        fun loadProfile(context: Context, name: String): ControlLayout? =
+            loadSlot(context, LayoutStore.sanitize(name))
+
+        fun deleteProfile(context: Context, name: String): Boolean =
+            deleteSlot(context, LayoutStore.sanitize(name))
 
         fun hasBackup(context: Context): Boolean = File(context.filesDir, BACKUP_NAME).exists()
 

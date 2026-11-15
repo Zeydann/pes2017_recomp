@@ -76,6 +76,16 @@ class ControlsEditorActivity : AppCompatActivity() {
         overlay.layout.save(this)
     }
 
+    /**
+     * The layout import picker's answer. The panel owns the validation and the
+     * apply; this activity only has to hand the result on.
+     */
+    @Deprecated("The panel's own document picker answers here")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (::panel.isInitialized) panel.handleActivityResult(requestCode, resultCode, data)
+    }
+
     private fun goFullscreen() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         val controller = WindowInsetsControllerCompat(window, window.decorView)

@@ -534,6 +534,10 @@ class ControlEditPanel(
         actions.add { redo() }
         labels.add(activity.getString(R.string.edit_profiles))
         actions.add { showProfiles() }
+        labels.add(activity.getString(R.string.layout_export))
+        actions.add { shareLayout(overlay.layout, activity.getString(R.string.edit_profiles)) }
+        labels.add(activity.getString(R.string.layout_import))
+        actions.add { importLayout() }
         AlertDialog.Builder(activity)
             .setTitle(R.string.edit_more)
             .setItems(labels.toTypedArray()) { _, which -> actions[which].invoke() }
@@ -652,29 +656,69 @@ class ControlEditPanel(
             .show()
     }
 
-    // ---- profiles -----------------------------------------------------------
+    // ---- saved layouts (slots) ----------------------------------------------
 
+    /**
+     * The saved pads: five numbered places and as many named ones as the player
+     * makes. A slot's name is its own -- renaming never renames a file -- so the
+     * list reads back what was typed rather than a sanitised file name.
+     */
     private fun showProfiles() {
-        val saved = ControlLayout.listProfiles(activity)
-        val labels = ArrayList<String>(3 + saved.size)
+        val slots = ControlLayout.listSlots(activity)
+        val labels = ArrayList<String>(slots.size + 5)
+        val actions = ArrayList<() -> Unit>(slots.size + 5)
+        // The two factory pads stay one tap away: a player who wants the pad
+        // back the way it shipped should not have to remember to delete a slot.
         labels.add(activity.getString(R.string.profile_modern))
+        actions.add { loadBuiltIn(PROFILE_MODERN) }
         labels.add(activity.getString(R.string.profile_classic))
+        actions.add { loadBuiltIn(PROFILE_CLASSIC) }
+        for (slot in slots) {
+            labels.add(
+                if (slot.numbered) {
+                    activity.getString(R.string.profile_slot, slot.id, slot.displayName)
+                } else {
+                    slot.displayName
+                },
+            )
+            actions.add { slotActions(slot) }
+        }
         labels.add(activity.getString(R.string.profile_save_as))
-        labels.addAll(saved)
+        actions.add { saveCurrentAs() }
+        labels.add(activity.getString(R.string.layout_import))
+        actions.add { importLayout() }
         AlertDialog.Builder(activity)
             .setTitle(R.string.edit_profiles)
-            .setItems(labels.toTypedArray()) { _, which ->
-                when {
-                    which == 0 -> loadBuiltIn(PROFILE_MODERN)
-                    which == 1 -> loadBuiltIn(PROFILE_CLASSIC)
-                    which == 2 -> saveProfileDialog()
-                    else -> profileActions(saved[which - 3])
+            .setItems(labels.toTypedArray()) { _, which -> actions[which].invoke() }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    /** Load, rename, duplicate, export or delete one saved pad. */
+    private fun slotActions(slot: LayoutSlot) {
+        val labels = arrayOf(
+            activity.getString(R.string.profile_load),
+            activity.getString(R.string.profile_rename),
+            activity.getString(R.string.profile_duplicate),
+            activity.getString(R.string.layout_export),
+            activity.getString(R.string.profile_delete),
+        )
+        AlertDialog.Builder(activity)
+            .setTitle(slot.displayName)
+            .setItems(labels) { _, which ->
+                when (which) {
+                    0 -> loadSlot(slot)
+                    1 -> renameSlot(slot)
+                    2 -> duplicateSlot(slot)
+                    3 -> exportSlot(slot)
+                    else -> confirmDeleteSlot(slot)
                 }
             }
             .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
+    /** Puts a factory pad back, without touching any saved slot. */
     private fun loadBuiltIn(profile: String) {
         remember()
         overlay.layout.replaceWith(
@@ -686,47 +730,168 @@ class ControlEditPanel(
         save()
     }
 
-    private fun saveProfileDialog() {
-        val dp = activity.resources.displayMetrics.density
-        val input = EditText(activity).apply {
-            hint = activity.getString(R.string.profile_name)
-            setPadding((20 * dp).roundToInt(), (8 * dp).roundToInt(), (20 * dp).roundToInt(), 0)
+    private fun loadSlot(slot: LayoutSlot) {
+        val loaded = ControlLayout.loadSlot(activity, slot.id)
+        if (loaded == null) {
+            Toast.makeText(activity, R.string.profile_failed, Toast.LENGTH_SHORT).show()
+            return
         }
+        remember()
+        overlay.layout.replaceWith(loaded)
+        overlay.select(null)
+        show(null)
+        overlay.refresh()
+        save()
+    }
+
+    /** Saves the current pad under a name the player types. */
+    private fun saveCurrentAs() {
+        nameDialog(activity.getString(R.string.profile_save_as), "") { name ->
+            val id = LayoutStore.sanitize(name)
+            if (ControlLayout.listSlots(activity).any { it.id == id }) {
+                confirmOverwrite(id, name)
+            } else {
+                writeSlot(id, name)
+            }
+        }
+    }
+
+    private fun confirmOverwrite(id: String, name: String) {
         AlertDialog.Builder(activity)
-            .setTitle(R.string.profile_save_as)
-            .setView(input)
+            .setTitle(R.string.profile_overwrite)
+            .setMessage(activity.getString(R.string.profile_overwrite_confirm, name))
             .setNegativeButton(R.string.cancel, null)
-            .setPositiveButton(android.R.string.ok) { _, _ ->
-                val name = input.text.toString().trim()
-                val ok = name.isNotEmpty() && ControlLayout.saveProfile(activity, overlay.layout, name)
-                Toast.makeText(
-                    activity,
-                    if (ok) R.string.profile_saved else R.string.profile_failed,
-                    Toast.LENGTH_SHORT,
-                ).show()
+            .setPositiveButton(R.string.profile_overwrite) { _, _ -> writeSlot(id, name) }
+            .show()
+    }
+
+    private fun writeSlot(id: String, name: String) {
+        val ok = ControlLayout.saveSlot(activity, overlay.layout, id, name)
+        Toast.makeText(
+            activity, if (ok) R.string.profile_saved else R.string.profile_failed, Toast.LENGTH_SHORT,
+        ).show()
+        if (ok) showProfiles()
+    }
+
+    private fun renameSlot(slot: LayoutSlot) {
+        nameDialog(activity.getString(R.string.profile_rename), slot.displayName) { name ->
+            val ok = ControlLayout.renameSlot(activity, slot.id, name)
+            Toast.makeText(
+                activity, if (ok) R.string.profile_renamed else R.string.profile_failed,
+                Toast.LENGTH_SHORT,
+            ).show()
+            if (ok) showProfiles()
+        }
+    }
+
+    /**
+     * Copies a saved pad into the first free numbered slot. With all five used,
+     * the copy goes beside it under its own id -- never on top of another pad,
+     * which is the silent overwrite this replaces.
+     */
+    private fun duplicateSlot(slot: LayoutSlot) {
+        val free = ControlLayout.freeSlot(activity)
+        val id = free ?: LayoutStore.sanitize(slot.displayName + " copy")
+        if (free == null && ControlLayout.listSlots(activity).any { it.id == id }) {
+            Toast.makeText(activity, R.string.profile_full, Toast.LENGTH_SHORT).show()
+            return
+        }
+        val copyName = activity.getString(R.string.profile_copy_name, slot.displayName)
+        val ok = ControlLayout.duplicateSlot(activity, slot.id, id, copyName)
+        Toast.makeText(
+            activity, if (ok) R.string.profile_duplicated else R.string.profile_failed,
+            Toast.LENGTH_SHORT,
+        ).show()
+        if (ok) showProfiles()
+    }
+
+    private fun confirmDeleteSlot(slot: LayoutSlot) {
+        AlertDialog.Builder(activity)
+            .setTitle(R.string.profile_delete)
+            .setMessage(activity.getString(R.string.profile_delete_confirm, slot.displayName))
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.profile_delete) { _, _ ->
+                ControlLayout.deleteSlot(activity, slot.id)
+                showProfiles()
             }
             .show()
     }
 
-    private fun profileActions(name: String) {
+    private fun exportSlot(slot: LayoutSlot) {
+        val layout = ControlLayout.loadSlot(activity, slot.id) ?: return
+        shareLayout(layout, slot.displayName)
+    }
+
+    private fun shareLayout(layout: ControlLayout, name: String) {
+        val json = LayoutEnvelope.export(layout, name, appVersion())
+        val ok = LayoutTransfer.share(activity, json, name)
+        Toast.makeText(
+            activity, if (ok) R.string.layout_exported else R.string.layout_export_failed,
+            Toast.LENGTH_SHORT,
+        ).show()
+    }
+
+    private fun appVersion(): String = try {
+        activity.packageManager.getPackageInfo(activity.packageName, 0).versionName ?: ""
+    } catch (_: Throwable) {
+        ""
+    }
+
+    private fun nameDialog(title: String, initial: String, onOk: (String) -> Unit) {
+        val dp = activity.resources.displayMetrics.density
+        val input = EditText(activity).apply {
+            setText(initial)
+            hint = activity.getString(R.string.profile_name)
+            setPadding((20 * dp).roundToInt(), (8 * dp).roundToInt(), (20 * dp).roundToInt(), 0)
+        }
         AlertDialog.Builder(activity)
-            .setTitle(name)
-            .setItems(arrayOf(activity.getString(R.string.profile_load),
-                activity.getString(R.string.profile_delete))) { _, which ->
-                if (which == 0) {
-                    val loaded = ControlLayout.loadProfile(activity, name) ?: return@setItems
-                    remember()
-                    overlay.layout.replaceWith(loaded)
-                    overlay.select(null)
-                    show(null)
-                    overlay.refresh()
-                    save()
+            .setTitle(title)
+            .setView(input)
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                val name = input.text.toString().trim()
+                if (name.isEmpty()) {
+                    Toast.makeText(activity, R.string.profile_failed, Toast.LENGTH_SHORT).show()
                 } else {
-                    ControlLayout.deleteProfile(activity, name)
+                    onOk(name)
                 }
             }
-            .setNegativeButton(R.string.cancel, null)
             .show()
+    }
+
+    // ---- import / export -----------------------------------------------------
+
+    private fun importLayout() {
+        LayoutTransfer.openDocument(activity)
+    }
+
+    /**
+     * The document picker's answer, forwarded by whichever activity hosts this
+     * panel. A file that fails validation changes nothing: the toast names the
+     * reason, and the pad the player is editing stays exactly as it was.
+     */
+    fun handleActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
+        if (requestCode != LayoutTransfer.REQUEST_IMPORT) return
+        if (resultCode != Activity.RESULT_OK) return
+        val uri = data?.data ?: return
+        val text = LayoutTransfer.read(activity, uri)
+        if (text == null) {
+            Toast.makeText(activity, R.string.layout_import_failed, Toast.LENGTH_SHORT).show()
+            return
+        }
+        when (val result = LayoutEnvelope.import(text)) {
+            is LayoutEnvelope.ImportResult.Ok -> {
+                remember()
+                overlay.layout.replaceWith(result.layout)
+                overlay.select(null)
+                show(null)
+                overlay.refresh()
+                save()
+                Toast.makeText(activity, R.string.layout_imported, Toast.LENGTH_SHORT).show()
+            }
+            is LayoutEnvelope.ImportResult.Rejected ->
+                Toast.makeText(activity, result.reason, Toast.LENGTH_LONG).show()
+        }
     }
 
     fun attach() {

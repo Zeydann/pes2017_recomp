@@ -8,11 +8,12 @@ import android.graphics.DashPathEffect
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
+import android.os.Build
 import android.os.SystemClock
 import android.util.AttributeSet
-import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
+import android.view.WindowInsets
 import android.widget.Toast
 import kotlin.math.abs
 import kotlin.math.hypot
@@ -36,6 +37,9 @@ class TouchOverlayView @JvmOverloads constructor(
 ) : View(context, attrs) {
 
     private val prefs by lazy { Prefs(context) }
+
+    /** The one path every buzz goes through (HapticsPolicy's switch lives there). */
+    private val haptics by lazy { Haptics(context, prefs) }
 
     var layout: ControlLayout = ControlLayout.defaults()
         set(value) {
@@ -336,6 +340,9 @@ class TouchOverlayView @JvmOverloads constructor(
     /** Set when the pad's own light has cost too much for three samples in a row. */
     private var effectsDegraded = false
 
+    /** True while an off control is being drawn, so its glow can be forced to none. */
+    private var drawingOff = false
+
     private val effects: Boolean
         get() = !effectsDegraded && ControlTheme.animated(prefs.controlFx)
     private val box = RectF()
@@ -349,11 +356,66 @@ class TouchOverlayView @JvmOverloads constructor(
 
     // ---- geometry ----------------------------------------------------------
 
+    // The window minus what a control may not sit under: the cutout, the rounded
+    // corners, the gesture bar. Recomputed only when the window or the insets
+    // change, because every hit test and every drawn pixel reads it.
+    private var safeInsets = SafeAreaDp.NONE
+    private var screenFit = ScreenFit(1f, 1f, SafeAreaDp.NONE)
+
     // Stance-aware: a control the player gave its own defending-pad place is
-    // drawn, hit-tested and edited there while that pad is out.
-    private fun centreX(element: ControlElement) = element.xFracOn(stance) * width
-    private fun centreY(element: ControlElement) = element.yFracOn(stance) * height
-    private fun radius(element: ControlElement) = element.sizeOn(stance) * density * 0.5f
+    // drawn, hit-tested and edited there while that pad is out. Fitted to the
+    // safe area, so a control on a notched phone is still a control a thumb can
+    // reach, and the same layout is unchanged on a phone without one.
+    private fun centreX(element: ControlElement): Float =
+        screenFit.xDp(element.xFracOn(stance), screenFit.sizeDp(element.sizeOn(stance))) * density
+
+    private fun centreY(element: ControlElement): Float =
+        screenFit.yDp(element.yFracOn(stance), screenFit.sizeDp(element.sizeOn(stance))) * density
+
+    private fun radius(element: ControlElement): Float =
+        screenFit.sizeDp(element.sizeOn(stance)) * density * 0.5f
+
+    private fun rebuildFit() {
+        if (width <= 0 || height <= 0) return
+        screenFit = ScreenFit(
+            max(1f, width / density), max(1f, height / density), safeInsets,
+        )
+    }
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        rebuildFit()
+    }
+
+    /**
+     * Records where the window's unusable edges are and consumes nothing: the
+     * match draws into the cutout on purpose, so the insets are the pad's
+     * business only. A control's position in the layout file is untouched by
+     * this -- fitting is a view, never a save.
+     */
+    override fun onApplyWindowInsets(insets: WindowInsets): WindowInsets {
+        var left = insets.systemWindowInsetLeft
+        var top = insets.systemWindowInsetTop
+        var right = insets.systemWindowInsetRight
+        var bottom = insets.systemWindowInsetBottom
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val safe = insets.getInsets(
+                WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout(),
+            )
+            left = safe.left
+            top = safe.top
+            right = safe.right
+            bottom = safe.bottom
+        }
+        val scale = if (density > 0f) density else 1f
+        val updated = SafeAreaDp(left / scale, top / scale, right / scale, bottom / scale)
+        if (updated != safeInsets) {
+            safeInsets = updated
+            rebuildFit()
+            invalidate()
+        }
+        return super.onApplyWindowInsets(insets)
+    }
 
     /** How far the knob travels inside its socket, as a fraction of the radius. */
     private val stickTravel = 0.62f
@@ -776,14 +838,9 @@ class TouchOverlayView @JvmOverloads constructor(
         return true
     }
 
-    private fun triggerHaptic() {
-        if (!prefs.vibration) return
-        try {
-            performHapticFeedback(
-                HapticFeedbackConstants.VIRTUAL_KEY,
-                HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING,
-            )
-        } catch (_: Throwable) {}
+    /** One tick, through the app's one haptics policy. */
+    private fun triggerHaptic(event: HapticEvent = HapticEvent.TAP) {
+        haptics.tick(this, event)
     }
 
     private fun press(pointerId: Int, x: Float, y: Float): Boolean {
@@ -1306,13 +1363,15 @@ class TouchOverlayView @JvmOverloads constructor(
         releaseAnimAt[element.id] = SystemClock.uptimeMillis()
     }
 
-    /** How lit a control is right now, 0 when the pad is idle. */
+    /** How lit a control is right now, 0 when the pad is idle and always 0 when it is off. */
     private fun effectAmount(element: ControlElement, now: Long): Float {
         if (!effects) return 0f
         val down = pressAnimAt[element.id] ?: return 0f
         val up = releaseAnimAt[element.id] ?: 0L
         val held = isOn(element)
-        return ControlTheme.pressAmount(held, down, up, now)
+        val amount = ControlTheme.pressAmount(held, down, up, now)
+        // An off control sends nothing, so it must not light up as if it had.
+        return ControlOffState.glow(amount, drawingOff, editing)
     }
 
     /**
@@ -1391,7 +1450,12 @@ class TouchOverlayView @JvmOverloads constructor(
             if (!editing && !element.shownIn(gamePhase, stance)) continue
             val faded = editing && !element.shownIn(gamePhase, stance)
             val stanceAlpha = element.alphaOn(stance)
-            val alpha = if (editing) max(0.28f, stanceAlpha) else stanceAlpha
+            // An off control is its own state in the editor: dimmed to 0.30,
+            // forced flat and badged. In play it is simply not drawn, which the
+            // phase check above has already done.
+            val off = ControlOffState.isOff(element.visibleIn(stance), editing)
+            drawingOff = off
+            val alpha = ControlOffState.alpha(stanceAlpha, off, editing)
             // The d-pad's own fade multiplies its layout alpha; everything
             // else is untouched, so no other control can flicker with it.
             val dpadFade = if (element.kind == ControlKind.DPAD && !editing) dpadAlpha() else 1f
@@ -1414,6 +1478,9 @@ class TouchOverlayView @JvmOverloads constructor(
                 }
             }
             if (editing && element === selected) drawSelection(canvas, element)
+            // The badge goes above the selection ring: it is a state, not a
+            // decoration, and a selected off control must still read as off.
+            if (ControlOffState.showsBadge(off, editing)) drawOffBadge(canvas, element)
             // The released swipe's trail is drawn over its control, whatever the
             // phase: it is feedback for a gesture that has already been sent.
             drawSwipeTrail(canvas, element)
@@ -1497,6 +1564,10 @@ class TouchOverlayView @JvmOverloads constructor(
 
         /** How long a released swipe's trail takes to fly out and fade. */
         private const val SWIPE_TRAIL_MS = 200L
+
+        /** The word on an off control's badge, and the red the editor gives it. */
+        private const val OFF_BADGE = "OFF"
+        private const val COLOR_OFF = 0xFFD32F2F.toInt()
 
         // The stance chip: green on the attacking pad, steel blue on the
         // defending one, so which half the thumb is in is legible at a glance.
@@ -2168,6 +2239,33 @@ class TouchOverlayView @JvmOverloads constructor(
         text.color = dashed.color
         text.textSize = 15f * density
         canvas.drawText(element.label, box.centerX(), box.centerY(), text)
+    }
+
+    /**
+     * The OFF badge: a red rounded pill under the control, in the editor only.
+     *
+     * A dimmed circle alone is ambiguous -- the editor already fades controls
+     * that belong to another phase -- so the state gets a word as well as a
+     * colour. Sized from the text rather than the control, so it stays legible
+     * on the smallest button the editor allows.
+     */
+    private fun drawOffBadge(canvas: Canvas, element: ControlElement) {
+        val r = radius(element)
+        val cx = centreX(element)
+        val cy = centreY(element)
+        subText.textSize = max(8f * density, r * 0.30f)
+        val textWidth = subText.measureText(OFF_BADGE)
+        val padX = 6f * density
+        val height = max(14f * density, r * 0.44f)
+        val halfWidth = textWidth / 2f + padX
+        val top = cy + r + 4f * density
+        box.set(cx - halfWidth, top, cx + halfWidth, top + height)
+        fill.color = COLOR_OFF
+        canvas.drawRoundRect(box, height / 2f, height / 2f, fill)
+        subText.color = Color.WHITE
+        canvas.drawText(
+            OFF_BADGE, cx, top + height / 2f - (subText.descent() + subText.ascent()) / 2f, subText,
+        )
     }
 
     private fun drawSelection(canvas: Canvas, element: ControlElement) {

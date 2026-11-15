@@ -155,7 +155,7 @@
     <string name="edit_hint">Hidden controls are shown faintly here so they can be turned back on.</string>
     <string name="size">Size</string>
     <string name="opacity">Opacity</string>
-    <string name="shown">Shown</string>
+    <string name="shown">On/Off</string>
     <string name="toggle">Stays down</string>
     <string name="snap">Snap</string>
     <string name="reset_one">Reset this</string>
@@ -309,7 +309,7 @@
     <string name="gamepad_p2">Physical controller is player 2 (testing)</string>
     <string name="gamepad_p2_hint">Touch controls stay player 1; the first physical controller drives player 2. Takes effect when a match is started.</string>
     <string name="gamepad_hint">Turn off to ignore controllers entirely. Some phones report an accessory as a gamepad with a stick that is not centred, which makes a player run on his own.</string>
-    <string name="vibration">Vibration</string>
+    <string name="vibration">Haptics (all feedback)</string>
     <string name="dpad_auto_hide">Auto-hide D-Pad</string>
     <string name="dpad_auto_hide_hint">During a match the d-pad fades out after four seconds without a touch, and comes back the moment you tap where it sits. In the title\'s menus it always stays visible. Turn this off to keep it on screen permanently.</string>
     <string name="control_fx">Touch effects</string>
@@ -428,6 +428,22 @@
     <string name="profile_failed">Could not save that profile</string>
     <string name="profile_load">Load</string>
     <string name="profile_delete">Delete</string>
+    <string name="profile_slot">%1$s · %2$s</string>
+    <string name="profile_rename">Rename</string>
+    <string name="profile_duplicate">Duplicate</string>
+    <string name="profile_overwrite">Overwrite</string>
+    <string name="profile_overwrite_confirm">A saved layout called %1$s already exists. Replace it?</string>
+    <string name="profile_full">All five slots are used and that name is taken too.</string>
+    <string name="profile_copy_name">%1$s copy</string>
+    <string name="profile_renamed">Renamed</string>
+    <string name="profile_duplicated">Duplicated</string>
+    <string name="profile_delete_confirm">Delete %1$s? Its controls are lost.</string>
+    <string name="layout_import">Import layout…</string>
+    <string name="layout_export">Export layout…</string>
+    <string name="layout_exported">Layout ready to share</string>
+    <string name="layout_export_failed">Could not export that layout</string>
+    <string name="layout_imported">Layout imported</string>
+    <string name="layout_import_failed">Could not read that file</string>
 
     <!-- Settings: the failsafe. -->
     <string name="restore_defaults">Restore default controls</string>
