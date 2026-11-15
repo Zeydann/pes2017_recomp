@@ -281,6 +281,14 @@ class Prefs(context: Context) {
      * How much light and motion the touch pad draws: [ControlTheme.FX_OFF],
      * [ControlTheme.FX_SUBTLE] (the default) or [ControlTheme.FX_FULL].
      */
+    /**
+     * Whether the d-pad fades out after [DpadAutoHide.IDLE_MS] without a touch
+     * in a match. On by default; off keeps it on screen permanently.
+     */
+    var dpadAutoHide: Boolean
+        get() = store.getBoolean(KEY_DPAD_AUTO_HIDE, true)
+        set(value) = store.edit().putBoolean(KEY_DPAD_AUTO_HIDE, value).apply()
+
     var controlFx: String
         get() = store.getString(KEY_CONTROL_FX, ControlTheme.FX_SUBTLE) ?: ControlTheme.FX_SUBTLE
         set(value) = store.edit()
@@ -494,6 +502,7 @@ class Prefs(context: Context) {
         private const val KEY_PAD_P2 = "padAsPlayer2"
         private const val KEY_VIBRATION = "vibration"
         private const val KEY_CONTROL_FX = "controlFx"
+        private const val KEY_DPAD_AUTO_HIDE = "dpadAutoHide"
         private const val KEY_BUTTON_STYLE = "buttonStyle"
         private const val STYLE_PLAYSTATION = "playstation"
         private const val STYLE_XBOX = "xbox"

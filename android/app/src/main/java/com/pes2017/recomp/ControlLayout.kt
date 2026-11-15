@@ -881,12 +881,14 @@ class ControlLayout private constructor(
                     place("look", ControlKind.LOOK, 0, "LOOK", 330f, 200f, 300f, 0f,
                         shownWhen = PhaseMask.MATCH),
 
-                    // The menus' d-pad, above where the left thumb rests. It is
-                    // on screen only while the title is in its menus (the app's
-                    // phase listener), because over the pitch the stick already
-                    // stands in for it.
-                    place("dpad", ControlKind.DPAD, 0, "D-PAD", 90f, -215f, 110f, 0.40f,
-                        shownWhen = PhaseMask.MENUS),
+                    // The d-pad: tactics and mentality in a match, navigation in
+                    // the menus. It sits above the left thumb and clear of the
+                    // movement stick's socket, the shoulders and the look band's
+                    // controls; over the pitch it fades out after four idle
+                    // seconds (DpadAutoHide), so it does not sit on the pitch
+                    // for a whole match. In the menus it never fades.
+                    place("dpad", ControlKind.DPAD, 0, "D-PAD", 200f, -240f, 110f, 0.40f,
+                        shownWhen = PhaseMask.ALWAYS),
 
                     // Stick clicks: kept for the editor, hidden until wanted. R3
                     // sits out of the skill palette's column, which it used to

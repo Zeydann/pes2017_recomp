@@ -310,6 +310,8 @@
     <string name="gamepad_p2_hint">Touch controls stay player 1; the first physical controller drives player 2. Takes effect when a match is started.</string>
     <string name="gamepad_hint">Turn off to ignore controllers entirely. Some phones report an accessory as a gamepad with a stick that is not centred, which makes a player run on his own.</string>
     <string name="vibration">Vibration</string>
+    <string name="dpad_auto_hide">Auto-hide D-Pad</string>
+    <string name="dpad_auto_hide_hint">During a match the d-pad fades out after four seconds without a touch, and comes back the moment you tap where it sits. In the title's menus it always stays visible. Turn this off to keep it on screen permanently.</string>
     <string name="control_fx">Touch effects</string>
     <string name="control_fx_hint">Soft glow and a short press animation on the pad. Turn off if the pad feels heavy or the phone runs warm.</string>
     <string name="flick_skill_stick">Flick the skill stick</string>
@@ -442,7 +444,7 @@
     <string name="controls_guide">Controls guide</string>
     <string name="guide_intro">Everything the pad can do, read from the controls you are using now.</string>
     <string name="guide_essentials">Essentials</string>
-    <string name="guide_essentials_text">Left thumb: move. The stick floats to where you land on the left half, or stays in its socket if you prefer it fixed. Push it to the rim to sprint, and it stays running until you pull back inside the release point. Right thumb: the action diamond.</string>
+    <string name="guide_essentials_text">Left thumb: move. The stick floats to where you land on the left half, or stays in its socket if you prefer it fixed. Push it to the rim to sprint, and it stays running until you pull back inside the release point. Right thumb: the action diamond. The d-pad above the stick is for tactics; it fades after four quiet seconds and comes back when you tap where it sits.</string>
     <string name="guide_dribbling">Dribbling</string>
     <string name="guide_dribbling_text">Roll a thumb between pass, cross, shoot and through ball without lifting: the direction you leave in is read as a swipe. Hold RB and centre the stick to dummy. Tap RB twice for the burst.</string>
     <string name="guide_wheel">Skill wheel</string>

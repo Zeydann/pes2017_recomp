@@ -61,12 +61,14 @@ class ControlLayoutPhaseTest {
     }
 
     @Test
-    fun theDefaultLayoutHasAMenusDpadThatIsOffThePitch() {
+    fun theDefaultLayoutHasADpadForTheMenusAndTheMatch() {
         val layout = ControlLayout.defaults(800f, 360f)
         val dpad = layout.find("dpad") ?: error("the default pad has a d-pad")
 
         assertTrue(dpad.kind == ControlKind.DPAD)
         assertTrue("it is there for the menus", dpad.shownIn(GamePhase.MENUS))
-        assertFalse("and not over the pitch, where the stick stands in", dpad.shownIn(GamePhase.MATCH))
+        // It is over the pitch too now, where it fades itself out after four
+        // idle seconds (DpadAutoHide) instead of sitting there all match.
+        assertTrue("and available for tactics in a match", dpad.shownIn(GamePhase.MATCH))
     }
 }

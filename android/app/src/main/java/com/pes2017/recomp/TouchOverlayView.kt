@@ -60,6 +60,7 @@ class TouchOverlayView @JvmOverloads constructor(
             releaseEverything()
             selected = if (value) selected else null
             invalidate()
+            refreshDpad()
         }
 
     var selected: ControlElement? = null
@@ -176,6 +177,29 @@ class TouchOverlayView @JvmOverloads constructor(
     // lifting: sliding from up to right is one gesture and two states.
     private val dpadBits = HashMap<Int, Int>()                    // pointer id -> arms held
 
+    // The d-pad's idle clock. In a match it fades out after four quiet seconds
+    // and comes back on a touch; in the menus it is navigation and stays put.
+    private val dpadAutoHide = DpadAutoHide()
+
+    private val dpadTick = object : Runnable {
+        override fun run() {
+            if (!dpadAutoHideApplies()) return
+            val now = SystemClock.uptimeMillis()
+            // Never fade from under a finger: a held arm is still a command.
+            if (dpadBits.isNotEmpty()) {
+                postDelayed(this, 500L)
+                return
+            }
+            dpadAutoHide.tick(now)
+            invalidate()
+            when {
+                dpadAutoHide.hidden -> Unit
+                dpadAutoHide.fading(now) -> postDelayed(this, 32L)
+                else -> postDelayed(this, dpadAutoHide.idleRemaining(now).coerceAtLeast(16L))
+            }
+        }
+    }
+
     // A swipe is read when the finger lifts and sent as one pulse: it has no bit
     // to hold, and a flick is over before the title's next poll anyway.
     private val swipeClassifier = SwipeClassifier(minTravelPx = 18f * density)
@@ -212,6 +236,8 @@ class TouchOverlayView @JvmOverloads constructor(
             field = value
             releaseEverything()
             invalidate()
+            // Entering or leaving a match starts the d-pad's idle clock fresh.
+            refreshDpad()
         }
 
     /**
@@ -224,6 +250,7 @@ class TouchOverlayView @JvmOverloads constructor(
             if (field == value) return
             field = value
             invalidate()
+            refreshDpad()
         }
 
     private var stanceToast: Toast? = null
@@ -358,6 +385,9 @@ class TouchOverlayView @JvmOverloads constructor(
             if (element.kind == ControlKind.LOOK) continue
             if (!available(element)) continue
             if (!showAll && !element.shownIn(gamePhase, stance)) continue
+            // A faded d-pad is gone as far as a touch is concerned: the tap
+            // falls through to the pitch, and the press that wakes it wakes it.
+            if (element.kind == ControlKind.DPAD && !showAll && dpadIsHidden()) continue
             if (!hit(element, x, y)) continue
             val distance = hypot(centreX(element) - x, centreY(element) - y)
             if (distance < nearestDistance) {
@@ -576,6 +606,59 @@ class TouchOverlayView @JvmOverloads constructor(
     private fun dpadOnScreen(): Boolean =
         layout.elements.any { it.kind == ControlKind.DPAD && it.shownIn(gamePhase, stance) }
 
+    // ---- the d-pad's idle fade ----------------------------------------------
+
+    /** Only a match with the preference on and a d-pad on screen has a clock. */
+    private fun dpadAutoHideApplies(): Boolean =
+        prefs.dpadAutoHide && !editing && gamePhase == GamePhase.MATCH && dpadOnScreen()
+
+    /** Visibility of the d-pad right now, 1 when it is not fading at all. */
+    private fun dpadAlpha(): Float =
+        if (dpadAutoHideApplies()) dpadAutoHide.alpha(SystemClock.uptimeMillis()) else 1f
+
+    /** Whether a touch should miss the d-pad because it has faded out. */
+    private fun dpadIsHidden(): Boolean =
+        dpadAutoHideApplies() && dpadAutoHide.hidden
+
+    /** A generous ring around the d-pad: anywhere a thumb aiming at it lands. */
+    private fun nearDpad(x: Float, y: Float): Boolean {
+        val dpad = layout.find("dpad") ?: return false
+        val reach = radius(dpad) * 1.6f + 12f * density
+        return hypot(x - centreX(dpad), y - centreY(dpad)) <= reach
+    }
+
+    /**
+     * Starts the idle countdown from fully visible. Called when the pad comes
+     * on screen, when the phase or stance changes, and when the d-pad is
+     * touched; not from drawing, or the clock would never run.
+     */
+    private fun refreshDpad() {
+        removeCallbacks(dpadTick)
+        val now = SystemClock.uptimeMillis()
+        dpadAutoHide.reset(now)
+        if (dpadAutoHideApplies()) postDelayed(dpadTick, DpadAutoHide.IDLE_MS)
+        invalidate()
+    }
+
+    /** A touch on or beside the d-pad: instantly opaque again, clock restarted. */
+    private fun wakeDpad() {
+        if (!dpadAutoHideApplies()) return
+        dpadAutoHide.reset(SystemClock.uptimeMillis())
+        removeCallbacks(dpadTick)
+        postDelayed(dpadTick, DpadAutoHide.IDLE_MS)
+        invalidate()
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        refreshDpad()
+    }
+
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        removeCallbacks(dpadTick)
+    }
+
     // ---- touches --------------------------------------------------------------
 
     @SuppressLint("ClickableViewAccessibility")
@@ -697,6 +780,15 @@ class TouchOverlayView @JvmOverloads constructor(
     }
 
     private fun press(pointerId: Int, x: Float, y: Float): Boolean {
+        // A tap on or beside the hidden d-pad brings it back. A tap squarely on
+        // where it sits only reveals it (no arm fires from an invisible
+        // control); one in the wider ring still reaches its neighbour, so the
+        // wake zone never swallows a pass or a camera drag.
+        if (!editing && dpadIsHidden() && nearDpad(x, y)) {
+            wakeDpad()
+            val dpad = layout.find("dpad")
+            if (dpad != null && hit(dpad, x, y)) return false
+        }
         val element = elementAt(x, y) ?: return false
         if (element.kind == ControlKind.LOOK) {
             lookPointers[pointerId] = floatArrayOf(x, y)
@@ -705,6 +797,7 @@ class TouchOverlayView @JvmOverloads constructor(
         triggerHaptic()
         pressAt[pointerId] = floatArrayOf(x, y)
         markPressed(element)
+        if (element.kind == ControlKind.DPAD) wakeDpad()
         // Pressed again inside its grace, a trigger is held, not released.
         if (element.kind == ControlKind.TRIGGER) triggerReleaseAt.remove(element.id)
         // A bounce of the sprint button is still a hold; it just does not need
@@ -780,6 +873,9 @@ class TouchOverlayView @JvmOverloads constructor(
         markReleased(released.element)
         val pressedAt = pressAt.remove(pointerId)
         dpadBits.remove(pointerId)
+        // The lift counts as activity too: a long hold should not make the
+        // d-pad vanish the instant it is let go.
+        if (released.element.kind == ControlKind.DPAD) wakeDpad()
         liveSwipes.remove(pointerId)
         // The stance chip: one tap, one flip. A thumb that slid off it said
         // something else and is not counted.
@@ -1253,10 +1349,14 @@ class TouchOverlayView @JvmOverloads constructor(
             val faded = editing && !element.shownIn(gamePhase, stance)
             val stanceAlpha = element.alphaOn(stance)
             val alpha = if (editing) max(0.28f, stanceAlpha) else stanceAlpha
+            // The d-pad's own fade multiplies its layout alpha; everything
+            // else is untouched, so no other control can flicker with it.
+            val dpadFade = if (element.kind == ControlKind.DPAD && !editing) dpadAlpha() else 1f
+            if (element.kind == ControlKind.DPAD && dpadFade <= 0.01f) continue
             when (element.kind) {
                 ControlKind.LOOK -> drawLook(canvas, element, faded)
                 ControlKind.STICK -> drawStick(canvas, element, alpha, faded)
-                ControlKind.DPAD -> drawDpad(canvas, element, alpha, faded)
+                ControlKind.DPAD -> drawDpad(canvas, element, alpha * dpadFade, faded)
                 ControlKind.SWIPE -> drawSwipe(canvas, element, alpha, faded)
                 ControlKind.BUTTON, ControlKind.TRIGGER, ControlKind.SKILL ->
                     drawButton(canvas, element, alpha, faded)

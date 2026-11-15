@@ -104,6 +104,7 @@ class SettingsActivity : AppCompatActivity() {
         switch(R.id.touch, prefs.touchControls) { prefs.touchControls = it }
         switch(R.id.gamepad, prefs.gamepadEnabled) { prefs.gamepadEnabled = it }
         switch(R.id.vibration, prefs.vibration) { prefs.vibration = it }
+        switch(R.id.dpad_auto_hide, prefs.dpadAutoHide) { prefs.dpadAutoHide = it }
         switch(R.id.control_fx, prefs.controlFx != ControlTheme.FX_OFF) {
             prefs.controlFx = if (it) ControlTheme.FX_SUBTLE else ControlTheme.FX_OFF
         }

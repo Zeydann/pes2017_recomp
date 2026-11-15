@@ -81,6 +81,22 @@ class TouchGeometryTest {
     }
 
     @Test
+    fun theDpadClearsEveryControlOnItsPad() {
+        val layout = layout()
+        val dpad = layout.find("dpad") ?: error("the default pad has a d-pad")
+        for (other in layout.elements) {
+            if (other === dpad) continue
+            if (other.kind == ControlKind.LOOK) continue
+            if (!other.visible) continue
+            if (!other.shownIn(GamePhase.MATCH, PadStance.ATTACK)) continue
+            assertTrue(
+                "the d-pad overlaps ${other.id}",
+                clearance(dpad, other) > 0f,
+            )
+        }
+    }
+
+    @Test
     fun theStanceChipAndSwitchStayInsideTheGestureBarInset() {
         val layout = layout()
         for (id in listOf("stance", "switch", "a")) {

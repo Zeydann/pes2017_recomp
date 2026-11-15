@@ -390,6 +390,37 @@ every bound swipe on the action buttons, plus essentials, dribbling, input
 safety and where the editor lives. It is built from the same glass/accent
 tokens as the pad and has no image assets to drift out of date.
 
+## The d-pad and its idle fade
+
+The d-pad is now on screen in a match as well as in the menus, at `200, 120`
+(110 dp): clear of the movement stick (37 dp), the near LB (5.2 dp) and the
+rest of the pad. Over the pitch it is a tactical control first, so it gets out
+of the way by itself:
+
+- After **four seconds** (`DpadAutoHide.IDLE_MS`, inside the requested 3–5 s)
+  without a touch, it fades to invisible over **280 ms**. The fade is linear
+  and runs on the view's own 32 ms tick; only the d-pad's alpha changes, so no
+  other control dims or flickers with it.
+- A tap anywhere in a ring of 1.6 × its radius plus 12 dp wakes it
+  **instantly** to full opacity. A tap squarely on the invisible control only
+  reveals it, so no arm fires from a shape the player cannot see; a tap in the
+  wider ring still reaches its neighbour (the near LB is inside that ring), so
+  the wake zone never swallows a pass or a camera drag. Touching a visible
+  d-pad restarts the clock.
+- While a d-pad arm is held the clock will not hide it (`dpadBits` is checked),
+  and a hidden d-pad is skipped by hit testing, so the touch falls through to
+  the pitch.
+- In the title's menus the d-pad never fades: it is navigation there, and the
+  phase check restricts the clock to `GamePhase.MATCH`.
+- The editor draws it always, faded only by the usual "not on this screen"
+  treatment, and entering the editor cancels the clock.
+- Settings → Controls → **Auto-hide D-Pad** (on by default) turns the whole
+  behaviour off, leaving it permanently visible. The preference is read live,
+  so the next match honours it without a restart.
+
+The four bits it holds, the stick stand-in and the menu behaviour are
+unchanged; this only changes when the control is drawn and hit-testable.
+
 ## Verification
 
 - `PadGesturesTest`: sprint latch and fake-shot arming, every compound sequence
@@ -410,8 +441,12 @@ tokens as the pad and has no image assets to drift out of date.
   test, so a later default move fails loudly).
 - `TouchGeometryTest`: the retuned diamond keeps at least 6 dp between every
   pair, every default swipe's corridor is clear, the skill ring clears every
-  control on the attacking pad, and the new controls stay out of the bottom
-  gesture inset.
+  control on the attacking pad, the d-pad clears every control on its pad, and
+  the new controls stay out of the bottom gesture inset.
+- `DpadAutoHideTest`: fully visible for the whole idle window, fading from
+  four seconds, linear to hidden at +280 ms, instant restore on a touch, a
+  touch during the fade cancels it, and the remaining idle time counts from
+  the last touch.
 - `LayoutSerializationTest`: a v7 round trip keeps roles, names and the
   defending copy; a v6 file is migrated rather than dropped; a removed control
   stays removed across a reload; the stick cannot be removed; `resetAll`

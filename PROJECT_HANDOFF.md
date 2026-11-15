@@ -34,6 +34,7 @@ ISO importing and the Bluetooth/USB gamepad path were not modified.
 | Swipe corridors and collision-free spacing | 64 dp retune + nearest-centre hit testing + corridor checker and editor warning; geometrically unit-tested |
 | Failsafe: schema v7 migration, backup, repair-on-load, Restore defaults / Restore backup | Implemented; migration and reset unit-tested |
 | Control guide (launcher and pause menu, live bindings) | Implemented; not device-viewed |
+| D-Pad auto-hide: four idle seconds in a match, 280 ms fade, instant wake, Settings switch | Implemented; timing unit-tested (`DpadAutoHideTest`); not device-tested |
 | Manual attacking/defending pads | Implemented (editor arrangement, Settings and pause-menu switch); automatic switching is **not** implemented and must not be claimed |
 | Skill palette and flick skill stick with native capability probes | Previously implemented; palette kept, hidden by default |
 | Skill wheel (hold, 8 sectors, native playback) | Implemented; pure geometry unit-tested; not device-tested |
@@ -113,6 +114,13 @@ guide) still needs an in-title check. See `docs/touch-controls.md`.
 - **Guide.** `ControlGuideActivity` from the launcher and the pause menu, with
   cards built from the player's current layout (wheel sectors, defending
   labels, bound swipes).
+- **D-pad auto-hide.** The d-pad now also ships on the match pad at `200, 120`
+  and clears the stick by 37 dp and the near LB by 5.2 dp. In a match it fades
+  after four idle seconds over 280 ms, wakes instantly on a tap within a
+  generous ring (that tap is consumed), refuses to fade while an arm is held,
+  and is skipped by hit testing once hidden. Menus never fade it, the editor
+  always shows it, and Settings → Controls → Auto-hide D-Pad (default on)
+  disables the behaviour. Timing lives in the pure `DpadAutoHide`.
 
 ## Tests actually executed
 
@@ -142,7 +150,7 @@ That is the previous 281 checks plus 196 + 97 and the texture store, with
 `ppc_recomp_shared.h`, which only the recompiled guest build generates), and
 every Kotlin/JUnit test, including the new `PadGesturesTest`,
 `StickVectorTest`, `SwipeBindingsTest`, `SkillWheelTest`, `DefensiveLayoutTest`,
-`TouchGeometryTest` and `LayoutSerializationTest`, and the existing
+`TouchGeometryTest`, `LayoutSerializationTest` and `DpadAutoHideTest`, and the existing
 `TouchClaimsTest`, `SwipeClassifierTest`, `TouchMathTest`,
 `ControlLayoutPhaseTest` and `GamepadInputTest` -- this workspace has no JDK 17
 and no Android SDK, and large downloads were deliberately not started. The two
