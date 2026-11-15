@@ -68,13 +68,50 @@ jobs:
           # caches are only reused when the build itself has not changed.
           cache: 'gradle'
 
-      - name: Set up the Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Accept SDK licenses and install what the app compiles against
+      # The SDK is set up here rather than through a third-party action: the
+      # action decides for itself where the SDK lives and what it installs, and
+      # when it fails it fails inside its own step with nothing in the log about
+      # why. These two steps are the same thing done with the tools Google
+      # publishes, so the failure -- if there is one -- is a line of shell.
+      - name: Set up Android SDK Environment
         run: |
-          yes | sdkmanager --licenses > /dev/null || true
+          echo "ANDROID_HOME=$HOME/android-sdk" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$HOME/android-sdk" >> "$GITHUB_ENV"
+          mkdir -p "$HOME/android-sdk"
+
+      - name: Install SDK components via sdkmanager
+        run: |
+          set -euo pipefail
+          export ANDROID_HOME="$HOME/android-sdk"
+          export ANDROID_SDK_ROOT="$ANDROID_HOME"
+          export PATH="$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools"
+
+          # The command-line tools are not in the image, so they are fetched.
+          # 11076708 is the current linux build of them; the zip always unpacks
+          # a directory called cmdline-tools, which sdkmanager insists is named
+          # "latest" before it will accept packages.
+          CMDLINE_TOOLS_URL="https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
+          curl -sSL --retry 3 "$CMDLINE_TOOLS_URL" -o /tmp/cmdline-tools.zip
+          mkdir -p "$ANDROID_HOME/cmdline-tools"
+          unzip -q /tmp/cmdline-tools.zip -d "$ANDROID_HOME/cmdline-tools"
+          rm -rf "$ANDROID_HOME/cmdline-tools/latest"
+          mv "$ANDROID_HOME/cmdline-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
+          rm /tmp/cmdline-tools.zip
+
+          # Licenses first: sdkmanager exits non-zero when stdin ends under
+          # `yes`, which is expected -- the licenses are the point.
+          #
+          # The install is deliberately NOT piped through `yes`: under
+          # `set -o pipefail` a `yes` closed early (SIGPIPE, 141) fails the whole
+          # pipeline even when sdkmanager succeeded, which is the kind of silent
+          # red build this file exists to stop.
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
           sdkmanager --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
+          # What the build will actually use, in the log rather than in a
+          # screenshot of a successful job.
+          sdkmanager --list_installed
+          ls "$ANDROID_HOME/platforms" "$ANDROID_HOME/build-tools"
 
       # See note 1 at the top of the file: there is no native source here to
       # compile, so the engine is fetched and its checksum enforced.
