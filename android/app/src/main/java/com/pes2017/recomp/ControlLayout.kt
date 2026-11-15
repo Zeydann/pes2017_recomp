@@ -700,7 +700,9 @@ class ControlLayout private constructor(
                         ?.let { layout.elements.add(it) }
                 }
             }
-            if (layout.elements.count { it.visible } < 3) layout.resetAll()
+            // Only an empty pad is certainly broken: a player may deliberately
+            // hide all but one control, and wiping that would be a bug.
+            if (layout.elements.isEmpty()) layout.resetAll()
         }
 
         // ---- profiles ------------------------------------------------------

@@ -583,6 +583,9 @@ class ControlEditPanel(
             .setItems(labels) { _, which ->
                 remember()
                 val added = missing[which]
+                // A palette control that ships hidden (the d-pad, stick clicks)
+                // is being added to be used, not to stay out of sight.
+                added.visible = true
                 if (overlay.layout.add(added)) {
                     overlay.keepApart(added)
                     overlay.select(added)
