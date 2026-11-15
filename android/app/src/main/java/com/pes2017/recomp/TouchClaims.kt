@@ -40,6 +40,19 @@ internal class TouchClaims {
     /** Whether the guest should see this control as down. */
     fun isOn(id: String): Boolean = (holds[id] ?: 0) > 0 || latched.containsKey(id)
 
+    /**
+     * Whether a finger is on it right now, ignoring latches. The state the pad
+     * pushes is built from this plus one source per latch, so a latched button is
+     * never also counted as a thumb: the two are different sources.
+     */
+    fun isHeld(id: String): Boolean = (holds[id] ?: 0) > 0
+
+    /**
+     * The ids with an engaged latch, as a live view of the keys: no copy is made,
+     * so this can be read on every frame. Pair it with [latchedHold].
+     */
+    fun latchIds(): Collection<String> = latched.keys
+
     fun isToggled(id: String): Boolean = latched.containsKey(id)
 
     /** What this control is holding with its latch, or [LatchHold.NONE]. */

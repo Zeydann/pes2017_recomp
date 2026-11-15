@@ -561,3 +561,43 @@ where nothing is bound, solid where something is, white under the thumb that is
 travelling that way), the tapered trail with its arrowhead, the direction-lock
 haptic, and the corridor warning in the editor. They hold nothing themselves, so
 nothing is sent until the thumb lifts.
+
+## Input safety and the cost of a frame
+
+**Holds are counted by source, not overwritten.** `HoldMixer` keeps one mask per
+source -- `PHYSICAL_TOUCH`, `JOCKEY_TOGGLE`, `TG1_TOGGLE`, `TG2_TOGGLE`,
+`MACRO_SEQUENCE` -- and the state pushed to the title is their union. Each source
+states the whole truth every frame, so no bit can be lifted by a source that never
+held it: SW2's `LT + arm` sequence ending cannot release the LT the jockey has
+latched, and two sources on one button both have to let go before it comes up.
+A latched spare or button has no source of its own and counts as the player's own
+hold, so it ends with the pad.
+
+**Compound sequences are queued, not raced.** `MacroSequencer` is a FIFO of
+absolute due times. A flick that arrives while another sequence is still playing
+is queued behind it -- the previous one finishes, a 50 ms gap passes, and then the
+next begins -- so the title sees the commands in the order they were flicked and
+never two half-sequences interleaved on the d-pad. Every beat in a sequence is the
+same 50 ms dwell, which is two or three polls at the title's frame rate. One timer
+drives the whole queue.
+
+**Swipes on the tactical buttons use their own cone.** `SwipeClassifier` takes a
+per-gesture dominance, so SW1/SW2 accept a flick anywhere inside 45 degrees of an
+arm (`CARDINAL_DOMINANCE`), while an action button keeps the pad's 1.30 rule and
+sends nothing for a diagonal. A leaning tactical flick therefore fires the arm it
+leans towards instead of nothing (or, worse, its neighbour).
+
+**Nothing measured twice.** Label widths are measured once per string at a
+reference text size and scaled from that ratio, and a control's fitted pixel
+geometry is cached against the inputs it was derived from (fraction, size, stance,
+window, insets), so a frame does no fitting arithmetic per control. Finished swipe
+trails are pruned once a frame rather than only where they happen to be drawn --
+a trail whose control is no longer on screen used to keep the animation loop
+asking for frames for the rest of the match -- and the d-pad's idle loop stops
+outright while an arm is held and once it has faded out.
+
+**Layouts are written atomically.** `LayoutStore.writeAtomically` writes to a
+sibling `.part` file, flushes it, and renames it over the target; if the rename is
+refused the target is removed before the move is retried, and the temporary never
+survives a failure. A crash mid-save leaves the previous layout readable, never a
+truncated one.

@@ -83,14 +83,20 @@ data class SwipeStep(
  */
 object SwipeSequence {
 
-    /** The modifier goes down this long before the primary bit. */
-    const val MODIFIER_LEAD_MS = 30L
+    /**
+     * Every beat in a sequence is the same, and short: 50 ms is two or three
+     * polls at the title's frame rate, which is enough for a press to be seen and
+     * short enough that a queued sequence of them still reads as one flick. The
+     * old timings (30/120/90) were tuned by feel and stacked up when two flicks
+     * arrived together; one dwell makes the queue's arithmetic predictable.
+     */
+    const val MODIFIER_LEAD_MS = 50L
 
-    /** How long the pair is held: several polls at the title's frame rate. */
-    const val HOLD_MS = 120L
+    /** How long a step is held: a poll-safe dwell at the title's frame rate. */
+    const val HOLD_MS = 50L
 
     /** The gap between a double tap's two presses. */
-    const val DOUBLE_TAP_GAP_MS = 90L
+    const val DOUBLE_TAP_GAP_MS = 50L
 
     fun steps(action: SwipeAction): List<SwipeStep> {
         if (!action.bound) return emptyList()

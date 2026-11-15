@@ -29,17 +29,34 @@ internal class SwipeClassifier(
     /** A drag longer than this is a slide across the pad, not a flick. */
     private val maxDurationMs: Long = 300L,
     /** How far the winning axis has to beat the other one. */
-    private val dominance: Float = 1.30f,
+    private val dominance: Float = DEFAULT_DOMINANCE,
 ) {
-    private class Gesture(val startX: Float, val startY: Float, val startMs: Long) {
+    private class Gesture(
+        val startX: Float,
+        val startY: Float,
+        val startMs: Long,
+        /** How far the winning axis must beat the other for this gesture. */
+        val dominance: Float,
+    ) {
         var lastX = startX
         var lastY = startY
     }
 
     private val gestures = HashMap<Int, Gesture>()
 
-    fun begin(pointerId: Int, x: Float, y: Float, nowMs: Long) {
-        gestures[pointerId] = Gesture(x, y, nowMs)
+    /**
+     * Starts reading a gesture. [cardinalBias] is per gesture rather than per pad:
+     * a five-way tactical button wants each arm to own a full quarter turn, while
+     * an action button's swipes are content to say "that was diagonal, nothing".
+     */
+    fun begin(
+        pointerId: Int,
+        x: Float,
+        y: Float,
+        nowMs: Long,
+        cardinalBias: Float = dominance,
+    ) {
+        gestures[pointerId] = Gesture(x, y, nowMs, cardinalBias)
     }
 
     fun move(pointerId: Int, x: Float, y: Float) {
@@ -60,8 +77,8 @@ internal class SwipeClassifier(
         if (max(ax, ay) < minTravelPx) return Swipe.NONE
 
         return when {
-            ax >= ay * dominance -> if (dx > 0f) Swipe.RIGHT else Swipe.LEFT
-            ay >= ax * dominance -> if (dy > 0f) Swipe.DOWN else Swipe.UP
+            ax >= ay * gesture.dominance -> if (dx > 0f) Swipe.RIGHT else Swipe.LEFT
+            ay >= ax * gesture.dominance -> if (dy > 0f) Swipe.DOWN else Swipe.UP
             else -> Swipe.NONE
         }
     }
@@ -80,10 +97,32 @@ internal class SwipeClassifier(
         val ay = abs(dy)
         if (max(ax, ay) < minTravelPx) return Swipe.NONE
         return when {
-            ax >= ay * dominance -> if (dx > 0f) Swipe.RIGHT else Swipe.LEFT
-            ay >= ax * dominance -> if (dy > 0f) Swipe.DOWN else Swipe.UP
+            ax >= ay * gesture.dominance -> if (dx > 0f) Swipe.RIGHT else Swipe.LEFT
+            ay >= ax * gesture.dominance -> if (dy > 0f) Swipe.DOWN else Swipe.UP
             else -> Swipe.NONE
         }
+    }
+
+    companion object {
+        /**
+         * The pad's usual rule: an axis has to win by nearly a third, so a flick
+         * that went evenly up and right sends nothing rather than a guess.
+         */
+        const val DEFAULT_DOMINANCE = 1.30f
+
+        /**
+         * The five-way buttons' rule: every arm owns a full quarter turn.
+         *
+         * A tactical flick is a thumb moving off a 88 dp circle in a hurry, and
+         * the arms are commands that cost the player a tactic if the wrong one
+         * fires. At 1.30 a flick 42 degrees off the vertical was nothing at all,
+         * and the thumb's next attempt was a harder diagonal, which resolved as
+         * its *neighbour*. Letting each arm take everything inside 45 degrees of
+         * it means the nearest arm always wins, and there is no band between the
+         * arms where a gesture is read as something other than what the thumb
+         * leaned towards.
+         */
+        const val CARDINAL_DOMINANCE = 1.0f
     }
 
     /** The gesture was taken away (another finger claimed it, or the pad hid). */

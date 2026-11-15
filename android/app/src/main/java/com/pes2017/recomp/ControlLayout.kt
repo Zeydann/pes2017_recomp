@@ -553,12 +553,7 @@ class ControlLayout private constructor(
             // Written beside and moved into place: a layout being saved as
             // the process is killed must not leave a half-written file that
             // the next start cannot read.
-            val temporary = File(context.filesDir, "$FILE_NAME.part")
-            temporary.writeText(toJson())
-            if (!temporary.renameTo(file)) {
-                file.writeText(toJson())
-                temporary.delete()
-            }
+            LayoutStore.writeAtomically(file, toJson())
         } catch (_: Throwable) {
             // A layout that cannot be saved is a small loss; crashing over
             // it would be a large one.

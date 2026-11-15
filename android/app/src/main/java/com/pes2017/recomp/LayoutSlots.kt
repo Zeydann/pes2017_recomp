@@ -1,6 +1,7 @@
 package com.pes2017.recomp
 
 import java.io.File
+import java.io.FileOutputStream
 
 /** One saved pad: a numbered slot, or a layout the player named. */
 data class LayoutSlot(
@@ -44,18 +45,10 @@ class LayoutStore(private val dir: File) {
         null
     }
 
+    /** Writes one slot atomically; false when the bytes could not be put in place. */
     fun write(id: String, text: String): Boolean = try {
         if (!dir.exists()) dir.mkdirs()
-        val file = fileFor(id)
-        // Written beside and moved into place: a layout being saved as the
-        // process dies must not leave a file the next start cannot read.
-        val temporary = File(dir, file.name + ".part")
-        temporary.writeText(text)
-        if (!temporary.renameTo(file)) {
-            file.writeText(text)
-            temporary.delete()
-        }
-        true
+        writeAtomically(fileFor(id), text)
     } catch (_: Throwable) {
         false
     }
@@ -131,6 +124,9 @@ class LayoutStore(private val dir: File) {
         const val LEGACY_PREFIX = "controls_profile_"
         const val SUFFIX = ".json"
 
+        /** The sibling a layout is written to before it is moved into place. */
+        const val PART_SUFFIX = ".part"
+
         /** Five numbered slots: enough alternatives to cover a phone's modes. */
         const val MAX_NUMBERED = 5
 
@@ -143,6 +139,46 @@ class LayoutStore(private val dir: File) {
          * trimmed. Dots are refused outright, so no id can walk out of the app's
          * own folder.
          */
+        /**
+         * Writes [text] to [file] by way of a sibling temporary file.
+         *
+         * A reader can never see half a layout: the bytes go to `<name>.part`,
+         * are flushed to the device, and are then moved over the target in one
+         * step. If the move is refused, the target is removed *before* the move
+         * is tried again rather than being written in place -- the window where
+         * nothing exists is better than the window where half a file does, and a
+         * crash in either leaves the previous layout readable or nothing at all,
+         * never a truncated one. The temporary file never survives a failure.
+         */
+        fun writeAtomically(file: File, text: String): Boolean {
+            val parent = file.absoluteFile.parentFile ?: return false
+            if (!parent.exists() && !parent.mkdirs()) return false
+            val temporary = File(parent, file.name + PART_SUFFIX)
+            try {
+                FileOutputStream(temporary).use { out ->
+                    out.write(text.toByteArray(Charsets.UTF_8))
+                    out.flush()
+                    // Best effort: the rename is what makes the write atomic, and
+                    // a file system that will not sync is still allowed to save.
+                    try {
+                        out.fd.sync()
+                    } catch (_: Throwable) {
+                    }
+                }
+            } catch (_: Throwable) {
+                temporary.delete()
+                return false
+            }
+            if (temporary.renameTo(file)) return true
+            if (file.exists() && !file.delete()) {
+                temporary.delete()
+                return false
+            }
+            if (temporary.renameTo(file)) return true
+            temporary.delete()
+            return false
+        }
+
         fun sanitize(name: String): String {
             val collapsed = name.trim().lowercase()
                 .replace(Regex("[^a-z0-9_-]+"), "_")

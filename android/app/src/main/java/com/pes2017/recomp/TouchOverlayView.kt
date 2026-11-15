@@ -124,13 +124,27 @@ class TouchOverlayView @JvmOverloads constructor(
     private val sprintLatch = SprintLatch()
 
     // A compound swipe's held modifier and button, and the steps still to run.
-    // One at a time: a new swipe cancels whatever the last one was holding.
+    // The compound sequence being held right now, and the queue of the ones the
+    // player has already asked for. Queued rather than raced: two flicks in a row
+    // are two commands the title hears in order, never two timers overwriting
+    // each other on the same d-pad.
     private val combo = ComboHold()
-    private val comboTasks = ArrayList<Runnable>()
+    private val macro = MacroSequencer()
+    private val macroPump = Runnable { pumpMacro() }
+    // Every source that wants a virtual button down, merged instead of written
+    // over, so one ending can never release another's bit.
+    private val mixer = HoldMixer()
 
     // The direction a thumb on an action button is heading for right now, for
     // the arrows under it. The gesture itself is read on the lift, as ever.
     private val liveSwipes = HashMap<Int, Swipe>()
+
+    // Reused by animateEffects: a fresh list per draw was one allocation a frame,
+    // which is exactly what this pass is here to stop.
+    private val finishedAnims = ArrayList<String>(4)
+
+    // A label's width per text-size unit, measured once per string.
+    private val textRatios = HashMap<String, Float>()
 
     // Look is a gesture rather than a hold, so each finger on it is sampled on
     // its own: with one slot for "the look pointer", a second thumb landing on
@@ -200,10 +214,10 @@ class TouchOverlayView @JvmOverloads constructor(
             if (!dpadAutoHideApplies()) return
             val now = SystemClock.uptimeMillis()
             // Never fade from under a finger: a held arm is still a command.
-            if (dpadBits.isNotEmpty()) {
-                postDelayed(this, 500L)
-                return
-            }
+            // Nothing is scheduled while it is held -- the loop stops here rather
+            // than waking every half second to say the same thing -- because
+            // letting go re-arms it through wakeDpad().
+            if (dpadBits.isNotEmpty()) return
             dpadAutoHide.tick(now)
             invalidate()
             when {
@@ -370,14 +384,68 @@ class TouchOverlayView @JvmOverloads constructor(
     // drawn, hit-tested and edited there while that pad is out. Fitted to the
     // safe area, so a control on a notched phone is still a control a thumb can
     // reach, and the same layout is unchanged on a phone without one.
-    private fun centreX(element: ControlElement): Float =
-        screenFit.xDp(element.xFracOn(stance), screenFit.sizeDp(element.sizeOn(stance))) * density
+    private fun centreX(element: ControlElement): Float = geometryFor(element).x
 
-    private fun centreY(element: ControlElement): Float =
-        screenFit.yDp(element.yFracOn(stance), screenFit.sizeDp(element.sizeOn(stance))) * density
+    private fun centreY(element: ControlElement): Float = geometryFor(element).y
 
-    private fun radius(element: ControlElement): Float =
-        screenFit.sizeDp(element.sizeOn(stance)) * density * 0.5f
+    private fun radius(element: ControlElement): Float = geometryFor(element).r
+
+    /**
+     * A control's fitted place and size in pixels, kept between frames.
+     *
+     * The fitting is cheap per control but it was being asked for four or five
+     * times per control per frame -- once for the circle, again for its centre,
+     * again for the hit test -- and each answer re-derived the safe size. One
+     * entry per control id remembers the numbers and, more importantly, what they
+     * were derived from: the fraction, the size, the pad, the window and the
+     * insets. A drag, a pinch, a stance flip, a rotation or a new cutout all
+     * change one of those, so a stale entry cannot outlive its inputs.
+     */
+    private class Geometry {
+        var valid = false
+        var xFrac = 0f
+        var yFrac = 0f
+        var sizeDp = 0f
+        var stance = PadStance.ATTACK
+        var width = 0
+        var height = 0
+        var insets: SafeAreaDp = SafeAreaDp.NONE
+        var x = 0f
+        var y = 0f
+        var r = 0f
+    }
+
+    private val fittedGeometry = HashMap<String, Geometry>()
+
+    private fun geometryFor(element: ControlElement): Geometry {
+        var geometry = fittedGeometry[element.id]
+        if (geometry == null) {
+            geometry = Geometry()
+            fittedGeometry[element.id] = geometry
+        }
+        val xFrac = element.xFracOn(stance)
+        val yFrac = element.yFracOn(stance)
+        val sizeDp = element.sizeOn(stance)
+        if (!geometry.valid || geometry.xFrac != xFrac || geometry.yFrac != yFrac ||
+            geometry.sizeDp != sizeDp || geometry.stance != stance ||
+            geometry.width != width || geometry.height != height ||
+            geometry.insets !== safeInsets
+        ) {
+            val fitted = screenFit.sizeDp(sizeDp)
+            geometry.x = screenFit.xDp(xFrac, fitted) * density
+            geometry.y = screenFit.yDp(yFrac, fitted) * density
+            geometry.r = fitted * density * 0.5f
+            geometry.xFrac = xFrac
+            geometry.yFrac = yFrac
+            geometry.sizeDp = sizeDp
+            geometry.stance = stance
+            geometry.width = width
+            geometry.height = height
+            geometry.insets = safeInsets
+            geometry.valid = true
+        }
+        return geometry
+    }
 
     private fun rebuildFit() {
         if (width <= 0 || height <= 0) return
@@ -508,7 +576,9 @@ class TouchOverlayView @JvmOverloads constructor(
 
         for (element in layout.elements) {
             if (!element.shownIn(gamePhase, stance)) continue
-            val on = claims.isOn(element.id)
+            // Fingers only: a latch is a source of its own and is merged below,
+            // so a latched button is not also counted as a thumb on the glass.
+            val on = claims.isHeld(element.id)
             when (element.kind) {
                 ControlKind.BUTTON -> if (on) buttons = buttons or element.value
                 ControlKind.DPAD -> buttons = buttons or dpadMaskFor(element)
@@ -541,12 +611,7 @@ class TouchOverlayView @JvmOverloads constructor(
                 ControlKind.CUSTOM -> Unit  // a spare: only its swipes send
                 // A latched toggle holds its command with no finger on it, so
                 // its bits are read from the latch rather than from a hold.
-                ControlKind.LATCH -> if (on) {
-                    val hold = claims.latchedHold(element.id)
-                    buttons = buttons or hold.buttons
-                    if (hold.leftTrigger) leftTrigger = 255
-                    if (hold.rightTrigger) rightTrigger = 255
-                }
+                ControlKind.LATCH -> Unit  // latched: merged by source below
                 ControlKind.TACTICAL -> Unit  // a five-way button: swipes send
                 ControlKind.LOOK -> Unit    // sent as deltas, not as a stick
             }
@@ -592,9 +657,44 @@ class TouchOverlayView @JvmOverloads constructor(
             sprintLatch.reset()
         }
 
-        buttons = buttons or combo.buttons
-        if (combo.leftTrigger) leftTrigger = 255
-        if (combo.rightTrigger) rightTrigger = 255
+        // Every source that wants a button down, merged rather than overwritten.
+        // A source states the whole truth each frame, so nothing has to be
+        // reference-counted across frames -- and because the sources are separate,
+        // SW2's LT sequence finishing cannot lift the LT that the jockey has
+        // latched, and two latches on one bit both have to be let go.
+        mixer.release(HoldSource.JOCKEY_TOGGLE)
+        mixer.release(HoldSource.TG1_TOGGLE)
+        mixer.release(HoldSource.TG2_TOGGLE)
+        var heldButtons = buttons
+        var heldLeft = leftTrigger != 0
+        var heldRight = rightTrigger != 0
+        for (id in claims.latchIds()) {
+            // A latch on a control the player has switched off, or that belongs to
+            // the other pad or phase, sends nothing: the switch means off, latch
+            // or no latch. The latch itself is kept, so switching it back on
+            // resumes the hold rather than silently dropping it.
+            val latched = layout.find(id)
+            if (latched == null || !latched.shownIn(gamePhase, stance)) continue
+            val hold = claims.latchedHold(id)
+            when (HoldMixer.sourceFor(id)) {
+                HoldSource.JOCKEY_TOGGLE, HoldSource.TG1_TOGGLE, HoldSource.TG2_TOGGLE ->
+                    mixer.set(HoldMixer.sourceFor(id), hold.buttons, hold.leftTrigger, hold.rightTrigger)
+                // A spare or a plain button switched to latching has no source of
+                // its own: it counts as the player's own hold, and ends with the pad.
+                else -> {
+                    heldButtons = heldButtons or hold.buttons
+                    heldLeft = heldLeft || hold.leftTrigger
+                    heldRight = heldRight || hold.rightTrigger
+                }
+            }
+        }
+        mixer.set(HoldSource.PHYSICAL_TOUCH, heldButtons, heldLeft, heldRight)
+        mixer.set(
+            HoldSource.MACRO_SEQUENCE, combo.buttons, combo.leftTrigger, combo.rightTrigger,
+        )
+        buttons = mixer.buttons
+        leftTrigger = if (mixer.leftTrigger) 255 else 0
+        rightTrigger = if (mixer.rightTrigger) 255 else 0
 
         if (!NativeBridge.dpadSynthesis) {
             if (dpadOnScreen() || gamePhase == GamePhase.MATCH) {
@@ -931,7 +1031,9 @@ class TouchOverlayView @JvmOverloads constructor(
             // The tactical button reads its four arms on the lift, like the
             // patch does; its centre tap is the fifth action and is bound the
             // same way, so nothing is sent while the thumb is down.
-            ControlKind.TACTICAL -> swipeClassifier.begin(pointerId, x, y, SystemClock.uptimeMillis())
+            ControlKind.TACTICAL -> swipeClassifier.begin(
+                pointerId, x, y, SystemClock.uptimeMillis(), SwipeClassifier.CARDINAL_DOMINANCE,
+            )
             // A toggle latches in TouchClaims itself, so there is nothing to
             // send here: its command is held from the next push onwards.
             ControlKind.LATCH -> Unit
@@ -1107,17 +1209,38 @@ class TouchOverlayView @JvmOverloads constructor(
             pendingSwipes = pendingSwipes or action.bit
             return
         }
-        cancelCombo()
-        for (step in SwipeSequence.steps(action)) {
-            lateinit var task: Runnable
-            task = Runnable {
-                comboTasks.remove(task)
-                combo.apply(step)
-                if (NativeBridge.isLoaded()) pushState()
-                invalidate()
-            }
-            comboTasks.add(task)
-            if (step.delayMs <= 0L) post(task) else postDelayed(task, step.delayMs)
+        // Queued behind whatever is still playing, with a beat between the two,
+        // so the tail of one sequence and the head of the next cannot interleave.
+        macro.enqueue(action, SystemClock.uptimeMillis())
+        scheduleMacro()
+    }
+
+    /** One timer for the whole queue: it wakes for the next step and no more. */
+    private fun scheduleMacro() {
+        removeCallbacks(macroPump)
+        val due = macro.nextDueMs() ?: return
+        postDelayed(macroPump, (due - SystemClock.uptimeMillis()).coerceAtLeast(0L))
+    }
+
+    /**
+     * Applies every step that has come due, in order, then waits for the next.
+     * Steps are whole held states, so the last one due is the state now; the
+     * sequence's own final step clears everything, which is why nothing can be
+     * left down when the queue empties.
+     */
+    private fun pumpMacro() {
+        val due = macro.takeDue(SystemClock.uptimeMillis())
+        if (due.isNotEmpty()) {
+            combo.apply(due[due.size - 1])
+            if (NativeBridge.isLoaded()) pushState()
+            invalidate()
+        }
+        if (macro.busy) {
+            scheduleMacro()
+        } else if (combo.any) {
+            combo.clear()
+            if (NativeBridge.isLoaded()) pushState()
+            invalidate()
         }
     }
 
@@ -1128,8 +1251,8 @@ class TouchOverlayView @JvmOverloads constructor(
      * can never be left down.
      */
     private fun cancelCombo() {
-        for (task in comboTasks) removeCallbacks(task)
-        comboTasks.clear()
+        removeCallbacks(macroPump)
+        macro.clear()
         combo.clear()
     }
 
@@ -1409,7 +1532,8 @@ class TouchOverlayView @JvmOverloads constructor(
     private fun animateEffects(now: Long): Boolean {
         if (!effects) return false
         var running = false
-        val finished = ArrayList<String>(2)
+        val finished = finishedAnims
+        finished.clear()
         for ((id, down) in pressAnimAt) {
             val up = releaseAnimAt[id] ?: 0L
             val since = now - (if (up >= down) up else down)
@@ -1513,8 +1637,13 @@ class TouchOverlayView @JvmOverloads constructor(
             // phase: it is feedback for a gesture that has already been sent.
             drawSwipeTrail(canvas, element)
         }
+        // Effects are pruned here, not only where they are drawn: a trail whose
+        // control stopped being on screen would never be reached again, and the
+        // animation loop would keep asking for frames for the rest of the match.
+        val effectsNow = SystemClock.uptimeMillis()
+        pruneSwipeTrails(effectsNow)
         if (swipeTrails.isNotEmpty()) postInvalidateOnAnimation()
-        if (animateEffects(SystemClock.uptimeMillis())) postInvalidateOnAnimation()
+        if (animateEffects(effectsNow)) postInvalidateOnAnimation()
         noteDrawCost(System.nanoTime() - drawStart)
     }
 
@@ -1592,6 +1721,9 @@ class TouchOverlayView @JvmOverloads constructor(
 
         /** How long a released swipe's trail takes to fly out and fade. */
         private const val SWIPE_TRAIL_MS = 200L
+
+        /** The text size a label is measured at once, so its ratio can be reused. */
+        private const val FIT_SAMPLE = 100f
 
         /** The word on an off control's badge, and the red the editor gives it. */
         private const val OFF_BADGE = "OFF"
@@ -2260,6 +2392,14 @@ class TouchOverlayView @JvmOverloads constructor(
      * way of saying "that flick was read". Nothing is held while it plays, so
      * the next touch is never blocked by an animation.
      */
+    private fun pruneSwipeTrails(now: Long) {
+        if (swipeTrails.isEmpty()) return
+        val iterator = swipeTrails.values.iterator()
+        while (iterator.hasNext()) {
+            if (now - iterator.next().startedAt >= SWIPE_TRAIL_MS) iterator.remove()
+        }
+    }
+
     private fun drawSwipeTrail(canvas: Canvas, element: ControlElement) {
         val trail = swipeTrails[element.id] ?: return
         if (trail.direction == Swipe.NONE) {
@@ -2319,7 +2459,18 @@ class TouchOverlayView @JvmOverloads constructor(
     ): Float {
         paint.textSize = desired
         if (value.isEmpty() || maxWidth <= 0f) return desired
-        val measured = paint.measureText(value)
+        // Measured once per string at a reference size, then scaled. Android's
+        // text widths are linear in textSize, so the ratio is all that is needed
+        // -- and a label is drawn every frame, so measuring it every frame was
+        // work the pad did for a string that cannot change between two frames.
+        var ratio = textRatios[value]
+        if (ratio == null) {
+            paint.textSize = FIT_SAMPLE
+            ratio = paint.measureText(value) / FIT_SAMPLE
+            textRatios[value] = ratio
+            paint.textSize = desired
+        }
+        val measured = ratio * desired
         if (measured <= maxWidth) return desired
         return (desired * (maxWidth / measured)).coerceAtLeast(minimum)
     }
