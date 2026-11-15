@@ -863,6 +863,14 @@ class ControlLayout private constructor(
         /** The first numbered slot with nothing in it, or null when all five are used. */
         fun freeSlot(context: Context): String? = store(context).freeNumberedId()
 
+        /**
+         * The five numbered places the "Save Layout" picker offers, with the
+         * name of the layout in each taken one, so the player can see what an
+         * overwrite would replace before answering the prompt.
+         */
+        fun saveSlots(context: Context): List<SaveSlotChoice> =
+            store(context).saveChoices { _, text -> nameIn(text) }
+
         fun loadSlot(context: Context, id: String): ControlLayout? {
             val text = store(context).read(id) ?: return null
             return parse(text)

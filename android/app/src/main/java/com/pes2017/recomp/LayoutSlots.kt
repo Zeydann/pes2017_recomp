@@ -16,6 +16,19 @@ data class LayoutSlot(
 }
 
 /**
+ * One place the "Save Layout" picker offers: a numbered slot and what, if
+ * anything, is already saved in it.
+ */
+data class SaveSlotChoice(
+    /** The numbered slot's id: "1".."5". */
+    val id: String,
+    /** The name of the layout already in the slot, or "" when it is empty. */
+    val displayName: String,
+    /** True when saving into it would replace a layout the player already has. */
+    val occupied: Boolean,
+)
+
+/**
  * The pad files on disk, one per slot.
  *
  * Two things went wrong with the first version, and both were the same mistake:
@@ -84,6 +97,25 @@ class LayoutStore(private val dir: File) {
 
     /** The first numbered slot with no file in it, or null when all five are used. */
     fun freeNumberedId(): String? = numberedIds().firstOrNull { !exists(it) }
+
+    /**
+     * The five numbered places as the "Save Layout" picker shows them: every
+     * slot, in order, with the name of whatever is already saved in it and
+     * whether choosing it would replace that layout.
+     *
+     * A slot counts as taken when its file exists, even if the file cannot be
+     * read: a save that ran over something this build could not parse is the
+     * player's decision to make, not one to take behind their back.
+     */
+    fun saveChoices(nameOf: (String, String) -> String): List<SaveSlotChoice> =
+        numberedIds().map { id ->
+            val text = read(id)
+            SaveSlotChoice(
+                id,
+                if (text == null) "" else nameOf(id, text).ifEmpty { prettyId(id) },
+                exists(id),
+            )
+        }
 
     /** How many named (non-numbered) layouts exist. */
     fun namedCount(): Int = list({ _, _ -> "" }).count { !it.numbered }

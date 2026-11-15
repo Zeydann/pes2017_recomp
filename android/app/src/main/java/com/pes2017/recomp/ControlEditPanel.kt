@@ -134,6 +134,19 @@ class ControlEditPanel(
     }
 
     /**
+     * "Save Layout": the five numbered places, one tap from the editor. Choosing
+     * a slot saves into it, and a slot that is already taken asks before it is
+     * replaced, so a tap can never quietly lose a pad.
+     */
+    private val saveLayout: Button = Button(activity).apply {
+        setText(R.string.layout_save)
+        textSize = 12f
+        minWidth = 0
+        minimumWidth = 0
+        setOnClickListener { pickSaveSlot() }
+    }
+
+    /**
      * Saving, loading and exporting layouts, one tap from the editor. The same
      * dialog is under More, but a player who has just arranged a pad looks for
      * Save first; burying it two menus deep is the reason it read as missing.
@@ -171,6 +184,9 @@ class ControlEditPanel(
     init {
         val dp = activity.resources.displayMetrics.density
         toolRow().addView(arrangement, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+        ).apply { marginStart = (6 * dp).roundToInt() })
+        toolRow().addView(saveLayout, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
         ).apply { marginStart = (6 * dp).roundToInt() })
         toolRow().addView(layouts, LinearLayout.LayoutParams(
@@ -752,6 +768,8 @@ class ControlEditPanel(
         val slots = ControlLayout.listSlots(activity)
         val labels = ArrayList<String>(slots.size + 12)
         val actions = ArrayList<() -> Unit>(slots.size + 12)
+        labels.add(activity.getString(R.string.layout_save))
+        actions.add { pickSaveSlot() }
         labels.add(activity.getString(R.string.profile_save_as))
         actions.add { saveCurrentAs() }
         labels.add(activity.getString(R.string.layout_export_current))
@@ -808,6 +826,49 @@ class ControlEditPanel(
                 }
             }
             .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    /**
+     * "Save Layout": the five numbered places, with the taken ones named, so the
+     * player picks where the pad goes instead of typing a name first.
+     */
+    private fun pickSaveSlot() {
+        val slots = ControlLayout.saveSlots(activity)
+        val labels = Array(slots.size) { index ->
+            val slot = slots[index]
+            if (slot.occupied) {
+                activity.getString(R.string.profile_slot, slot.id, slot.displayName)
+            } else {
+                activity.getString(R.string.profile_slot_empty, slot.id)
+            }
+        }
+        AlertDialog.Builder(activity)
+            .setTitle(R.string.layout_save)
+            .setItems(labels) { _, which -> saveToChosenSlot(slots[which]) }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    /**
+     * Saves the pad into the chosen numbered slot. A slot that already holds a
+     * layout is only replaced after the player says yes; "No", the back button
+     * or a tap outside the prompt leaves that saved pad exactly as it was. An
+     * overwrite keeps the slot's name and changes only the controls in it.
+     */
+    private fun saveToChosenSlot(slot: SaveSlotChoice) {
+        val name = slot.displayName.ifBlank {
+            activity.getString(R.string.profile_default_name, slot.id)
+        }
+        if (!slot.occupied) {
+            writeSlot(slot.id, name, reopen = false)
+            return
+        }
+        AlertDialog.Builder(activity)
+            .setTitle(R.string.layout_save)
+            .setMessage(R.string.slot_taken_confirm)
+            .setNegativeButton(R.string.no, null)
+            .setPositiveButton(R.string.yes) { _, _ -> writeSlot(slot.id, name, reopen = false) }
             .show()
     }
 
@@ -906,12 +967,14 @@ class ControlEditPanel(
             .show()
     }
 
-    private fun writeSlot(id: String, name: String) {
+    private fun writeSlot(id: String, name: String, reopen: Boolean = true) {
         val ok = ControlLayout.saveSlot(activity, overlay.layout, id, name)
         Toast.makeText(
             activity, if (ok) R.string.profile_saved else R.string.profile_failed, Toast.LENGTH_SHORT,
         ).show()
-        if (ok) showProfiles()
+        // The slot picker closes on its own answer; only the layouts list wants
+        // to come back so the player sees the slot it now holds.
+        if (ok && reopen) showProfiles()
     }
 
     private fun renameSlot(slot: LayoutSlot) {

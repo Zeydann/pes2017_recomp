@@ -116,6 +116,41 @@ class LayoutSlotsTest {
     }
 
     @Test
+    fun theSavePickerOffersAllFiveNumberedSlotsInOrder() {
+        val choices = store().saveChoices(::nameFromJson)
+
+        assertEquals(listOf("1", "2", "3", "4", "5"), choices.map { it.id })
+        assertTrue("nothing is saved yet", choices.none { it.occupied })
+        assertTrue(choices.all { it.displayName.isEmpty() })
+    }
+
+    @Test
+    fun aTakenSlotIsMarkedAndNamedInTheSavePicker() {
+        val store = store()
+        store.write("2", """{"name":"Away Pad"}""")
+
+        val choices = store.saveChoices(::nameFromJson)
+
+        val taken = choices.single { it.occupied }
+        assertEquals("2", taken.id)
+        assertEquals("Away Pad", taken.displayName)
+        assertEquals(4, choices.count { !it.occupied })
+    }
+
+    @Test
+    fun anUnreadableSlotStillCountsAsTaken() {
+        // A slot holding something this build cannot parse must still ask
+        // before it is overwritten, rather than reading as empty.
+        File(folder.root, "controls_slot_4.json").mkdirs()
+
+        val choices = store().saveChoices(::nameFromJson)
+
+        assertTrue(choices.first { it.id == "4" }.occupied)
+        // Nothing readable to name it with; the picker falls back to the slot number.
+        assertEquals("", choices.first { it.id == "4" }.displayName)
+    }
+
+    @Test
     fun aMissingSlotReadsAsNullRatherThanFailing() {
         assertNull(store().read("nothing"))
     }

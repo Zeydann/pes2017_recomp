@@ -434,6 +434,10 @@
     <string name="profile_duplicate">Duplicate</string>
     <string name="profile_overwrite">Overwrite</string>
     <string name="profile_overwrite_confirm">A saved layout called %1$s already exists. Replace it?</string>
+    <string name="layout_save">Save Layout</string>
+    <string name="slot_taken_confirm">Slot already taken. Do you want to overwrite it?</string>
+    <string name="yes">Yes</string>
+    <string name="no">No</string>
     <string name="profile_full">All five slots are used and that name is taken too.</string>
     <string name="profile_copy_name">%1$s copy</string>
     <string name="profile_renamed">Renamed</string>
