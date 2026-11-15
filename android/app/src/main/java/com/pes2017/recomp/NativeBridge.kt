@@ -224,8 +224,50 @@ object NativeBridge {
      * player's own was the only way to work a menu: nothing is lost, the
      * setting simply has no effect.
      */
-    val dpadSynthesis: Boolean by lazy {
-        answered("nativeDpadSynthesis") { nativeDpadSynthesis(true) }
+    @Volatile
+    private var dpadSynthesisState: Boolean? = null
+
+    val dpadSynthesis: Boolean
+        get() = dpadSynthesisState ?: probeDpadSynthesis()
+
+    /**
+     * Asks once whether the loaded engine exports the entry point. The probe
+     * itself is a call because JNI has no cheaper way to ask: a missing symbol
+     * throws [UnsatisfiedLinkError], which [answered] catches and remembers as
+     * "no". That is the supported state for an engine built before the d-pad.
+     */
+    @Synchronized
+    private fun probeDpadSynthesis(): Boolean {
+        dpadSynthesisState?.let { return it }
+        val present = answered("nativeDpadSynthesis") { nativeDpadSynthesis(true) }
+        dpadSynthesisState = present
+        return present
+    }
+
+    /**
+     * The only way the app asks the engine to stand its stick in for a d-pad.
+     *
+     * Safe wrapper rather than a bare native call: an engine whose symbol table
+     * answers the probe but whose loaded copy cannot link the method (a mixed or
+     * repackaged library) would otherwise throw out of a touch event. On a
+     * failure the capability is turned off for the rest of the process, so the
+     * app keeps its own stick-to-d-pad synthesis and nothing else changes.
+     *
+     * @return true when the engine took the call; false when the app must do it.
+     */
+    fun setDpadSynthesis(enabled: Boolean): Boolean {
+        if (!dpadSynthesis) return false
+        return try {
+            nativeDpadSynthesis(enabled)
+            true
+        } catch (_: UnsatisfiedLinkError) {
+            dpadSynthesisState = false
+            Log.i(
+                "PES17",
+                "nativeDpadSynthesis could not link: the app keeps its own d-pad synthesis",
+            )
+            false
+        }
     }
 
     /**

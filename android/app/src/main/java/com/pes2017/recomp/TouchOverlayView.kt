@@ -595,11 +595,11 @@ class TouchOverlayView @JvmOverloads constructor(
      */
     private fun syncDpadSynthesis() {
         if (!NativeBridge.isLoaded()) return
-        // A runtime built before the d-pad existed has no such entry point, and
-        // calling it is the app closing: it is asked once, then left alone. The
-        // stand-in is done in pushState instead when this is false.
-        if (!NativeBridge.dpadSynthesis) return
-        NativeBridge.nativeDpadSynthesis(!dpadOnScreen())
+        // Through the safe wrapper: it answers the "does this engine have it"
+        // question once, catches a missing symbol instead of letting it leave a
+        // touch event, and reports false so the stand-in in pushState keeps
+        // working. Nothing about the d-pad's bits or drawing changes here.
+        NativeBridge.setDpadSynthesis(!dpadOnScreen())
     }
 
     /** Whether a d-pad of the player's own is on screen in this phase. */
