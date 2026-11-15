@@ -38,16 +38,46 @@ class SwipeLabelsTest {
         )
     }
 
+    private fun spare() = ControlElement(
+        "c1", ControlKind.CUSTOM, 0, "C1", 0.5f, 0.5f, 48f, role = ControlRole.NONE,
+    )
+
     @Test
-    fun aSpareFallsBackToItsBinding() {
-        val spare = ControlElement(
-            "c1", ControlKind.CUSTOM, 0, "C1", 0.5f, 0.5f, 48f, role = ControlRole.NONE,
+    fun aSpareNamesTheActionItPlays() {
+        // C1..C10 hold nothing of their own, so the pill has to read the command
+        // the direction sends -- the same words the action buttons show.
+        assertEquals(
+            "Chipped Through Ball",
+            SwipeLabels.describe(spare(), SwipeAction.held(SwipeModifier.LB, NativeBridge.Y)),
         )
         assertEquals(
-            "LB + A",
-            SwipeLabels.describe(spare, SwipeAction.held(SwipeModifier.LB, NativeBridge.A)),
+            "One-Two",
+            SwipeLabels.describe(spare(), SwipeAction.held(SwipeModifier.LB, NativeBridge.A)),
         )
-        assertEquals("B ×2", SwipeLabels.describe(spare, SwipeAction.double(NativeBridge.B)))
+        assertEquals("Low Cross", SwipeLabels.describe(spare(), SwipeAction.double(NativeBridge.B)))
+        assertEquals(
+            "Chip Shot",
+            SwipeLabels.describe(spare(), SwipeAction.held(SwipeModifier.LB, NativeBridge.X)),
+        )
+    }
+
+    @Test
+    fun aSpareBoundToAShoulderStillReadsItsBinding() {
+        // Nothing in the game's vocabulary for this one: the binding is the name.
+        assertEquals("LB", SwipeLabels.describe(spare(), SwipeAction.of(NativeBridge.LB)))
+    }
+
+    @Test
+    fun aSpareAccentFollowsTheCommandItPlays() {
+        assertEquals(0, SwipeLabels.accentBit(spare()))
+        assertEquals(NativeBridge.X, SwipeLabels.accentBit(spare().copy(swipeUp = NativeBridge.X)))
+        assertEquals(NativeBridge.Y, SwipeLabels.accentBit(spare().copy(value = NativeBridge.Y)))
+        // The centre tap counts too: an unbound swipe list but a bound tap is
+        // still a spare that plays something.
+        assertEquals(
+            NativeBridge.B,
+            SwipeLabels.accentBit(spare().copy(swipeTap = NativeBridge.B)),
+        )
     }
 
     @Test

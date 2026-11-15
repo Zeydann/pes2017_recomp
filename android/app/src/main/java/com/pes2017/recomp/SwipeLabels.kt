@@ -19,11 +19,38 @@ object SwipeLabels {
      */
     fun describe(element: ControlElement, action: SwipeAction): String {
         if (!action.bound) return ""
-        val role = if (element.role != ControlRole.NONE) element.role else ControlRole.of(element.value)
+        // The role follows the command the gesture actually sends, not only the
+        // control's own bit: a spare (C1..C10) holds nothing itself, and its
+        // directions are bound to face buttons. A spare bound to LB + Y is
+        // playing the chipped through ball, so the pill says exactly that -- as
+        // it does over the through-ball button -- instead of "LB + Y".
+        val role = when {
+            element.role != ControlRole.NONE -> element.role
+            element.kind == ControlKind.CUSTOM -> ControlRole.of(action.bit)
+            else -> ControlRole.of(element.value)
+        }
         val named = namedFor(role, action)
         if (named != null) return named
         return plain(element, action)
     }
+
+    /**
+     * The pad bit a spare's accent should follow: its own binding when the
+     * editor gave it one, otherwise the first direction that sends a face
+     * button, otherwise 0. Only the drawing uses it, to tint C1..C10 the colour
+     * of the command they play; an unbound spare is nobody's colour.
+     */
+    fun accentBit(element: ControlElement): Int {
+        if (element.value != 0) return element.value
+        for (direction in DIRECTIONS) {
+            val bit = element.swipeBit(direction)
+            if (bit != 0) return bit
+        }
+        return element.swipeTap
+    }
+
+    /** The four directions, in the order the file and the editor list them. */
+    private val DIRECTIONS = arrayOf(Swipe.UP, Swipe.DOWN, Swipe.LEFT, Swipe.RIGHT)
 
     /** The four action buttons' own vocabulary, or null for anything else. */
     private fun namedFor(role: ControlRole, action: SwipeAction): String? {

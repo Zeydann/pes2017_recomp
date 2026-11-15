@@ -90,6 +90,33 @@ class SwipeClassifierTest {
     }
 
     @Test
+    fun everyPadButtonReadsTheSameSwipe() {
+        // C1..C10, the tactical five-ways and the action buttons all read
+        // through SwipeClassifier.forPadButtons: 10 dp of travel, no time
+        // limit, nearest axis. A short, slow drag on a spare is a swipe.
+        assertEquals(10f, SwipeClassifier.MIN_TRAVEL_DP)
+        val pad = SwipeClassifier.forPadButtons(1f)
+        assertEquals(Swipe.NONE, flick(pad, 9f, 0f))
+        assertEquals(Swipe.RIGHT, flick(pad, 11f, 0f, atMs = 3_000L))
+        assertEquals(Swipe.UP, flick(pad, 0f, -11f, atMs = 3_000L))
+    }
+
+    @Test
+    fun aSpareButtonHasNoDiagonalDeadBand() {
+        // The overlay begins every button's gesture with CARDINAL_DOMINANCE, so
+        // a spare reads the nearest arm even on a 45-degree drag, exactly as
+        // pass, shoot, cross and through do.
+        val pad = SwipeClassifier.forPadButtons(1f)
+        pad.begin(1, 100f, 100f, 0L, SwipeClassifier.CARDINAL_DOMINANCE)
+        pad.move(1, 116f, 116f)
+        assertEquals(Swipe.RIGHT, pad.end(1, 400L))
+
+        pad.begin(2, 100f, 100f, 0L, SwipeClassifier.CARDINAL_DOMINANCE)
+        pad.move(2, 84f, 117f)
+        assertEquals(Swipe.DOWN, pad.end(2, 400L))
+    }
+
+    @Test
     fun theDirectionIsWhereItEndedUpNotWhereItWandered() {
         val classifier = classifier()
         classifier.begin(1, 0f, 0f, 0L)

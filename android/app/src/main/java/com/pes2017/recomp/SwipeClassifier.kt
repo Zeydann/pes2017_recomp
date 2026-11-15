@@ -111,6 +111,28 @@ internal class SwipeClassifier(
 
     companion object {
         /**
+         * How far a thumb has to travel, in dp, before a drag is a swipe rather
+         * than a tap: a thumb moving off the spot. Ten is small on purpose -- a
+         * flick across a button is a deliberate gesture. Every button on the
+         * pad uses it, the ten spares included, so C1..C10 cannot end up asking
+         * for a longer, faster drag than pass or shoot.
+         */
+        const val MIN_TRAVEL_DP = 10f
+
+        /**
+         * The classifier every button on the pad reads its swipes with: the
+         * action buttons, the five-way tactical buttons and C1..C10 alike.
+         *
+         * One factory so the three cannot drift apart: the spare buttons were
+         * once read with a longer travel and a time limit, which made a working
+         * swipe on C1 look ignored. There is no time limit at all -- a player
+         * may hold a button and then drag to pick a variant -- and the travel
+         * threshold is [MIN_TRAVEL_DP].
+         */
+        fun forPadButtons(density: Float): SwipeClassifier =
+            SwipeClassifier(minTravelPx = MIN_TRAVEL_DP * density, maxDurationMs = 0L)
+
+        /**
          * The pad's usual rule: an axis has to win by nearly a third, so a flick
          * that went evenly up and right sends nothing rather than a guess. The
          * action buttons do not use it -- see [CARDINAL_DOMINANCE] -- because a

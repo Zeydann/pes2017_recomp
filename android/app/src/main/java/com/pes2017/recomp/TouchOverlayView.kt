@@ -240,11 +240,11 @@ class TouchOverlayView @JvmOverloads constructor(
     }
 
     // A swipe is read when the finger lifts and sent as one pulse: it has no bit
-    // to hold, and a flick is over before the title's next poll anyway. The
-    // threshold is 10 dp -- a deliberate drag on a 64 dp button, not a flick
-    // across it -- and there is no time limit, because holding a button to
-    // charge and then dragging is how a charged variant is played.
-    private val swipeClassifier = SwipeClassifier(minTravelPx = 10f * density, maxDurationMs = 0L)
+    // to hold, and a flick is over before the title's next poll anyway. Every
+    // button -- the action four, the tactical five-ways and C1..C10 -- reads
+    // through this one classifier, so their travel threshold and lack of a time
+    // limit are the same by construction, not by three copies agreeing.
+    private val swipeClassifier = SwipeClassifier.forPadButtons(density)
 
     // The left stick standing in for the d-pad, for an engine that cannot do it
     // itself (TouchMath.kt). Carried across pushes, because its hysteresis is
@@ -1891,6 +1891,12 @@ class TouchOverlayView @JvmOverloads constructor(
         private const val COLOR_LT_GLOW = 0xFF38BDF8.toInt()
         private const val COLOR_BUMPER_GLOW = 0xFF94A3B8.toInt()
 
+        // A spare (C1..C10) that sends nothing yet: the pad's neutral violet.
+        // Once the editor binds it to a face button it takes that button's own
+        // colour instead, so a C bound to shoot glows the way shoot does.
+        private const val COLOR_SPARE = 0xFF4C1D95.toInt()
+        private const val COLOR_SPARE_GLOW = 0xFFA78BFA.toInt()
+
         /** The latch halo: the one colour that means "this is on and holding". */
         private const val COLOR_LATCH = 0xFF38BDF8.toInt()
 
@@ -1955,6 +1961,13 @@ class TouchOverlayView @JvmOverloads constructor(
         val isX = id == "x"
         val isY = id == "y"
         val isFaceButton = isA || isB || isX || isY
+        // A spare holds nothing of its own, so its colour has to come from the
+        // command it was given; unbound, it keeps the neutral spare violet.
+        val isSpare = element.kind == ControlKind.CUSTOM
+        val spareBit = if (isSpare) SwipeLabels.accentBit(element) else 0
+        // The direction a thumb on this spare is holding right now: its second
+        // "active" state, since nothing of its own is down while the thumb is.
+        val spareSwipe = if (isSpare) liveSwipe(element) else Swipe.NONE
         val isRT = id == "rt"
         val isLT = id == "lt"
         // By bit rather than by id, so the defending switch -- a second LB in
@@ -1966,6 +1979,7 @@ class TouchOverlayView @JvmOverloads constructor(
 
         val label = ControlLayout.labelFor(element, playStation)
         val coreColor = when {
+            isSpare -> spareCore(spareBit)
             isA -> if (playStation) PS_CROSS else COLOR_A
             isB -> if (playStation) PS_CIRCLE else COLOR_B
             isX -> if (playStation) PS_SQUARE else COLOR_X
@@ -1977,6 +1991,7 @@ class TouchOverlayView @JvmOverloads constructor(
         }
 
         val glowColor = when {
+            isSpare -> spareGlow(spareBit)
             isA -> if (playStation) PS_CROSS_GLOW else COLOR_A_GLOW
             isB -> if (playStation) PS_CIRCLE_GLOW else COLOR_B_GLOW
             isX -> if (playStation) PS_SQUARE_GLOW else COLOR_X_GLOW
@@ -2011,6 +2026,26 @@ class TouchOverlayView @JvmOverloads constructor(
                 Color.red(glowColor), Color.green(glowColor), Color.blue(glowColor),
             )
             canvas.drawCircle(cx, cy, r * 1.08f, fill)
+        }
+
+        // A spare's locked direction is its other "active" state: a halo in the
+        // colour of the command it is about to send, drawn from the moment the
+        // axis wins until the finger lifts. The pill above says it in words;
+        // this is what the thumb sees without looking away from the button.
+        if (spareSwipe != Swipe.NONE) {
+            val bit = element.swipeBit(spareSwipe).let { if (it != 0) it else spareBit }
+            val accent = spareGlow(bit)
+            fill.color = Color.argb(
+                (alpha * fadeFactor * 110).toInt().coerceIn(0, 255),
+                Color.red(accent), Color.green(accent), Color.blue(accent),
+            )
+            canvas.drawCircle(cx, cy, r * 1.26f, fill)
+            stroke.color = Color.argb(
+                (alpha * fadeFactor * 220).toInt().coerceIn(0, 255),
+                Color.red(accent), Color.green(accent), Color.blue(accent),
+            )
+            stroke.strokeWidth = max(1.5f, r * 0.05f)
+            canvas.drawCircle(cx, cy, r * 1.34f, stroke)
         }
 
         val pressScale = ControlTheme.scale(fx)
@@ -2105,6 +2140,39 @@ class TouchOverlayView @JvmOverloads constructor(
             // The four directions this button can swipe, on its rim. Nothing is
             // drawn for a button with no bindings, so no arrow promises a
             // gesture that does nothing.
+            drawSwipeArrows(canvas, element, cx, cy, r, alpha * fadeFactor)
+        } else if (isSpare) {
+            // A spare, drawn as a real button rather than a grey placeholder:
+            // the same glass as an action button, tinted with the command it
+            // sends, with the four directions it can swipe on its rim. While a
+            // direction is being read it wears a halo in that command's colour,
+            // which is the only "held" feedback it can have -- nothing of its
+            // own goes down until the thumb lifts.
+            fill.color = Color.argb(
+                (alpha * fadeFactor * 180).toInt().coerceIn(0, 255), 12, 16, 24,
+            )
+            canvas.drawCircle(cx, cy, r, fill)
+
+            stroke.color = Color.argb(
+                (alpha * fadeFactor * (if (pressed) 255 else 175)).toInt().coerceIn(0, 255),
+                Color.red(glowColor), Color.green(glowColor), Color.blue(glowColor),
+            )
+            stroke.strokeWidth = max(1.5f, r * 0.045f)
+            canvas.drawCircle(cx, cy, r - stroke.strokeWidth * 0.5f, stroke)
+
+            val coreR = r * 0.90f
+            fill.color = Color.argb(
+                (alpha * fadeFactor * (if (pressed) 150 else 60)).toInt().coerceIn(0, 255),
+                Color.red(coreColor), Color.green(coreColor), Color.blue(coreColor),
+            )
+            canvas.drawCircle(cx, cy, coreR, fill)
+
+            text.textSize = fitText(
+                text, label, coreR * 1.5f, coreR * (if (label.length > 2) 0.52f else 0.72f),
+            )
+            text.color = Color.argb((alpha * fadeFactor * 250).toInt().coerceIn(0, 255), 255, 255, 255)
+            canvas.drawText(label, cx, cy - (text.descent() + text.ascent()) * 0.5f, text)
+
             drawSwipeArrows(canvas, element, cx, cy, r, alpha * fadeFactor)
         } else if (isRT || isLT) {
             // Xbox Ergonomic Trigger (RT / LT)
@@ -2209,6 +2277,30 @@ class TouchOverlayView @JvmOverloads constructor(
             drawLatchRing(canvas, element, cx, cy, r, alpha * fadeFactor)
         }
         if (scaled) canvas.restore()
+    }
+
+    /**
+     * The glass tint for a spare: the colour of the command it plays, so a C
+     * bound to shoot looks like shoot rather than like a grey spare. An unbound
+     * spare keeps the pad's neutral violet.
+     */
+    private fun spareCore(bit: Int): Int = when (bit) {
+        NativeBridge.A -> if (playStation) PS_CROSS else COLOR_A
+        NativeBridge.B -> if (playStation) PS_CIRCLE else COLOR_B
+        NativeBridge.X -> if (playStation) PS_SQUARE else COLOR_X
+        NativeBridge.Y -> if (playStation) PS_TRIANGLE else COLOR_Y
+        NativeBridge.LB, NativeBridge.RB -> 0xFF334155.toInt()
+        else -> COLOR_SPARE
+    }
+
+    /** The glow for a spare: the same accent its bound command glows in. */
+    private fun spareGlow(bit: Int): Int = when (bit) {
+        NativeBridge.A -> if (playStation) PS_CROSS_GLOW else COLOR_A_GLOW
+        NativeBridge.B -> if (playStation) PS_CIRCLE_GLOW else COLOR_B_GLOW
+        NativeBridge.X -> if (playStation) PS_SQUARE_GLOW else COLOR_X_GLOW
+        NativeBridge.Y -> if (playStation) PS_TRIANGLE_GLOW else COLOR_Y_GLOW
+        NativeBridge.LB, NativeBridge.RB -> COLOR_BUMPER_GLOW
+        else -> COLOR_SPARE_GLOW
     }
 
     /**
