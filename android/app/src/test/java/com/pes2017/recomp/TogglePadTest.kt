@@ -28,26 +28,84 @@ class TogglePadTest {
     }
 
     @Test
-    fun `the two custom toggles ship hidden, unbound, and always latching`() {
+    fun `the six custom toggles ship hidden, unassigned, and always latching`() {
         val pad = pad()
-        for (id in listOf("tg1", "tg2")) {
+        for (id in listOf("tg1", "tg2", "tg3", "tg4", "tg5", "tg6")) {
             val toggle = pad.find(id)
             assertNotNull("$id ships with the pad", toggle)
             assertEquals(ControlKind.LATCH, toggle!!.kind)
             assertFalse("$id starts hidden", toggle.visible)
-            assertEquals("$id starts unbound", 0, toggle.value)
+            assertEquals("$id starts unassigned", ToggleAction.NOTHING, toggle.toggleAction)
             assertTrue("$id latches without asking", toggle.latches())
-            assertFalse("an unbound toggle holds nothing", toggle.latchHold().any)
+            assertFalse("an unassigned toggle holds nothing", toggle.latchHold().any)
         }
     }
 
     @Test
-    fun `a bound toggle holds its own bit, and a rebind changes what it holds`() {
-        val toggle = pad().find("tg1")!!
-        toggle.value = NativeBridge.Y
-        assertEquals(LatchHold(buttons = NativeBridge.Y), toggle.latchHold())
-        toggle.value = NativeBridge.RIGHT
-        assertEquals(LatchHold(buttons = NativeBridge.RIGHT), toggle.latchHold())
+    fun `every custom toggle has its own hold source`() {
+        assertEquals(HoldSource.TG1_TOGGLE, HoldMixer.sourceFor("tg1"))
+        assertEquals(HoldSource.TG2_TOGGLE, HoldMixer.sourceFor("tg2"))
+        assertEquals(HoldSource.TG3_TOGGLE, HoldMixer.sourceFor("tg3"))
+        assertEquals(HoldSource.TG4_TOGGLE, HoldMixer.sourceFor("tg4"))
+        assertEquals(HoldSource.TG5_TOGGLE, HoldMixer.sourceFor("tg5"))
+        assertEquals(HoldSource.TG6_TOGGLE, HoldMixer.sourceFor("tg6"))
+    }
+
+    @Test
+    fun `the toggle menu is the title's action list, in order`() {
+        assertEquals(
+            listOf(
+                "Nothing (Unassigned)",
+                "Sprint: RT",
+                "Jockeying: LT",
+                "Running Jockey: LT + RT",
+                "Teammate Pressure: RB",
+                "Pressure: A",
+                "Manual Goalkeeper Movement: R3",
+                "Super Cancel: RB + RT",
+                "Shielding: LT",
+                "Player Movement: LS",
+            ),
+            ToggleAction.entries.map { it.label },
+        )
+    }
+
+    @Test
+    fun `every toggle action holds exactly its input`() {
+        assertEquals(LatchHold.NONE, ToggleAction.NOTHING.hold)
+        assertEquals(LatchHold(rightTrigger = true), ToggleAction.SPRINT.hold)
+        assertEquals(LatchHold(leftTrigger = true), ToggleAction.JOCKEY.hold)
+        assertEquals(
+            LatchHold(leftTrigger = true, rightTrigger = true),
+            ToggleAction.RUNNING_JOCKEY.hold,
+        )
+        assertEquals(LatchHold(buttons = NativeBridge.RB), ToggleAction.TEAMMATE_PRESSURE.hold)
+        assertEquals(LatchHold(buttons = NativeBridge.A), ToggleAction.PRESSURE.hold)
+        assertEquals(LatchHold(buttons = NativeBridge.R3), ToggleAction.MANUAL_GK.hold)
+        assertEquals(
+            LatchHold(buttons = NativeBridge.RB, rightTrigger = true),
+            ToggleAction.SUPER_CANCEL.hold,
+        )
+        assertEquals(LatchHold(leftTrigger = true), ToggleAction.SHIELDING.hold)
+        assertEquals(LatchHold(buttons = NativeBridge.L3), ToggleAction.PLAYER_MOVEMENT.hold)
+    }
+
+    @Test
+    fun `a toggle holds the assigned action, and a reassignment changes it`() {
+        val toggle = pad().find("tg2")!!
+        toggle.toggleAction = ToggleAction.SPRINT
+        assertEquals(LatchHold(rightTrigger = true), toggle.latchHold())
+        toggle.toggleAction = ToggleAction.PRESSURE
+        assertEquals(LatchHold(buttons = NativeBridge.A), toggle.latchHold())
+        toggle.toggleAction = ToggleAction.NOTHING
+        assertEquals(LatchHold.NONE, toggle.latchHold())
+    }
+
+    @Test
+    fun `an unknown action name reads as unassigned`() {
+        assertEquals(ToggleAction.NOTHING, ToggleAction.of(null))
+        assertEquals(ToggleAction.NOTHING, ToggleAction.of("TELEPORT"))
+        assertEquals(ToggleAction.SUPER_CANCEL, ToggleAction.of("SUPER_CANCEL"))
     }
 
     @Test
@@ -154,14 +212,25 @@ class TogglePadTest {
     }
 
     @Test
-    fun `a custom toggle latches without the per-button switch`() {
+    fun `an assigned toggle keeps its action held until the second tap`() {
         val claims = TouchClaims()
-        val toggle = pad().find("tg1")!!
-        toggle.value = NativeBridge.START
+        val toggle = pad().find("tg3")!!
+        toggle.toggleAction = ToggleAction.SUPER_CANCEL
         claims.press(1, toggle)
-        assertEquals(LatchHold(buttons = NativeBridge.START), claims.latchedHold(toggle.id))
+        assertEquals(
+            LatchHold(buttons = NativeBridge.RB, rightTrigger = true),
+            claims.latchedHold(toggle.id),
+        )
+        // The finger lifting is not the toggle: it stays engaged.
         claims.release(1)
         assertTrue(claims.isOn(toggle.id))
+        assertEquals(
+            LatchHold(buttons = NativeBridge.RB, rightTrigger = true),
+            claims.latchedHold(toggle.id),
+        )
+        claims.press(2, toggle)
+        assertFalse("the second tap lets go", claims.isOn(toggle.id))
+        assertEquals(LatchHold.NONE, claims.latchedHold(toggle.id))
     }
 
     @Test
@@ -194,7 +263,7 @@ class TogglePadTest {
         val pad = pad()
         pad.find("jockey")!!.visible = true
         pad.find("jockey")!!.toggle = true
-        pad.find("tg1")!!.value = NativeBridge.R3
+        pad.find("tg1")!!.toggleAction = ToggleAction.MANUAL_GK
         pad.find("tg2")!!.visible = true
         pad.find("sw1")!!.visible = true
         pad.find("sw2")!!.visible = true
@@ -206,7 +275,7 @@ class TogglePadTest {
         assertTrue(restored.find("jockey")!!.toggle)
         assertTrue(restored.find("jockey")!!.visible)
         assertEquals(ControlRole.JOCKEY, restored.find("jockey")!!.role)
-        assertEquals(NativeBridge.R3, restored.find("tg1")!!.value)
+        assertEquals(ToggleAction.MANUAL_GK, restored.find("tg1")!!.toggleAction)
         assertTrue(restored.find("tg2")!!.visible)
         assertEquals(ControlKind.TACTICAL, restored.find("sw1")!!.kind)
         assertEquals(
@@ -218,6 +287,29 @@ class TogglePadTest {
             SwipeAction.held(SwipeModifier.LT, NativeBridge.RIGHT),
             restored.find("sw2")!!.swipeAction(Swipe.RIGHT),
         )
+    }
+
+    @Test
+    fun `a toggle's action survives a save and an older file starts unassigned`() {
+        val pad = pad()
+        pad.find("tg4")!!.visible = true
+        pad.find("tg4")!!.toggleAction = ToggleAction.RUNNING_JOCKEY
+
+        val restored = ControlLayout.parse(pad.toJson())
+        assertNotNull(restored)
+        assertEquals(ToggleAction.RUNNING_JOCKEY, restored!!.find("tg4")!!.toggleAction)
+        assertTrue(restored.find("tg4")!!.visible)
+        assertEquals(
+            LatchHold(leftTrigger = true, rightTrigger = true),
+            restored.find("tg4")!!.latchHold(),
+        )
+
+        // A file that never knew about the presets comes back unassigned, and
+        // the toggle it gains holds nothing rather than a guess.
+        val old = ControlLayout.parse("""{"version":8,"w":800.0,"h":360.0,"elements":[]}""")
+        assertNotNull(old)
+        assertEquals(ToggleAction.NOTHING, old!!.find("tg6")!!.toggleAction)
+        assertFalse(old.find("tg6")!!.latchHold().any)
     }
 
     @Test

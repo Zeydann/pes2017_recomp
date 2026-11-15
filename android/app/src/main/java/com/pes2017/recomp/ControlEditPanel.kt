@@ -888,27 +888,21 @@ class ControlEditPanel(
     }
 
     /**
-     * TG1/TG2's mapping: the saved pads a toggle can switch to, plus "none".
-     * The mapping is per control, so the two toggles can land on different pads.
+     * TG1..TG6's assignment: the game actions a toggle can keep held, in the
+     * order the title's own control table lists them. One toggle holds one
+     * action, and the action is what the pad holds every frame while the toggle
+     * is on -- sprint holds RT, running jockey holds LT + RT, super cancel holds
+     * RB + RT -- until the toggle is tapped off again.
+     *
+     * The list is [ToggleAction] itself, so the editor cannot offer an action
+     * the pad does not know how to hold.
      */
     private fun pickToggleMapping() {
         val element = current ?: overlay.selected ?: return
-        val slots = ControlLayout.listSlots(activity)
-        val labels = ArrayList<String>(slots.size + 1)
-        val ids = ArrayList<String>(slots.size + 1)
-        labels.add(activity.getString(R.string.button_none))
-        ids.add("")
-        for (slot in slots) {
-            labels.add(
-                if (slot.numbered) {
-                    activity.getString(R.string.profile_slot, slot.id, slot.displayName)
-                } else {
-                    slot.displayName
-                },
-            )
-            ids.add(slot.id)
-        }
-        val selected = ids.indexOf(element.toggleProfile).coerceAtLeast(0)
+        if (element.kind != ControlKind.LATCH) return
+        val actions = ToggleAction.entries
+        val labels = Array(actions.size) { actions[it].label }
+        val selected = actions.indexOf(element.toggleAction).coerceAtLeast(0)
         AlertDialog.Builder(activity)
             .setTitle(
                 activity.getString(
@@ -916,10 +910,14 @@ class ControlEditPanel(
                     ControlLayout.labelFor(element, overlay.playStation),
                 ),
             )
-            .setSingleChoiceItems(labels.toTypedArray(), selected) { dialog, which ->
+            .setSingleChoiceItems(labels, selected) { dialog, which ->
                 remember()
-                element.toggleProfile = ids[which]
+                element.toggleAction = actions[which]
+                // A toggle that is already engaged keeps the hold it latched
+                // with until it is tapped off and on again: the hold is taken
+                // at the tap, not guessed from an action that changed under it.
                 show(element)
+                overlay.refresh()
                 save()
                 dialog.dismiss()
             }

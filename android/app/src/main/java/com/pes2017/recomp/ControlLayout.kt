@@ -84,10 +84,10 @@ enum class ControlKind {
     CUSTOM,
 
     /**
-     * A latching toggle (tg1, tg2): one tap engages the command bound to it and
-     * holds it down until a second tap lets go, so a player who has to hold two
-     * things at once has one thumb free. Unbound until the editor gives it a
-     * bit; a toggle with nothing bound latches nothing at all.
+     * A latching toggle (tg1..tg6): one tap engages the game action assigned to
+     * it and holds it down until a second tap lets go, so a player who has to
+     * hold two things at once has one thumb free. Unassigned until the editor
+     * gives it an action; a toggle with nothing assigned latches nothing at all.
      */
     LATCH,
 
@@ -249,11 +249,16 @@ data class ControlElement(
     var trickMoves: IntArray = IntArray(SkillMoves.COUNT) { -1 },
     /**
      * The saved layout this latch switches to when it is engaged, as a
-     * [LayoutStore] slot id, or "" for a plain toggle. Only the two custom
-     * toggles (tg1, tg2) use it: one tap puts that pad on screen, which is how a
-     * player keeps a defending arrangement and an attacking one a thumb apart.
+     * [LayoutStore] slot id, or "" for a plain toggle. Layouts written before
+     * the toggle presets existed may still carry one.
      */
     var toggleProfile: String = "",
+    /**
+     * The game action a custom toggle (TG1..TG6) keeps held while it is on.
+     * [ToggleAction.NOTHING] for everything that is not a custom toggle, and for
+     * a toggle the player has not assigned yet.
+     */
+    var toggleAction: ToggleAction = ToggleAction.NOTHING,
 ) {
     /** The move a wheel sector plays, or -1 for none and for a sector off the wheel. */
     fun trickMove(sector: Int): Int {
@@ -537,6 +542,11 @@ class ControlLayout private constructor(
             // A custom toggle's mapping, written only when it has one, so an
             // ordinary pad stays the file it always was.
             if (element.toggleProfile.isNotEmpty()) item.put("profile", element.toggleProfile)
+            // The game action a TG1..TG6 keeps held, written only when one is
+            // assigned: an unassigned toggle stays the file it always was.
+            if (element.toggleAction != ToggleAction.NOTHING) {
+                item.put("toggleAction", element.toggleAction.name)
+            }
             array.put(item)
         }
         val root = JSONObject()
@@ -746,6 +756,12 @@ class ControlLayout private constructor(
                 // toggle somewhere else, and the toggle itself still works.
                 if (item.has("profile")) {
                     element.toggleProfile = item.optString("profile", "").trim()
+                }
+                // A custom toggle's assigned game action. A file from before the
+                // presets, or one naming an action this build dropped, starts
+                // unassigned rather than holding a guess.
+                if (item.has("toggleAction")) {
+                    element.toggleAction = ToggleAction.of(item.optString("toggleAction", ""))
                 }
                 item.optJSONArray("swipeActions")?.let { actions ->
                     for (index in 0 until min(DIRECTIONS.size, actions.length())) {
@@ -1074,10 +1090,15 @@ class ControlLayout private constructor(
                     place("jockey", ControlKind.TRIGGER, 0, "JCK", 176f, 76f, 56f, 0.45f,
                         visible = false, toggle = true, role = ControlRole.JOCKEY),
 
-                    // Two custom toggles, hidden and unbound: a latch the player
-                    // binds to whatever the pad is missing, one command each.
+                    // Six custom toggles, hidden and unassigned: a latch the
+                    // player assigns to whatever the pad is missing, one game
+                    // action each, held for as long as the toggle is on.
                     place("tg1", ControlKind.LATCH, 0, "TG1", 60f, 150f, 52f, 0.40f, visible = false),
                     place("tg2", ControlKind.LATCH, 0, "TG2", 120f, 150f, 52f, 0.40f, visible = false),
+                    place("tg3", ControlKind.LATCH, 0, "TG3", 180f, 150f, 52f, 0.40f, visible = false),
+                    place("tg4", ControlKind.LATCH, 0, "TG4", 240f, 150f, 52f, 0.40f, visible = false),
+                    place("tg5", ControlKind.LATCH, 0, "TG5", 300f, 150f, 52f, 0.40f, visible = false),
+                    place("tg6", ControlKind.LATCH, 0, "TG6", 360f, 150f, 52f, 0.40f, visible = false),
 
                     // Two tactical five-way buttons, hidden until the player
                     // wants them. sw1 carries the quick tactics and the
@@ -1245,6 +1266,10 @@ class ControlLayout private constructor(
                 "jockey" -> "JCK"
                 "tg1" -> "TG1"
                 "tg2" -> "TG2"
+                "tg3" -> "TG3"
+                "tg4" -> "TG4"
+                "tg5" -> "TG5"
+                "tg6" -> "TG6"
                 "sw1" -> "SW1"
                 "sw2" -> "SW2"
                 "start" -> "START"

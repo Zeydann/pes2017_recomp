@@ -679,6 +679,10 @@ class TouchOverlayView @JvmOverloads constructor(
         mixer.release(HoldSource.JOCKEY_TOGGLE)
         mixer.release(HoldSource.TG1_TOGGLE)
         mixer.release(HoldSource.TG2_TOGGLE)
+        mixer.release(HoldSource.TG3_TOGGLE)
+        mixer.release(HoldSource.TG4_TOGGLE)
+        mixer.release(HoldSource.TG5_TOGGLE)
+        mixer.release(HoldSource.TG6_TOGGLE)
         var heldButtons = buttons
         var heldLeft = leftTrigger != 0
         var heldRight = rightTrigger != 0
@@ -691,7 +695,9 @@ class TouchOverlayView @JvmOverloads constructor(
             if (latched == null || !latched.shownIn(gamePhase, stance)) continue
             val hold = claims.latchedHold(id)
             when (HoldMixer.sourceFor(id)) {
-                HoldSource.JOCKEY_TOGGLE, HoldSource.TG1_TOGGLE, HoldSource.TG2_TOGGLE ->
+                HoldSource.JOCKEY_TOGGLE, HoldSource.TG1_TOGGLE, HoldSource.TG2_TOGGLE,
+                HoldSource.TG3_TOGGLE, HoldSource.TG4_TOGGLE, HoldSource.TG5_TOGGLE,
+                HoldSource.TG6_TOGGLE ->
                     mixer.set(HoldMixer.sourceFor(id), hold.buttons, hold.leftTrigger, hold.rightTrigger)
                 // A spare or a plain button switched to latching has no source of
                 // its own: it counts as the player's own hold, and ends with the pad.
@@ -2315,6 +2321,18 @@ class TouchOverlayView @JvmOverloads constructor(
     private fun drawLatchRing(
         canvas: Canvas, element: ControlElement, cx: Float, cy: Float, r: Float, alpha: Float,
     ) {
+        // The halo first: a wide, soft band just outside the rim, so an
+        // engaged toggle glows -- visible from across the pad -- instead of
+        // reading as a thin outline that is easy to miss over bright turf. It
+        // is a band rather than a filled disc so the control's own label stays
+        // legible.
+        stroke.color = Color.argb(
+            (alpha * 85f).toInt().coerceIn(0, 255),
+            Color.red(COLOR_LATCH), Color.green(COLOR_LATCH), Color.blue(COLOR_LATCH),
+        )
+        stroke.strokeWidth = max(4f, r * 0.22f)
+        canvas.drawCircle(cx, cy, r + stroke.strokeWidth * 0.9f, stroke)
+
         stroke.color = Color.argb(
             (alpha * 235f).toInt().coerceIn(0, 255),
             Color.red(COLOR_LATCH), Color.green(COLOR_LATCH), Color.blue(COLOR_LATCH),

@@ -23,6 +23,18 @@ enum class HoldSource {
     /** The second custom toggle's latch. */
     TG2_TOGGLE,
 
+    /** The third custom toggle's latch. */
+    TG3_TOGGLE,
+
+    /** The fourth custom toggle's latch. */
+    TG4_TOGGLE,
+
+    /** The fifth custom toggle's latch. */
+    TG5_TOGGLE,
+
+    /** The sixth custom toggle's latch. */
+    TG6_TOGGLE,
+
     /** A compound swipe's timed steps. */
     MACRO_SEQUENCE,
 
@@ -115,6 +127,10 @@ class HoldMixer {
             "jockey" -> HoldSource.JOCKEY_TOGGLE
             "tg1" -> HoldSource.TG1_TOGGLE
             "tg2" -> HoldSource.TG2_TOGGLE
+            "tg3" -> HoldSource.TG3_TOGGLE
+            "tg4" -> HoldSource.TG4_TOGGLE
+            "tg5" -> HoldSource.TG5_TOGGLE
+            "tg6" -> HoldSource.TG6_TOGGLE
             else -> HoldSource.PHYSICAL_TOUCH
         }
     }
