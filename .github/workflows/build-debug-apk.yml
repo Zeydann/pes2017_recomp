@@ -1,0 +1,145 @@
+name: Debug APK
+
+# A plain debug apk, signed with the debug key, for putting on a phone.
+#
+# Separate from android.yml on purpose: that one builds a *release* apk, insists
+# on the four production signing secrets and verifies the permanent certificate
+# -- none of which a build for testing should need. Nothing here touches a
+# release, a tag or the store.
+#
+# Two things about this repository decide the shape of the job below.
+#
+# 1. The native library cannot be compiled here. libpes17.so is the recompiled
+#    title, made from the disc's own executables, and those are in no repository
+#    -- so there is nothing in this tree to run CMake over. The app packages a
+#    prebuilt engine instead (`-PprebuiltNative=<dir>`, see app/build.gradle.kts),
+#    which is why the job downloads a published engine apk, checks its SHA-256
+#    and unpacks lib/arm64-v8a from it before Gradle runs. Without that step
+#    assembleDebug would try to compile 1,600 generated units that are not here.
+#    A fork that HAS built an engine from these sources points the two variables
+#    below at its own release asset and gets an apk carrying its own engine.
+#
+# 2. The Gradle wrapper lives in android/, not at the root: `./gradlew` here
+#    means `android/gradlew` run from `android/`.
+#
+# Triggers: `main` as asked, the freebuff/* working branches so a push to one of
+# them produces an apk to test, and workflow_dispatch for running it by hand.
+# GitHub's "Run workflow" picker only lists workflows on the repository's default
+# branch, so a hand-run needs this file there first; a push works either way.
+on:
+  push:
+    branches:
+      - main
+      - 'freebuff/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # The published engine unless a fork sets its own (Settings > Secrets and
+  # variables > Actions > Variables).
+  ENGINE_URL: "${{ vars.PES17_ENGINE_URL || 'https://github.com/dzakyraf/pes2017-recomp/releases/download/0.2.0/pes2017-recomp-0.2.0.apk' }}"
+  ENGINE_SHA256: "${{ vars.PES17_ENGINE_SHA256 || '843e276c2f86adc6057c0ed5288ab64110195342ac6bbeec1e6ce663b83ce1d6' }}"
+
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: What is being built
+        run: |
+          echo "ref:   $GITHUB_REF"
+          echo "sha:   $GITHUB_SHA"
+          echo "actor: $GITHUB_ACTOR"
+          echo "event: $GITHUB_EVENT_NAME"
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          # Hashes the wrapper properties and every build script, so the Gradle
+          # caches are only reused when the build itself has not changed.
+          cache: 'gradle'
+
+      - name: Set up the Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Accept SDK licenses and install what the app compiles against
+        run: |
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
+      # See note 1 at the top of the file: there is no native source here to
+      # compile, so the engine is fetched and its checksum enforced.
+      - name: Fetch the native engine
+        run: |
+          echo "engine: $ENGINE_URL"
+          mkdir -p "$GITHUB_WORKSPACE/libpes17_prebuilt/arm64-v8a"
+          curl -sL --retry 3 -o /tmp/upstream.apk "$ENGINE_URL"
+          if [ ! -f /tmp/upstream.apk ]; then
+            echo "ERROR: could not download the apk with the native engine."
+            exit 1
+          fi
+          echo "$ENGINE_SHA256  /tmp/upstream.apk" \
+            | sha256sum -c - || { echo "ERROR: engine checksum mismatch!"; exit 1; }
+          unzip -j /tmp/upstream.apk "lib/arm64-v8a/*" -d "$GITHUB_WORKSPACE/libpes17_prebuilt/arm64-v8a/"
+          ls -lh "$GITHUB_WORKSPACE/libpes17_prebuilt/arm64-v8a/"
+
+      # Which of the app's entry points this engine has. One built before a
+      # function existed does not export it, and the app asks before calling it,
+      # so the cost is that feature and not the whole app -- but which features
+      # those are belongs in the log.
+      - name: Audit the engine's entry points
+        run: |
+          ./tools/engine_symbols.sh \
+            "$GITHUB_WORKSPACE/libpes17_prebuilt/arm64-v8a/libpes17.so"
+
+      - name: Unit tests
+        working-directory: android
+        run: |
+          chmod +x ./gradlew
+          PREBUILT="$GITHUB_WORKSPACE/libpes17_prebuilt"
+          ./gradlew :app:testDebugUnitTest -PprebuiltNative="$PREBUILT" --stacktrace
+
+      - name: Build debug APK
+        working-directory: android
+        run: |
+          PREBUILT="$GITHUB_WORKSPACE/libpes17_prebuilt"
+          echo "Building debug apk with prebuiltNative=$PREBUILT"
+          ./gradlew :app:assembleDebug -PprebuiltNative="$PREBUILT" --stacktrace
+
+      - name: Check the APK carries the engine
+        run: |
+          APK=$(ls "$GITHUB_WORKSPACE"/android/app/build/outputs/apk/debug/*.apk | head -1)
+          echo "APK: $APK"
+          ls -lh "$APK"
+          unzip -l "$APK" | grep "lib/arm64-v8a/libpes17.so" \
+            || { echo "ERROR: libpes17.so missing from the apk -- it would install and die on launch."; exit 1; }
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: pes17-touch-debug-apk
+          path: android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      # Kept even when the build fails: a failing unit test is read from its
+      # report, and the report only exists on the runner.
+      - name: Upload test reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pes17-touch-unit-test-reports
+          path: |
+            android/app/build/reports/tests/
+            android/app/build/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
