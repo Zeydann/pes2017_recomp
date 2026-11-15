@@ -61,74 +61,49 @@ class PadGesturesTest {
         assertFalse(latch.active)
     }
 
-    // ---- the fake shot -------------------------------------------------------
-
-    private fun fake(minTravelPx: Float = 40f) = FakeShotGesture(minTravelPx)
-
-    /** Shoot at (100, 100), pass at (200, 100): the drag has to go right. */
-    private fun moved(
-        gesture: FakeShotGesture,
-        dx: Float,
-        dy: Float,
-        fromX: Float = 100f,
-        fromY: Float = 100f,
-    ): Boolean = gesture.moved(
-        fromX, fromY, fromX + dx, fromY + dy,
-        100f, 100f, 200f, 100f,
-    )
+    // ---- the pass double tap (one-two) ---------------------------------------
 
     @Test
-    fun aDragTowardsPassArmsTheGesture() {
-        val gesture = fake()
-        assertTrue(moved(gesture, 60f, 0f))
-        assertTrue(gesture.armed)
+    fun twoQuickTapsOfPassMakeAPair() {
+        val tap = DoubleTap()
+        tap.release(1_000)
+        assertTrue("a second press inside 220 ms", tap.press(1_180))
     }
 
     @Test
-    fun aShortDragIsJustAThumbResting() {
-        val gesture = fake()
-        assertFalse(moved(gesture, 20f, 0f))
-        assertFalse(gesture.armed)
+    fun aSlowSecondTapIsJustAnotherPass() {
+        // Missing the window degrades into two ordinary passes, never nothing.
+        val tap = DoubleTap()
+        tap.release(1_000)
+        assertFalse(tap.press(1_260))
     }
 
     @Test
-    fun aDragAwayFromPassDoesNotArm() {
-        assertFalse(moved(fake(), -60f, 0f))
+    fun aFirstPressWithNothingBeforeItIsNotAPair() {
+        assertFalse(DoubleTap().press(5_000))
     }
 
     @Test
-    fun aDragAcrossTheButtonDoesNotArm() {
-        // Straight up: 90 degrees from the line to pass, so 45 is too far.
-        assertFalse(moved(fake(), 0f, -60f))
-        // Evenly right and down is 0.71 of the way, inside the cut-off; make it
-        // clearly diagonal so the test is about the rule, not rounding.
-        assertFalse(moved(fake(), 40f, -60f))
+    fun aCompletedPairIsConsumedSoThreeTapsAreNotTwoPairs() {
+        val tap = DoubleTap()
+        tap.release(0)
+        assertTrue(tap.press(100))
+        assertFalse("the pair is spent", tap.press(180))
+        tap.release(200)
+        assertTrue("a fresh pair", tap.press(300))
     }
 
     @Test
-    fun theGesturePressesPassOnlyOnce() {
-        val gesture = fake()
-        assertTrue(moved(gesture, 60f, 0f))
-        assertFalse(moved(gesture, 80f, 0f))
-        assertFalse(moved(gesture, 100f, 0f))
-        assertTrue(gesture.armed)
+    fun resetForgetsAHalfPair() {
+        val tap = DoubleTap()
+        tap.release(0)
+        tap.reset()
+        assertFalse(tap.press(50))
     }
 
     @Test
-    fun resetLetsTheNextDragArmAgain() {
-        val gesture = fake()
-        assertTrue(moved(gesture, 60f, 0f))
-        gesture.reset()
-        assertFalse(gesture.armed)
-        assertTrue(moved(gesture, 60f, 0f))
-    }
-
-    @Test
-    fun aPassControlOnTopOfShootCannotArmAnything() {
-        // The direction from shoot to pass is degenerate; nothing to aim at.
-        val gesture = fake()
-        assertFalse(gesture.moved(100f, 100f, 200f, 100f, 100f, 100f, 100f, 100f))
-        assertFalse(gesture.armed)
+    fun theWindowIsTheDocumentedFifthOfASecond() {
+        assertEquals(220L, DoubleTap.WINDOW_MS)
     }
 
     // ---- compound swipe sequences --------------------------------------------
@@ -226,13 +201,12 @@ class PadGesturesTest {
     }
 
     @Test
-    fun aFakeShotOwnsItsGesture() {
-        // Even a bound direction must not also fire when the drag was a fake
-        // shot: one gesture, one action.
-        val bound = SwipeAction.held(SwipeModifier.RB, NativeBridge.X)
-        assertTrue(SwipePriority.sendsSwipe(faked = false, bound))
-        assertFalse(SwipePriority.sendsSwipe(faked = true, bound))
-        assertFalse(SwipePriority.sendsSwipe(faked = false, SwipeAction.NONE))
+    fun aSwipeFiresExactlyWhenItsDirectionIsBound() {
+        // Button swipes are direct commands now: there is no second gesture
+        // competing for the drag, so a lift only asks whether it was bound.
+        assertTrue(SwipePriority.sendsSwipe(SwipeAction.held(SwipeModifier.RB, NativeBridge.X)))
+        assertTrue(SwipePriority.sendsSwipe(SwipeAction.of(NativeBridge.A)))
+        assertFalse(SwipePriority.sendsSwipe(SwipeAction.NONE))
     }
 
     // ---- the speed burst's two taps ------------------------------------------

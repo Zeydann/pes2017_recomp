@@ -60,8 +60,13 @@ class DpadAutoHide(
         if (fadingSince >= 0 || hidden) 0L else (idleMs - (now - lastTouchAt)).coerceAtLeast(0L)
 
     companion object {
-        /** Four seconds: inside the requested three-to-five second window. */
-        const val IDLE_MS = 4_000L
+        /**
+         * Three seconds: long enough that a thumb resting between commands does
+         * not lose the d-pad, short enough that it is off the pitch during open
+         * play. A touch -- or a thumb sliding into its area -- brings it back at
+         * once, so the cost of fading early is one tap.
+         */
+        const val IDLE_MS = 3_000L
 
         /** Short enough to feel like a fade, long enough not to blink. */
         const val FADE_MS = 280L

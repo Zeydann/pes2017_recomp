@@ -338,19 +338,31 @@ class Prefs(context: Context) {
 
     /**
      * The curve on the rest of the throw: below 1 reaches the edge sooner, above
-     * 1 is finer around the middle, where a walking pace lives.
+     * 1 is finer around the middle, where a walking pace lives. 1.9 opens the
+     * walking band -- the part of the throw between standing and a jog -- wide
+     * enough for a thumb to hold a pace deliberately rather than sprint by
+     * accident, now that the throw is measured across the whole socket.
      */
     var stickCurve: Float
-        get() = store.getFloat(KEY_STICK_CURVE, 1.45f)
+        get() = store.getFloat(KEY_STICK_CURVE, 1.9f)
         set(value) = store.edit().putFloat(KEY_STICK_CURVE, value.coerceIn(0.7f, 2.5f)).apply()
 
-    /** The skill stick is left unshaped by default: tricks are muscle memory. */
+    /**
+     * The skill stick's deadzone. 0.05 rather than none: a resting thumb on a
+     * small socket otherwise leaves a direction held, and every skill move is
+     * read as the tail of the last one.
+     */
     var rightStickDeadzone: Float
-        get() = store.getFloat(KEY_RIGHT_STICK_DEADZONE, 0f)
+        get() = store.getFloat(KEY_RIGHT_STICK_DEADZONE, 0.05f)
         set(value) = store.edit().putFloat(KEY_RIGHT_STICK_DEADZONE, value.coerceIn(0f, 0.20f)).apply()
 
+    /**
+     * The skill stick's curve. 0.85 reaches the edge slightly sooner than linear:
+     * skill moves are short flicks to a sector, not a pace to be modulated, and
+     * the runtime has to see the direction before the thumb leaves.
+     */
     var rightStickCurve: Float
-        get() = store.getFloat(KEY_RIGHT_STICK_CURVE, 1f)
+        get() = store.getFloat(KEY_RIGHT_STICK_CURVE, 0.85f)
         set(value) = store.edit().putFloat(KEY_RIGHT_STICK_CURVE, value.coerceIn(0.7f, 2.5f)).apply()
 
     /**
@@ -382,10 +394,26 @@ class Prefs(context: Context) {
      * known spot ask for.
      */
     var stickMode: String
-        get() = store.getString(KEY_STICK_MODE, STICK_MOVE) ?: STICK_MOVE
+        get() {
+            // Fixed is the default now: a thumb that rests on a known spot is
+            // what most players expect, and the floating socket is the choice.
+            // The setter has always been the only writer, so a stored value is
+            // a choice already made -- a phone that never touched the setting
+            // has no value here and gets the fixed socket.
+            if (!stickModeChosen) return STICK_FIXED
+            return store.getString(KEY_STICK_MODE, STICK_FIXED) ?: STICK_FIXED
+        }
         set(value) = store.edit()
             .putString(KEY_STICK_MODE, if (value == STICK_FIXED) STICK_FIXED else STICK_MOVE)
             .apply()
+
+    /**
+     * Whether the player has ever chosen a stick mode. Written the moment the
+     * setting is touched, which is what lets the default change without
+     * overwriting a manual choice made on the build that defaulted to floating.
+     */
+    val stickModeChosen: Boolean
+        get() = store.contains(KEY_STICK_MODE)
 
     /**
      * Sprint from the stick's rim: push the movement stick all the way out and

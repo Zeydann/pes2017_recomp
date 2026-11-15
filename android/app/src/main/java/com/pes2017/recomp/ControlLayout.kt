@@ -70,6 +70,18 @@ enum class ControlKind {
      * says and which controls are arranged for which half of the game.
      */
     STANCE,
+
+    /**
+     * A spare button (c1..c10) with no bit of its own until the player gives it
+     * one: its centre tap and its four swipes are bound in the editor. Ten of
+     * them ship hidden, so a pad can grow a command the title has but the
+     * default pad does not, without the editor having to invent a control.
+     *
+     * It behaves like a plain button for swipes -- the bits are sent when the
+     * finger lifts -- but because the button itself may hold nothing, a thumb
+     * resting on an unbound one sends nothing at all.
+     */
+    CUSTOM,
 }
 
 /** When a control belongs on screen. */
@@ -256,24 +268,34 @@ data class ControlElement(
 
     // The editor writes through these, so a change made while the defending
     // pad is out lands on the defending copy rather than moving both.
+    // One canonical map: a control has one place, one size, one opacity and one
+    // switch, and a defending-pad copy is kept in step with it rather than being
+    // moved on its own. Two independent copies were the source of the overlap
+    // bugs, where moving a control with the ball at the player's feet left its
+    // attacking twin under the pass button.
     fun setX(x: Float, stance: PadStance) {
-        if (stance == PadStance.DEFEND) defendX = x else xFrac = x
+        xFrac = x
+        if (defendX != null) defendX = x
     }
 
     fun setY(y: Float, stance: PadStance) {
-        if (stance == PadStance.DEFEND) defendY = y else yFrac = y
+        yFrac = y
+        if (defendY != null) defendY = y
     }
 
     fun setSize(size: Float, stance: PadStance) {
-        if (stance == PadStance.DEFEND) defendSize = size else sizeDp = size
+        sizeDp = size
+        if (defendSize != null) defendSize = size
     }
 
     fun setAlpha(value: Float, stance: PadStance) {
-        if (stance == PadStance.DEFEND) defendAlpha = value else alpha = value
+        alpha = value
+        if (defendAlpha != null) defendAlpha = value
     }
 
     fun setVisible(value: Boolean, stance: PadStance) {
-        if (stance == PadStance.DEFEND) defendVisible = value else visible = value
+        visible = value
+        if (defendVisible != null) defendVisible = value
     }
 
     /** Starts a distinct defending-pad copy at today's attacking values. */
@@ -522,7 +544,14 @@ class ControlLayout private constructor(
         private const val BACKUP_NAME = "controls.backup.json"
         private const val BROKEN_NAME = "controls.broken.json"
         private const val PROFILE_PREFIX = "controls_profile_"
-        private const val FORMAT_VERSION = 7
+
+        /**
+         * The layout file's version. 8 folds the separate defending-pad copies
+         * back onto the one canonical map (see [foldDefendOverrides]), so a
+         * layout written by an older build cannot leave two controls in the
+         * same place.
+         */
+        private const val FORMAT_VERSION = 8
 
         /** The four directions, in the order the file and the editor list them. */
         private val DIRECTIONS = arrayOf(Swipe.UP, Swipe.DOWN, Swipe.LEFT, Swipe.RIGHT)
@@ -575,7 +604,8 @@ class ControlLayout private constructor(
         fun parse(text: String, fallbackWidthDp: Float = 800f, fallbackHeightDp: Float = 360f): ControlLayout? {
             return try {
                 val root = JSONObject(text)
-                if (root.optInt("version", 1) > FORMAT_VERSION) return null
+                val version = root.optInt("version", 1)
+                if (version > FORMAT_VERSION) return null
                 val widthDp = root.optDouble("w", fallbackWidthDp.toDouble())
                     .toFloat().coerceIn(320f, 2400f)
                 val heightDp = root.optDouble("h", fallbackHeightDp.toDouble())
@@ -583,6 +613,7 @@ class ControlLayout private constructor(
                 val profile = root.optString("profile", PROFILE_MODERN)
                 val layout = defaults(widthDp, heightDp, profile)
                 applyJson(root, layout)
+                if (version < 8) foldDefendOverrides(layout)
                 sanitize(layout)
                 layout
             } catch (_: Throwable) {
@@ -693,6 +724,25 @@ class ControlLayout private constructor(
          * and the camera region are not optional, and a pad with almost nothing
          * left on it is indistinguishable from a broken file, so it starts over.
          */
+        /**
+         * The v8 migration: a layout from before the canonical map carried a
+         * second geometry for some controls, and moving one copy left the other
+         * where it was. Folding takes the defending values the player last set
+         * as the one place the control has, then drops the copies, so the two
+         * pads can never disagree again.
+         */
+        private fun foldDefendOverrides(layout: ControlLayout) {
+            for (element in layout.elements) {
+                if (!element.hasDefendOverride()) continue
+                element.defendX?.let { element.xFrac = it }
+                element.defendY?.let { element.yFrac = it }
+                element.defendSize?.let { element.sizeDp = it }
+                element.defendAlpha?.let { element.alpha = it }
+                element.defendVisible?.let { element.visible = it }
+                element.mergeStance()
+            }
+        }
+
         private fun sanitize(layout: ControlLayout) {
             for (id in listOf("stick", "look")) {
                 if (layout.find(id) == null) {
@@ -900,6 +950,23 @@ class ControlLayout private constructor(
                     // Menus have to be found at a glance in a football game.
                     place("start", ControlKind.BUTTON, NativeBridge.START, "START", centre + 60f, 37f, 54f, 0.75f),
                     place("back", ControlKind.BUTTON, NativeBridge.BACK, "SELECT", centre - 40f, 37f, 54f, 0.75f),
+
+                    // Ten spare buttons, hidden until the player binds one. Each
+                    // takes a centre tap plus four swipes (its `swipeTap` and
+                    // `swipeUp/Down/Left/Right`), so a command the title has but
+                    // the default pad does not is one edit away. Hidden means
+                    // hidden: an unbound spare on screen would be a dead circle
+                    // under the thumb.
+                    place("c1", ControlKind.CUSTOM, 0, "C1", 60f, 60f, 48f, 0.40f, visible = false),
+                    place("c2", ControlKind.CUSTOM, 0, "C2", 116f, 60f, 48f, 0.40f, visible = false),
+                    place("c3", ControlKind.CUSTOM, 0, "C3", 172f, 60f, 48f, 0.40f, visible = false),
+                    place("c4", ControlKind.CUSTOM, 0, "C4", 228f, 60f, 48f, 0.40f, visible = false),
+                    place("c5", ControlKind.CUSTOM, 0, "C5", 284f, 60f, 48f, 0.40f, visible = false),
+                    place("c6", ControlKind.CUSTOM, 0, "C6", 340f, 60f, 48f, 0.40f, visible = false),
+                    place("c7", ControlKind.CUSTOM, 0, "C7", 396f, 60f, 48f, 0.40f, visible = false),
+                    place("c8", ControlKind.CUSTOM, 0, "C8", 452f, 60f, 48f, 0.40f, visible = false),
+                    place("c9", ControlKind.CUSTOM, 0, "C9", 508f, 60f, 48f, 0.40f, visible = false),
+                    place("c10", ControlKind.CUSTOM, 0, "C10", 564f, 60f, 48f, 0.40f, visible = false),
                 ),
                 widthDp, heightDp, profile,
             )

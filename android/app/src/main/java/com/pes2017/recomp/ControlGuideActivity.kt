@@ -85,6 +85,8 @@ class ControlGuideActivity : AppCompatActivity() {
             getString(R.string.guide_defending_text) + "\n\n" + stanceSummary(layout))
         addCard(column, R.string.guide_swipes,
             getString(R.string.guide_swipes_text) + "\n\n" + swipeSummary(layout))
+        addCard(column, R.string.guide_custom_buttons,
+            getString(R.string.guide_custom_buttons_text) + "\n\n" + spareSummary(layout))
         addCard(column, R.string.guide_customization, getString(R.string.guide_customization_text))
         addCard(column, R.string.guide_security, getString(R.string.guide_security_text))
 
@@ -119,6 +121,19 @@ class ControlGuideActivity : AppCompatActivity() {
         column.addView(card, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
         ).apply { bottomMargin = dp(8) })
+    }
+
+    /**
+     * How many of the ten spares are in use. The card above explains what they
+     * are; this line says whether the player has already given one a job, which
+     * is the question a guide is asked after the pad has been edited.
+     */
+    private fun spareSummary(layout: ControlLayout): String {
+        val spares = layout.elements.filter { it.kind == ControlKind.CUSTOM }
+        fun bound(element: ControlElement) = element.swipeTap != 0 || element.swipeUp != 0 ||
+            element.swipeDown != 0 || element.swipeLeft != 0 || element.swipeRight != 0
+        val used = spares.count { bound(it) }
+        return getString(R.string.guide_custom_buttons_summary, used, spares.size)
     }
 
     /** The wheel as the player has it now: each sector and the move in it. */

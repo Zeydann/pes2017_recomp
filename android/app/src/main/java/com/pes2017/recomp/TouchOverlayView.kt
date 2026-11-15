@@ -97,14 +97,24 @@ class TouchOverlayView @JvmOverloads constructor(
     private var floatOriginX = 0f
     private var floatOriginY = 0f
 
-    // Where each finger landed: the fake shot's drag is measured from there.
+    // Where each finger landed: a stance tap is measured from there.
     private val pressAt = HashMap<Int, FloatArray>()
 
-    // The fake shot is read while the thumb is still down (PadGestures.kt), so
-    // its state is per pointer, and the pass it presses is held beside the
-    // claims until that pointer lifts.
-    private val fakeShots = HashMap<Int, FakeShotGesture>()
-    private var fakeHeld = 0
+    // The pass button's double tap: the second tap of a pair inside the window
+    // also sends L1 + pass, the one-two. A single tap is untouched, so an
+    // ordinary pass still plays as one.
+    private val passDoubleTap = DoubleTap()
+
+    // The swipe a thumb has just released, per control: its trail flies out and
+    // fades over SWIPE_TRAIL_MS, which is the feedback that says the flick was
+    // read rather than dropped.
+    private class SwipeTrail(val direction: Swipe, val startedAt: Long)
+    private val swipeTrails = HashMap<String, SwipeTrail>()
+
+    // The absolute skill stick is polled by the title, so the last sample is held
+    // for a moment after the thumb lifts: a flick that begins and ends between
+    // two polls is otherwise never seen.
+    private val skillReleaseUntil = HashMap<String, Long>()
 
     // Sprint from the rim, with separate press and release points.
     private val sprintLatch = SprintLatch()
@@ -363,10 +373,11 @@ class TouchOverlayView @JvmOverloads constructor(
             rectOf(element, box)
             return box.contains(x, y)
         }
-        // A touch a little outside still counts: glass has no edges to feel,
-        // and a button that needs to be hit exactly is a button that gets
-        // missed in a firefight.
-        val slack = 6f * density
+        // A touch a little outside still counts in play: glass has no edges to
+        // feel, and a button that needs to be hit exactly is a button that gets
+        // missed in a firefight. The editor grips harder -- a spare button hidden
+        // under a neighbour has to be selectable -- so its handles do not overlap.
+        val slack = (if (editing) 2f else 6f) * density
         return hypot(x - centreX(element), y - centreY(element)) <= radius(element) + slack
     }
 
@@ -461,6 +472,7 @@ class TouchOverlayView @JvmOverloads constructor(
                 ControlKind.SKILL -> Unit   // fires once on the press, not as state
                 ControlKind.TRICK -> Unit   // fires once on the lift, not as state
                 ControlKind.STANCE -> Unit  // just swaps labels, never a bit
+                ControlKind.CUSTOM -> Unit  // a spare: only its swipes send
                 ControlKind.LOOK -> Unit    // sent as deltas, not as a stick
             }
         }
@@ -505,9 +517,6 @@ class TouchOverlayView @JvmOverloads constructor(
             sprintLatch.reset()
         }
 
-        // The pass pressed by a fake shot is held while its shoot thumb is
-        // down (the title cancels the shot on that press), and let go with it.
-        buttons = buttons or fakeHeld
         buttons = buttons or combo.buttons
         if (combo.leftTrigger) leftTrigger = 255
         if (combo.rightTrigger) rightTrigger = 255
@@ -553,8 +562,9 @@ class TouchOverlayView @JvmOverloads constructor(
         floatPointer = -1
         pressAt.clear()
         liveSwipes.clear()
-        fakeShots.clear()
-        fakeHeld = 0
+        passDoubleTap.reset()
+        swipeTrails.clear()
+        skillReleaseUntil.clear()
         sprintLatch.reset()
         cancelCombo()
         // Toggles survive a pause -- a player who was aiming down sights
@@ -680,6 +690,10 @@ class TouchOverlayView @JvmOverloads constructor(
                     val id = event.getPointerId(index)
                     val x = event.getX(index)
                     val y = event.getY(index)
+                    // Sliding a thumb into the faded d-pad's area wakes it: the
+                    // reach and the tap are the same intent, and making the
+                    // player lift and press again is the version they notice.
+                    if (!editing && dpadIsHidden() && nearDpad(x, y)) wakeDpad()
                     if (lookPointers.containsKey(id)) {
                         // Every sample between frames matters for a smooth
                         // turn, so the batched history is used too.
@@ -713,23 +727,16 @@ class TouchOverlayView @JvmOverloads constructor(
                             swipeClassifier.move(id, x, y)
                             liveSwipes[id] = swipeClassifier.peek(id)
                         }
-                        ControlKind.BUTTON -> {
-                            // The same four directions, on the button the thumb
+                        ControlKind.BUTTON, ControlKind.CUSTOM -> {
+                            // The same four directions, on the control the thumb
                             // is already on. Only the drawing reads the peek;
                             // the bit is sent when the finger lifts.
                             swipeClassifier.move(id, x, y)
-                            liveSwipes[id] = swipeClassifier.peek(id)
-                            // And the fake shot is armed here, while the thumb
-                            // is still down: PES cancels the shot when pass
-                            // goes down during its power gauge, not when the
-                            // finger lifts.
-                            val gesture = fakeShots[id]
-                            val start = pressAt[id]
-                            if (gesture != null && start != null &&
-                                armFakeShot(gesture, element, start, x, y)
-                            ) {
-                                changed = true
-                            }
+                            val peek = swipeClassifier.peek(id)
+                            // A direction lock ticks once, so the flick is known
+                            // to have registered before the thumb even lifts.
+                            if (peek != liveSwipes[id] && peek != Swipe.NONE) triggerHaptic()
+                            liveSwipes[id] = peek
                         }
                         ControlKind.TRICK -> {
                             if (id != trickPointer) continue
@@ -836,13 +843,20 @@ class TouchOverlayView @JvmOverloads constructor(
             ControlKind.SWIPE -> swipeClassifier.begin(pointerId, x, y, SystemClock.uptimeMillis())
             ControlKind.BUTTON -> if (!element.toggle) {
                 swipeClassifier.begin(pointerId, x, y, SystemClock.uptimeMillis())
-                // The fake shot's state belongs to the thumb that started on
-                // shoot; a press anywhere else drops whatever was left there.
-                fakeShots.remove(pointerId)
-                if (element.role == ControlRole.SHOOT) {
-                    fakeShots[pointerId] = FakeShotGesture(FAKE_SHOT_TRAVEL * density)
+                // Double-tapping pass is the one-two. The single tap is still a
+                // single pass: the pair only adds L1 + pass on the second press,
+                // so a tap that misses the window is simply two passes.
+                if (element.role == ControlRole.PASS &&
+                    passDoubleTap.press(SystemClock.uptimeMillis()) &&
+                    NativeBridge.isLoaded()
+                ) {
+                    emitSwipe(SwipeAction.held(SwipeModifier.LB, element.value))
+                    triggerHaptic()
                 }
             }
+            // A spare button holds no bit of its own: its centre tap and its four
+            // swipes are all read on the lift, like any other swipe.
+            ControlKind.CUSTOM -> swipeClassifier.begin(pointerId, x, y, SystemClock.uptimeMillis())
             // One tap, one move: the runtime plays it on the skill stick and
             // holds the stick until its last frame, so nothing here has to.
             ControlKind.SKILL -> if (NativeBridge.skillStick) NativeBridge.nativeSkillPlay(element.value)
@@ -888,26 +902,18 @@ class TouchOverlayView @JvmOverloads constructor(
             }
         }
         if (released.element.kind == ControlKind.BUTTON) {
-            val gesture = fakeShots.remove(pointerId)
-            val faked = gesture?.armed == true
+            if (released.element.role == ControlRole.PASS) {
+                passDoubleTap.release(SystemClock.uptimeMillis())
+            }
             // A swipe on the button the thumb is already on: the held bit has
             // been sent all along, and a bound direction is what the lift adds.
-            // A fake shot owns the gesture, so its direction does not also fire.
-            val direction = if (!faked && released.lastClaim) {
-                swipeClassifier.end(pointerId, SystemClock.uptimeMillis())
-            } else {
-                swipeClassifier.cancel(pointerId)
-                Swipe.NONE
-            }
-            val action = released.element.swipeAction(direction)
-            if (faked) {
-                // The pass pressed at arming is let go with the shoot: nothing
-                // is sent at the lift, so the gesture is one cancelled shot and
-                // not a shot followed by a pass. A second thumb still faking
-                // keeps its own pass down.
-                if (fakeShots.values.none { it.armed }) fakeHeld = 0
-            }
-            if (SwipePriority.sendsSwipe(faked, action)) emitSwipe(action)
+            finishSwipe(pointerId, released.element, released.lastClaim)
+        }
+        if (released.element.kind == ControlKind.CUSTOM) {
+            // Nothing was held, so the tap itself is the fifth action: an unbound
+            // direction on a spare sends `swipeTap`, which is how one press of a
+            // spare button plays a command.
+            finishSwipe(pointerId, released.element, released.lastClaim)
         }
         if (released.element.kind == ControlKind.SWIPE) {
             // One gesture, one action. Another finger still on the patch keeps
@@ -919,7 +925,8 @@ class TouchOverlayView @JvmOverloads constructor(
                 Swipe.NONE
             }
             val action = released.element.swipeAction(direction)
-            if (SwipePriority.sendsSwipe(faked = false, action)) emitSwipe(action)
+            if (SwipePriority.sendsSwipe(action)) emitSwipe(action)
+            noteSwipeTrail(released.element, direction)
         }
         if (released.element.kind == ControlKind.TRICK) {
             removeCallbacks(trickOpenTask)
@@ -941,7 +948,27 @@ class TouchOverlayView @JvmOverloads constructor(
         // Another finger still on the stick keeps its deflection; the last one
         // to lift centres it.
         if (released.element.kind == ControlKind.STICK) {
-            if (released.lastClaim) stickPositions.remove(released.element.id)
+            skillReleaseUntil.remove(released.element.id)
+            if (released.lastClaim) {
+                // The absolute skill stick is read by polling, so lifting in the
+                // same frame as a flick can leave the last sample unseen: the
+                // last deflection is held for 90 ms, and a fresh press cancels
+                // it. The flick path has its own release, so it is not held.
+                if (!flicking && released.element.value != 0) {
+                    val id = released.element.id
+                    val until = SystemClock.uptimeMillis() + SKILL_RELEASE_HOLD_MS
+                    skillReleaseUntil[id] = until
+                    postDelayed({
+                        if (skillReleaseUntil[id] != until) return@postDelayed
+                        skillReleaseUntil.remove(id)
+                        stickPositions.remove(id)
+                        if (NativeBridge.isLoaded()) pushState()
+                        invalidate()
+                    }, SKILL_RELEASE_HOLD_MS)
+                } else {
+                    stickPositions.remove(released.element.id)
+                }
+            }
             // The socket goes back to where the layout put it when the last
             // floating thumb lifts.
             if (pointerId == floatPointer) floatPointer = -1
@@ -1040,9 +1067,43 @@ class TouchOverlayView @JvmOverloads constructor(
         if (dx != 0f || dy != 0f) NativeBridge.nativeLookDelta(dx, dy)
     }
 
-    /** The throw a stick is measured against: the travel the hand can see. */
-    private fun throwRadius(element: ControlElement) =
-        radius(element) * if (prefs.travelMatchesKnob) stickTravel else 1f
+    /**
+     * The throw a stick is measured against.
+     *
+     * The whole socket, not the knob's smaller travel: a thumb on the rim is
+     * full deflection, which is what lets the sprint latch's 0.92 press point
+     * sit where a hand can actually find it instead of beyond the control's own
+     * edge. The skill stick is deliberately shorter -- 55% of the socket -- a
+     * skill move being a short flick to a sector rather than a pace to hold.
+     */
+    private fun throwRadius(element: ControlElement): Float {
+        val r = radius(element)
+        return if (element.value == 0) r else r * SKILL_THROW
+    }
+
+    /**
+     * Reads the lift as one of four directions and sends what it is bound to.
+     * Shared by an action button and a spare: the button keeps its held bit, and
+     * both add the direction the thumb ended on.
+     */
+    private fun finishSwipe(pointerId: Int, element: ControlElement, lastClaim: Boolean) {
+        val direction = if (lastClaim) {
+            swipeClassifier.end(pointerId, SystemClock.uptimeMillis())
+        } else {
+            swipeClassifier.cancel(pointerId)
+            Swipe.NONE
+        }
+        val action = element.swipeAction(direction)
+        if (SwipePriority.sendsSwipe(action)) emitSwipe(action)
+        noteSwipeTrail(element, direction)
+    }
+
+    /** Remembers a released direction so its trail can fly out and fade. */
+    private fun noteSwipeTrail(element: ControlElement, direction: Swipe) {
+        if (direction == Swipe.NONE) return
+        swipeTrails[element.id] = SwipeTrail(direction, SystemClock.uptimeMillis())
+        invalidate()
+    }
 
     /** Whether this stick is the movement stick held by a floating thumb. */
     private fun isFloating(element: ControlElement): Boolean =
@@ -1066,34 +1127,6 @@ class TouchOverlayView @JvmOverloads constructor(
         stickPositions[element.id] = StickVector.of(
             stickBaseX(element), stickBaseY(element), x, y, throwRadius(element),
         )
-    }
-
-    /** The pass control a fake shot on [shoot] cancels into, or null. */
-    private fun passControl(shoot: ControlElement): ControlElement? {
-        if (shoot.sub != "SHOOT") return null
-        return layout.elements.firstOrNull {
-            it.sub == "PASS" && it.kind == ControlKind.BUTTON && it.shownIn(gamePhase, stance)
-        }
-    }
-
-    /**
-     * One move sample of a thumb on shoot. When the drag first points clearly
-     * at pass, this presses pass *while shoot is still held* -- PES 2017's own
-     * "cancel pass/shot" rule is X then A with the power gauge showing -- and
-     * the bit stays held until the shoot thumb lifts.
-     */
-    private fun armFakeShot(
-        gesture: FakeShotGesture, shoot: ControlElement, start: FloatArray, x: Float, y: Float,
-    ): Boolean {
-        val pass = passControl(shoot) ?: return false
-        val armed = gesture.moved(
-            start[0], start[1], x, y,
-            centreX(shoot), centreY(shoot), centreX(pass), centreY(pass),
-        )
-        if (!armed) return false
-        fakeHeld = fakeHeld or pass.value
-        triggerHaptic()
-        return true
     }
 
     /**
@@ -1222,25 +1255,35 @@ class TouchOverlayView @JvmOverloads constructor(
         if (width == 0 || height == 0 || element.kind == ControlKind.LOOK) return
         val gap = 14f * density
         val margin = 8f * density
+        fun px(e: ControlElement, st: PadStance) = e.xFracOn(st) * width
+        fun py(e: ControlElement, st: PadStance) = e.yFracOn(st) * height
+        fun pr(e: ControlElement, st: PadStance) = e.sizeOn(st) * density * 0.5f
         repeat(24) {
             var moved = false
-            for (other in layout.elements) {
-                if (other === element || !other.visibleIn(stance) || other.kind == ControlKind.LOOK) continue
-                val dx = centreX(element) - centreX(other)
-                val dy = centreY(element) - centreY(other)
-                val distance = hypot(dx, dy)
-                val needed = radius(element) + radius(other) + gap
-                if (distance >= needed) continue
-                // Exactly on top: push towards the screen's middle, which has room.
-                val ux = if (distance > 0.5f) dx / distance else if (centreX(element) > width / 2f) -1f else 1f
-                val uy = if (distance > 0.5f) dy / distance else 0f
-                val push = needed - distance
-                val r = radius(element) + margin
-                val x = (centreX(element) + ux * push).coerceIn(r, max(r, width - r))
-                val y = (centreY(element) + uy * push).coerceIn(r, max(r, height - r))
-                element.setX(x / width, stance)
-                element.setY(y / height, stance)
-                moved = true
+            // Both pads at once. Coordinates are one map now, so a control made
+            // clear on the attacking pad must not be left touching on the
+            // defending one -- which is exactly the overlap the old second copy
+            // could produce.
+            for (st in PadStance.values()) {
+                if (!element.visibleIn(st)) continue
+                for (other in layout.elements) {
+                    if (other === element || !other.visibleIn(st) || other.kind == ControlKind.LOOK) continue
+                    val dx = px(element, st) - px(other, st)
+                    val dy = py(element, st) - py(other, st)
+                    val distance = hypot(dx, dy)
+                    val needed = pr(element, st) + pr(other, st) + gap
+                    if (distance >= needed) continue
+                    // Exactly on top: push towards the screen's middle, which has room.
+                    val ux = if (distance > 0.5f) dx / distance else if (px(element, st) > width / 2f) -1f else 1f
+                    val uy = if (distance > 0.5f) dy / distance else 0f
+                    val push = needed - distance
+                    val reach = pr(element, st) + margin
+                    val x = (px(element, st) + ux * push).coerceIn(reach, max(reach, width - reach))
+                    val y = (py(element, st) + uy * push).coerceIn(reach, max(reach, height - reach))
+                    element.setX(x / width, stance)
+                    element.setY(y / height, stance)
+                    moved = true
+                }
             }
             if (!moved) {
                 invalidate()
@@ -1358,7 +1401,7 @@ class TouchOverlayView @JvmOverloads constructor(
                 ControlKind.STICK -> drawStick(canvas, element, alpha, faded)
                 ControlKind.DPAD -> drawDpad(canvas, element, alpha * dpadFade, faded)
                 ControlKind.SWIPE -> drawSwipe(canvas, element, alpha, faded)
-                ControlKind.BUTTON, ControlKind.TRIGGER, ControlKind.SKILL ->
+                ControlKind.BUTTON, ControlKind.TRIGGER, ControlKind.SKILL, ControlKind.CUSTOM ->
                     drawButton(canvas, element, alpha, faded)
                 ControlKind.STANCE -> drawStance(canvas, element, alpha, faded)
                 ControlKind.TRICK -> {
@@ -1371,7 +1414,11 @@ class TouchOverlayView @JvmOverloads constructor(
                 }
             }
             if (editing && element === selected) drawSelection(canvas, element)
+            // The released swipe's trail is drawn over its control, whatever the
+            // phase: it is feedback for a gesture that has already been sent.
+            drawSwipeTrail(canvas, element)
         }
+        if (swipeTrails.isNotEmpty()) postInvalidateOnAnimation()
         if (animateEffects(SystemClock.uptimeMillis())) postInvalidateOnAnimation()
         noteDrawCost(System.nanoTime() - drawStart)
     }
@@ -1438,8 +1485,18 @@ class TouchOverlayView @JvmOverloads constructor(
         /** How much of the screen's width, from the left, the floating stick owns. */
         private const val FLOAT_ZONE = 0.5f
 
-        /** How far a drag has to go to count as a fake shot, in dp. */
-        private const val FAKE_SHOT_TRAVEL = 24f
+        /**
+         * The skill stick's throw, as a share of its socket. Short enough that a
+         * flick reaches the rim, long enough that the eight sectors are not all
+         * under the first millimetre of travel.
+         */
+        private const val SKILL_THROW = 0.55f
+
+        /** How long the last skill-stick sample is held after the thumb lifts. */
+        private const val SKILL_RELEASE_HOLD_MS = 90L
+
+        /** How long a released swipe's trail takes to fly out and fade. */
+        private const val SWIPE_TRAIL_MS = 200L
 
         // The stance chip: green on the attacking pad, steel blue on the
         // defending one, so which half the thumb is in is legible at a glance.
@@ -1644,7 +1701,12 @@ class TouchOverlayView @JvmOverloads constructor(
                 drawPsSymbol(canvas, id, cx, symY + 1.2f * density, size, shadow)
                 drawPsSymbol(canvas, id, cx, symY, size, ink)
             } else {
-                text.textSize = glyphR * (if (actionSubtitle.isNotEmpty()) 0.78f else 0.95f)
+                // Auto-fitted: a renamed button's letter runs out of the circle
+                // otherwise, and the glyph is what the thumb aims at.
+                text.textSize = fitText(
+                    text, label, glyphR * 1.55f,
+                    glyphR * (if (actionSubtitle.isNotEmpty()) 0.78f else 0.95f),
+                )
                 val baseLetterY = if (actionSubtitle.isNotEmpty()) cy - glyphR * 0.10f else cy
                 val letterY = baseLetterY - (text.descent() + text.ascent()) * 0.5f
                 text.color = shadow
@@ -1654,7 +1716,9 @@ class TouchOverlayView @JvmOverloads constructor(
             }
 
             if (actionSubtitle.isNotEmpty()) {
-                subText.textSize = max(8f, glyphR * 0.28f)
+                subText.textSize = fitText(
+                    subText, actionSubtitle, coreR * 1.5f, max(8f, glyphR * 0.28f),
+                )
                 val subY = cy + glyphR * 0.58f
                 subText.color = Color.argb((alpha * fadeFactor * 140).toInt().coerceIn(0, 255), 0, 0, 0)
                 canvas.drawText(actionSubtitle, cx, subY + 1f * density, subText)
@@ -1706,7 +1770,7 @@ class TouchOverlayView @JvmOverloads constructor(
             val labelY = if (bumperCaption.isEmpty()) cy - (text.descent() + text.ascent()) * 0.5f else cy - r * 0.06f
             canvas.drawText(label, cx, labelY, text)
             if (bumperCaption.isNotEmpty()) {
-                subText.textSize = r * 0.27f
+                subText.textSize = fitText(subText, bumperCaption, r * 1.15f, r * 0.27f)
                 subText.color = Color.argb((alpha * fadeFactor * 220).toInt().coerceIn(0, 255), 226, 232, 240)
                 canvas.drawText(bumperCaption, cx, cy + r * 0.44f, subText)
             }
@@ -1741,7 +1805,7 @@ class TouchOverlayView @JvmOverloads constructor(
             stroke.strokeWidth = max(1.5f, r * 0.045f)
             canvas.drawCircle(cx, cy, r - stroke.strokeWidth * 0.5f, stroke)
 
-            text.textSize = r * (if (label.length > 5) 0.26f else 0.32f)
+            text.textSize = fitText(text, label, r * 1.6f, r * (if (label.length > 5) 0.26f else 0.32f))
             text.color = Color.WHITE
             canvas.drawText(label, cx, cy - (text.descent() + text.ascent()) * (if (caption(element).isEmpty()) 0.5f else 1.1f), text)
             if (caption(element).isNotEmpty()) {
@@ -1757,7 +1821,9 @@ class TouchOverlayView @JvmOverloads constructor(
             stroke.strokeWidth = max(1.5f, r * 0.055f)
             canvas.drawCircle(cx, cy, r - stroke.strokeWidth * 0.5f, stroke)
             text.color = shade(alpha, pressed, faded)
-            text.textSize = r * (if (element.label.length > 2) 0.52f else 0.8f)
+            text.textSize = fitText(
+                text, element.label, r * 1.6f, r * (if (element.label.length > 2) 0.52f else 0.8f),
+            )
             canvas.drawText(element.label, cx, cy - (text.descent() + text.ascent()) * 0.5f, text)
         }
         if (scaled) canvas.restore()
@@ -1803,6 +1869,9 @@ class TouchOverlayView @JvmOverloads constructor(
             val dy = when (direction) { Swipe.UP -> -1f; Swipe.DOWN -> 1f; else -> 0f }
             val level = when { lit -> 255; bound -> 205; else -> 60 }
             notchPaint.color = Color.argb((alpha * level).toInt().coerceIn(0, 255), 255, 255, 255)
+            // The live direction is both brighter and heavier, so the feedback
+            // is legible under a thumb that is covering the middle of the button.
+            notchPaint.strokeWidth = if (lit) max(2.5f, r * 0.09f) else max(1.5f, r * 0.05f)
             val tipX = cx + dx * inset
             val tipY = cy + dy * inset
             val backX = tipX - dx * arm
@@ -2018,6 +2087,76 @@ class TouchOverlayView @JvmOverloads constructor(
             canvas.drawLine(tipX, tipY, backX + barbX, backY + barbY, notchPaint)
             canvas.drawLine(tipX, tipY, backX - barbX, backY - barbY, notchPaint)
         }
+    }
+
+    /**
+     * A released swipe, drawn as a tapered trail with an arrowhead that flies
+     * out of the control and fades: white over the accent colour, the pad's own
+     * way of saying "that flick was read". Nothing is held while it plays, so
+     * the next touch is never blocked by an animation.
+     */
+    private fun drawSwipeTrail(canvas: Canvas, element: ControlElement) {
+        val trail = swipeTrails[element.id] ?: return
+        if (trail.direction == Swipe.NONE) {
+            swipeTrails.remove(element.id)
+            return
+        }
+        val now = SystemClock.uptimeMillis()
+        val progress = ((now - trail.startedAt).toFloat() / SWIPE_TRAIL_MS).coerceIn(0f, 1f)
+        if (progress >= 1f) {
+            swipeTrails.remove(element.id)
+            return
+        }
+        val r = radius(element)
+        val cx = centreX(element)
+        val cy = centreY(element)
+        val dx = when (trail.direction) { Swipe.LEFT -> -1f; Swipe.RIGHT -> 1f; else -> 0f }
+        val dy = when (trail.direction) { Swipe.UP -> -1f; Swipe.DOWN -> 1f; else -> 0f }
+        // The head leaves the rim as it fades; the tail stays near the control so
+        // the trail always reads as coming from the thing that was flicked.
+        val head = r * (0.95f + 0.55f * progress)
+        val tail = r * 0.55f
+        val fade = 1f - progress
+        val tipX = cx + dx * head
+        val tipY = cy + dy * head
+        val backX = cx + dx * tail
+        val backY = cy + dy * tail
+
+        // 1. The accent underlay, wide and soft, tapering away with the fade.
+        notchPaint.color = Color.argb(
+            (200 * fade * 0.45f).toInt().coerceIn(0, 255), 34, 197, 94,
+        )
+        notchPaint.strokeWidth = max(2f, r * 0.22f * fade)
+        canvas.drawLine(backX, backY, tipX, tipY, notchPaint)
+
+        // 2. The white core over it, narrower: the trail reads on bright turf.
+        notchPaint.color = Color.argb((235 * fade).toInt().coerceIn(0, 255), 255, 255, 255)
+        notchPaint.strokeWidth = max(1.5f, r * 0.085f * fade)
+        canvas.drawLine(backX, backY, tipX, tipY, notchPaint)
+
+        // 3. The arrowhead, at the moving tip.
+        val arm = max(4f, r * 0.20f) * (0.6f + 0.4f * fade)
+        val barbX = -dy * arm * 0.75f
+        val barbY = dx * arm * 0.75f
+        notchPaint.strokeWidth = max(1.5f, r * 0.075f * fade)
+        canvas.drawLine(tipX, tipY, tipX - dx * arm + barbX, tipY - dy * arm + barbY, notchPaint)
+        canvas.drawLine(tipX, tipY, tipX - dx * arm - barbX, tipY - dy * arm - barbY, notchPaint)
+    }
+
+    /**
+     * Shrinks [paint]'s size until [value] fits [maxWidth], never below
+     * [minimum]. Glyphs and captions are drawn inside fixed circles, so a long
+     * rename used to run out past the rim; this keeps the drawing inside the
+     * control it belongs to.
+     */
+    private fun fitText(
+        paint: Paint, value: String, maxWidth: Float, desired: Float, minimum: Float = 6f,
+    ): Float {
+        paint.textSize = desired
+        if (value.isEmpty() || maxWidth <= 0f) return desired
+        val measured = paint.measureText(value)
+        if (measured <= maxWidth) return desired
+        return (desired * (maxWidth / measured)).coerceAtLeast(minimum)
     }
 
     private fun drawLook(canvas: Canvas, element: ControlElement, faded: Boolean) {

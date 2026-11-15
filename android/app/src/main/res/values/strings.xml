@@ -444,7 +444,7 @@
     <string name="controls_guide">Controls guide</string>
     <string name="guide_intro">Everything the pad can do, read from the controls you are using now.</string>
     <string name="guide_essentials">Essentials</string>
-    <string name="guide_essentials_text">Left thumb: move. The stick floats to where you land on the left half, or stays in its socket if you prefer it fixed. Push it to the rim to sprint, and it stays running until you pull back inside the release point. Right thumb: the action diamond. The d-pad above the stick is for tactics; it fades after four quiet seconds and comes back when you tap where it sits.</string>
+    <string name="guide_essentials_text">Left thumb: move. The stick floats to where you land on the left half, or stays in its socket if you prefer it fixed. Push it to the rim to sprint, and it stays running until you pull back inside the release point. Right thumb: the action diamond. The d-pad above the stick is for tactics; it fades after three quiet seconds and comes back when you tap, or slide a thumb, where it sits.</string>
     <string name="guide_dribbling">Dribbling</string>
     <string name="guide_dribbling_text">Roll a thumb between pass, cross, shoot and through ball without lifting: the direction you leave in is read as a swipe. Hold RB and centre the stick to dummy. Tap RB twice for the burst.</string>
     <string name="guide_wheel">Skill wheel</string>
@@ -454,6 +454,9 @@
     <string name="guide_swipes">Swipes</string>
     <string name="guide_swipes_text">Each action button can send a different command in each of its four directions. The arrows on the rim show what is bound; the editor lists every direction and warns when a track is blocked.</string>
     <string name="guide_customization">Customization</string>
+    <string name="guide_custom_buttons">Spare buttons (C1–C10)</string>
+    <string name="guide_custom_buttons_text">Ten spare buttons ship hidden: faded circles along the top of the editor, off the pad until you give one a job. Select one and bind its centre tap and its four swipes, and it joins the pad. L1 and R1 stay modifiers — L1 + pass, R1 + shoot — rather than swipe targets, and double-tapping pass plays the one-two.</string>
+    <string name="guide_custom_buttons_summary">%1$d of %2$d spares are bound.</string>
     <string name="guide_customization_text">Pause and choose Edit controls, or Settings, Controls, Arrange. Move, resize, fade, hide, rebind, rename or remove any control, give one a different place on the defending pad, undo a mistake, or save the whole pad as a profile. Restore default controls is always one tap away.</string>
     <string name="guide_security">Input safety</string>
     <string name="guide_security_text">A touch belongs to the control it lands on until that finger lifts. Movement never becomes a shot, a swipe belongs to the button it started on, and the stance chip holds nothing down.</string>

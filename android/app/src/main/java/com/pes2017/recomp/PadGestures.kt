@@ -4,9 +4,10 @@ import kotlin.math.hypot
 
 /**
  * The gestures the pad has to remember between touch samples: the sprint
- * latch, the fake shot, and what a bound swipe does when it is more than one
- * bit. All of it is arithmetic on numbers the overlay already has, so it lives
- * here rather than in it, and a test can check every edge without a phone.
+ * latch, the pass double tap, and what a bound swipe does when it is more than
+ * one bit. All of it is arithmetic on numbers the overlay already has, so it
+ * lives here rather than in it, and a test can check every edge without a
+ * phone.
  */
 
 /**
@@ -155,13 +156,57 @@ class ComboHold {
     }
 }
 
-/** Which of the two things a lifted gesture should do when both apply. */
+/**
+ * Whether a lifted gesture still has something to send.
+ *
+ * Button swipes are direct directional commands now: there is no second
+ * gesture competing for the same drag, so the only question is whether the
+ * direction the thumb ended on was bound at all.
+ */
 object SwipePriority {
+    fun sendsSwipe(action: SwipeAction): Boolean = action.bound
+}
+
+/**
+ * Two taps of the same button, close enough together to be the title's own
+ * double tap.
+ *
+ * The single tap is never disturbed: the first press sends its bit as always,
+ * and the second press is a press of its own. What the pair adds is the
+ * compound sequence -- for pass that is L1 + pass, the one-two -- so a slower
+ * second tap simply plays as two ordinary passes instead of nothing at all.
+ *
+ * One instance per control, because a pair belongs to the button, not to the
+ * finger: lifting one thumb and landing another on pass inside the window is
+ * still two taps of pass.
+ */
+class DoubleTap(private val windowMs: Long = WINDOW_MS) {
+    private var lastUpAt = Long.MIN_VALUE
+
     /**
-     * A fake shot owns the gesture it is part of: its swipe direction must not
-     * also fire, or one drag would cancel a shot and send another command.
+     * One press at [nowMs]. Returns true when this press completes a pair, in
+     * which case the caller also sends the compound sequence. A completed pair
+     * is consumed, so three taps are a pair and a single rather than two pairs.
      */
-    fun sendsSwipe(faked: Boolean, action: SwipeAction): Boolean = !faked && action.bound
+    fun press(nowMs: Long): Boolean {
+        val paired = lastUpAt != Long.MIN_VALUE && nowMs - lastUpAt in 0..windowMs
+        if (paired) lastUpAt = Long.MIN_VALUE
+        return paired
+    }
+
+    /** One lift: the start of the window the next press is measured against. */
+    fun release(nowMs: Long) {
+        lastUpAt = nowMs
+    }
+
+    fun reset() {
+        lastUpAt = Long.MIN_VALUE
+    }
+
+    companion object {
+        /** A fifth of a second: the gap a thumb makes when it means to tap twice. */
+        const val WINDOW_MS = 220L
+    }
 }
 
 /**
@@ -196,64 +241,6 @@ class SprintLatch(
 
     fun reset() {
         active = false
-    }
-}
-
-/**
- * The fake shot, as PES 2017 actually performs it.
- *
- * The title's own manual lists "cancel pass / shot" as B, X or Y followed by A:
- * while the shot's power gauge is showing, pressing pass cancels the shot and
- * the player feints. It is not a shot and then a pass -- that would be a real
- * shot followed by a real pass, which is exactly what the gesture must avoid.
- *
- * So the gesture is read while the thumb is still down: the press starts on
- * shoot, a drag towards pass arms it, and the caller presses pass at that
- * moment, *before* the lift, while shoot is still held. The lift then releases
- * both together and sends nothing extra.
- *
- * The drag has to end up within about 45 degrees of the line from shoot to pass
- * and to have travelled [minTravelPx]: a thumb that wandered sideways is not a
- * fake shot, and a tap never arms one.
- *
- * One instance per pointer, because two thumbs can hold two buttons.
- */
-class FakeShotGesture(
-    /** How far the thumb has to travel before the gesture arms, in pixels. */
-    private val minTravelPx: Float,
-    /** How close to the shoot -> pass line the drag has to be (cosine). */
-    private val cosine: Float = 0.70f,
-) {
-    /** Whether this gesture has already pressed pass. */
-    var armed = false
-        private set
-
-    /**
-     * One move sample. Returns true on the sample that arms the gesture, which
-     * is when the caller must press pass; every later sample returns false, so
-     * one drag presses pass once.
-     */
-    fun moved(
-        startX: Float, startY: Float, x: Float, y: Float,
-        shootX: Float, shootY: Float, passX: Float, passY: Float,
-    ): Boolean {
-        if (armed) return false
-        val towardX = passX - shootX
-        val towardY = passY - shootY
-        val toward = hypot(towardX, towardY)
-        if (toward < 1f) return false
-        val dx = x - startX
-        val dy = y - startY
-        val travel = hypot(dx, dy)
-        if (travel < minTravelPx) return false
-        val alignment = (dx * towardX + dy * towardY) / (travel * toward)
-        if (alignment < cosine) return false
-        armed = true
-        return true
-    }
-
-    fun reset() {
-        armed = false
     }
 }
 

@@ -1,7 +1,7 @@
 # Touch controls: what every control sends
 
 This is the reference for the on-screen pad: the pad bits each control presses,
-the gestures (fake shot, sprint, joystick modes), the compound swipe bindings,
+the gestures (the pass double tap, sprint, joystick modes), the compound swipe bindings,
 and the complete default mapping of the sixteen action-button swipe slots.
 
 The app never sends a *game action*. It sends the same Xbox 360 pad the title
@@ -85,10 +85,10 @@ own base + modifier scheme:
 
 Caveats:
 
-- **Fake shot priority.** The Shoot→Pass drag is the fake shot. It arms during
-  the drag and suppresses that gesture's swipe (`SwipePriority`), so the Shoot
-  Right binding (RB + X) never fires over a drag towards Pass. A drag that is
-  not towards Pass still fires it.
+- **Button swipes are direct.** A flick on an action button sends the direction
+  the thumb ended on and nothing else. The fake shot's drag used to compete for
+  the same gesture; it is gone, so `SwipePriority` only asks whether the
+  direction was bound, and a bound direction always fires.
 - A slide holds the button normally for the whole travel and releases it on the
   lift, so a plain tap is unchanged. A **bound** direction adds the sequence
   above; an unbound one adds nothing.
@@ -100,32 +100,36 @@ Caveats:
 - The dedicated SWIPE patch uses the same bindings and is independent of the
   action buttons.
 
-## The fake shot
+## Double-tapping pass (the one-two)
 
-PES 2017 cancels a shot when pass goes down while its power gauge is showing
-(manual: cancel pass/shot = **B / X / Y then A**), and the shot fires on the
-release of shoot. So the gesture must press pass *before* the lift:
+PES 2017's one-two is **L1 + pass**. On the pad, two taps of Pass inside 220 ms
+(`DoubleTap`) send that combination as a short held sequence: L1 down, L1 + pass,
+then everything cleared.
 
-1. Thumb down on Shoot; shoot is held and the gauge runs.
-2. While still down, a drag within ~45° of the Shoot→Pass line and at least
-   24 dp arms the gesture: the pass bit is pressed and held, with shoot still
-   down.
-3. The lift releases both. Nothing else is sent -- no trailing pass pulse, and
-   the Shoot swipe is suppressed for that gesture.
-4. Taps, short drags, drags away from Pass and drags across the button never
-   arm. Multitouch is per pointer; two fake shots keep their own pass bits.
-
-Implemented and unit-tested; the cancel itself is not device-verified.
+The single tap is untouched. The first press already sent its pass bit, and the
+second press is a press of its own, so a tap that misses the window degrades
+into two ordinary passes rather than nothing at all. A completed pair is
+consumed, so three taps are a pair and a single rather than two pairs.
 
 ## The movement stick
 
 Both modes share `StickVector` (`TouchMath.kt`): thumb offset from the socket
 divided by the visible throw, clamped to the rim, screen-Y flipped for the guest.
 
-- **Move** (default): socket placed where the thumb lands on the left half and
-  **stays fixed**; the knob moves inside it. Lifting returns it to its layout
-  position. A second thumb shares the base.
-- **Fixed**: socket is the layout socket; knob inside it; centres on release.
+- **Fixed** (default): the socket is the layout socket, so the stick is where
+  the player learned it. The knob moves inside it; the last push is centred on
+  release.
+- **Move**: socket placed where the thumb lands on the left half and **stays
+  fixed** while that thumb is down; lifting returns it to its layout position. A
+  second thumb shares the base.
+
+The throw is measured across the **whole socket**, not the knob's smaller
+travel: a thumb on the rim is full deflection, which is what puts the 0.92
+sprint latch where a hand can find it. The skill stick is the exception -- its
+throw is 55 % of its socket, with a 0.05 deadzone and a 0.85 curve -- because a
+skill move is a short flick to a sector rather than a pace to hold. The absolute
+skill stick's last sample is held for 90 ms after the lift so the title's poll
+can see a flick that began and ended between two frames.
 
 ## Sprint from the rim
 
@@ -334,8 +338,8 @@ Two rules keep it honest:
 3. **Swipes are local.** A swipe starts only on a `BUTTON` or the `SWIPE`
    patch, and is read only on that finger's lift. A finger that landed on the
    stick can never produce a swipe.
-4. **The fake shot is local.** Only a button whose **role** is `SHOOT` arms it.
-   Roles survive renaming, so a cosmetic label cannot move the gesture.
+4. **The pass double tap is local.** Only a button whose **role** is `PASS` is
+   read for it. Roles survive renaming, so a cosmetic label cannot move it.
 5. **The stance chip holds nothing** and does not release another thumb's
    button; controls that leave the pad simply stop being sent.
 6. **Nothing survives a cancel.** Pause, hide, focus loss and `ACTION_CANCEL`
@@ -423,10 +427,10 @@ unchanged; this only changes when the control is drawn and hit-testable.
 
 ## Verification
 
-- `PadGesturesTest`: sprint latch and fake-shot arming, every compound sequence
-  (modifier lead, trigger axis, double tap, ending clear, mid-sequence clear,
-  fake-shot priority), the wheel's hold and sector arithmetic, and the sprint
-  tap cadence behind the 2x RB speed burst.
+- `PadGesturesTest`: the sprint latch, the pass double tap's window and its
+  consumed pair, every compound sequence (modifier lead, trigger axis, double
+  tap, ending clear, mid-sequence clear), the wheel's hold and sector
+  arithmetic, and the sprint tap cadence behind the 2x RB speed burst.
 - `SkillWheelTest`: the eight moves in the table, the exit hints, every default
   sector bound and unique, the default wheel's sector order, and that a bad
   index is not stored.

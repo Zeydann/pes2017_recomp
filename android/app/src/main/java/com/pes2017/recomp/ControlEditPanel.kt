@@ -53,22 +53,41 @@ class ControlEditPanel(
     }
     private val resetOne: Button = view.findViewById(R.id.edit_reset_one)
 
-    /** Reset this / Reset all / Done: top right, on screen for the whole edit. */
+    /**
+     * The editor's own strip: two rows, not one.
+     *
+     * A single row grew wider than the screen as the editor gained buttons, and
+     * the first thing pushed off the end was "Arrangement" -- the one control
+     * whose absence cannot be explained to a player. The upper row holds what
+     * acts on the selected control; the lower row holds reset and done, which
+     * never change width.
+     */
     private val actions: LinearLayout = LinearLayout(activity).apply {
-        orientation = LinearLayout.HORIZONTAL
+        orientation = LinearLayout.VERTICAL
         val dp = activity.resources.displayMetrics.density
         setPadding((4 * dp).roundToInt(), (4 * dp).roundToInt(), (4 * dp).roundToInt(), (4 * dp).roundToInt())
+        val tools = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }
+        val finishes = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }
+        addView(tools, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+        ))
+        addView(finishes, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+        ).apply { topMargin = (4 * dp).roundToInt() })
         for (id in intArrayOf(R.id.edit_reset_one, R.id.edit_reset_all, R.id.edit_done)) {
             val button = view.findViewById<Button>(id)
             (button.parent as ViewGroup).removeView(button)
             button.textSize = 12f
             button.minWidth = 0
             button.minimumWidth = 0
-            addView(button, LinearLayout.LayoutParams(
+            finishes.addView(button, LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
             ).apply { marginStart = (6 * dp).roundToInt() })
         }
     }
+
+    /** The upper row of [actions]: the buttons that act on the selection. */
+    private fun toolRow(): LinearLayout = actions.getChildAt(0) as LinearLayout
     /** Shown while a swipe control or an action button is selected: what each direction sends. */
     private val swipes: Button = Button(activity).apply {
         setText(R.string.swipe_bindings)
@@ -102,15 +121,23 @@ class ControlEditPanel(
     private var attached = false
     private var atTop = false
 
+    /**
+     * Set while [show] writes the switches from the selected control. Without
+     * it, setting `isChecked` fires the change listener, which reads a
+     * half-updated control back into the layout -- so selecting a hidden
+     * control could silently re-show (or re-hide) its neighbour.
+     */
+    private var updating = false
+
     init {
         val dp = activity.resources.displayMetrics.density
-        actions.addView(arrangement, LinearLayout.LayoutParams(
+        toolRow().addView(arrangement, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
         ).apply { marginStart = (6 * dp).roundToInt() })
-        actions.addView(swipes, LinearLayout.LayoutParams(
+        toolRow().addView(swipes, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
         ).apply { marginStart = (6 * dp).roundToInt() })
-        actions.addView(wheel, LinearLayout.LayoutParams(
+        toolRow().addView(wheel, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
         ).apply { marginStart = (6 * dp).roundToInt() })
         val more = Button(activity).apply {
@@ -120,7 +147,7 @@ class ControlEditPanel(
             minimumWidth = 0
             setOnClickListener { showMore() }
         }
-        actions.addView(more, LinearLayout.LayoutParams(
+        toolRow().addView(more, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
         ).apply { marginStart = (6 * dp).roundToInt() })
         size.max = 100
@@ -163,6 +190,7 @@ class ControlEditPanel(
             override fun onStopTrackingTouch(bar: SeekBar) = save()
         })
         visible.setOnCheckedChangeListener { _, checked ->
+            if (updating) return@setOnCheckedChangeListener
             val element = current ?: return@setOnCheckedChangeListener
             if (element.visibleIn(overlay.stance) == checked) return@setOnCheckedChangeListener
             remember()
@@ -173,6 +201,7 @@ class ControlEditPanel(
         }
         overlay.onEditStarted = { remember() }
         toggle.setOnCheckedChangeListener { _, checked ->
+            if (updating) return@setOnCheckedChangeListener
             val element = current ?: return@setOnCheckedChangeListener
             element.toggle = checked
             save()
@@ -266,8 +295,12 @@ class ControlEditPanel(
     private fun pickSwipeAction(element: ControlElement, direction: Int) {
         val primary = intArrayOf(NativeBridge.A, NativeBridge.B, NativeBridge.X, NativeBridge.Y)
         val options = mutableListOf(SwipeAction.NONE)
+        // L1/R1 are deliberately absent as plain targets: they are the pad's
+        // modifiers (LB + pass, RB + shoot), and a swipe bound to one only ever
+        // pressed the shoulder on its own. As a modifier they are still one tap
+        // away in the list below.
         for (bit in intArrayOf(NativeBridge.A, NativeBridge.B, NativeBridge.X, NativeBridge.Y,
-            NativeBridge.LB, NativeBridge.RB, NativeBridge.START, NativeBridge.BACK,
+            NativeBridge.START, NativeBridge.BACK,
             NativeBridge.L3, NativeBridge.R3, NativeBridge.UP, NativeBridge.DOWN,
             NativeBridge.LEFT, NativeBridge.RIGHT)
         ) options.add(SwipeAction.of(bit))
@@ -758,7 +791,9 @@ class ControlEditPanel(
         }
         title.text = activity.getString(R.string.edit_selected, ControlLayout.labelFor(element, overlay.playStation))
         swipes.visibility =
-            if (element.kind == ControlKind.SWIPE || element.kind == ControlKind.BUTTON) {
+            if (element.kind == ControlKind.SWIPE || element.kind == ControlKind.BUTTON ||
+                element.kind == ControlKind.CUSTOM
+            ) {
                 View.VISIBLE
             } else {
                 View.GONE
@@ -774,8 +809,10 @@ class ControlEditPanel(
         size.progress = (((elementSize - smallest) / (largest - smallest)) * 100f)
             .roundToInt().coerceIn(0, 100)
         opacity.progress = (element.alphaOn(overlay.stance) * 100f).roundToInt().coerceIn(0, 100)
+        updating = true
         visible.isChecked = element.visibleIn(overlay.stance)
         toggle.isChecked = element.toggle
+        updating = false
         showClearance(element)
     }
 }
