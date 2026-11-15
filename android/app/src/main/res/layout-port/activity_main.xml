@@ -90,6 +90,11 @@
                     android:text="@string/entry_install" />
 
                 <Button
+                    android:id="@+id/controls_guide"
+                    style="@style/MenuEntry"
+                    android:text="@string/controls_guide" />
+
+                <Button
                     android:id="@+id/settings"
                     style="@style/MenuEntry"
                     android:text="@string/entry_settings" />
