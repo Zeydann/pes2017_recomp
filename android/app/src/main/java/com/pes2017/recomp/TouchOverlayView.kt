@@ -13,6 +13,7 @@ import android.util.AttributeSet
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
+import android.widget.Toast
 import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.max
@@ -219,9 +220,30 @@ class TouchOverlayView @JvmOverloads constructor(
         set(value) {
             if (field == value) return
             field = value
-            releaseEverything()
             invalidate()
         }
+
+    private var stanceToast: Toast? = null
+
+    /**
+     * Flips the pad and remembers it. Deliberately does not call
+     * `releaseEverything`: another finger may be holding a button, and a flip
+     * only changes what the labels say, never which bit that finger holds. A
+     * control arranged for the other stance simply stops being sent, because
+     * `pushState` skips what is not on screen, and its claim goes when the
+     * finger lifts.
+     */
+    fun setStance(value: PadStance) {
+        if (stance == value) return
+        stance = value
+        prefs.defendingPad = value == PadStance.DEFEND
+        stanceToast?.cancel()
+        stanceToast = Toast.makeText(
+            context,
+            if (value == PadStance.DEFEND) R.string.stance_toast_defend else R.string.stance_toast_attack,
+            Toast.LENGTH_SHORT,
+        ).also { it.show() }
+    }
 
     // ---- editing -----------------------------------------------------------
     private var dragPointer = -1
@@ -376,6 +398,7 @@ class TouchOverlayView @JvmOverloads constructor(
                 ControlKind.SWIPE -> Unit   // sent when the finger lifts, as a pulse
                 ControlKind.SKILL -> Unit   // fires once on the press, not as state
                 ControlKind.TRICK -> Unit   // fires once on the lift, not as state
+                ControlKind.STANCE -> Unit  // just swaps labels, never a bit
                 ControlKind.LOOK -> Unit    // sent as deltas, not as a stick
             }
         }
@@ -616,7 +639,7 @@ class TouchOverlayView @JvmOverloads constructor(
 
             MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> {
                 val index = event.actionIndex
-                changed = release(event.getPointerId(index))
+                changed = release(event.getPointerId(index), event.getX(index), event.getY(index))
             }
 
             MotionEvent.ACTION_CANCEL -> {
@@ -714,16 +737,26 @@ class TouchOverlayView @JvmOverloads constructor(
         return true
     }
 
-    private fun release(pointerId: Int): Boolean {
+    private fun release(pointerId: Int, x: Float, y: Float): Boolean {
         if (lookPointers.remove(pointerId) != null) {
             // A turn ends when the last finger on the look area lifts.
             if (lookPointers.isEmpty()) NativeBridge.nativeLookEnd()
             return false
         }
         val released = claims.release(pointerId) ?: return false
+        val pressedAt = pressAt.remove(pointerId)
         dpadBits.remove(pointerId)
-        pressAt.remove(pointerId)
         liveSwipes.remove(pointerId)
+        // The stance chip: one tap, one flip. A thumb that slid off it said
+        // something else and is not counted.
+        if (released.element.kind == ControlKind.STANCE) {
+            val start = pressedAt
+            val tapSlop = 18f * density
+            if (start == null || hypot(x - start[0], y - start[1]) <= tapSlop) {
+                triggerHaptic()
+                setStance(if (stance == PadStance.DEFEND) PadStance.ATTACK else PadStance.DEFEND)
+            }
+        }
         if (released.element.kind == ControlKind.BUTTON) {
             val gesture = fakeShots.remove(pointerId)
             val faked = gesture?.armed == true
@@ -1115,6 +1148,7 @@ class TouchOverlayView @JvmOverloads constructor(
                 ControlKind.SWIPE -> drawSwipe(canvas, element, alpha, faded)
                 ControlKind.BUTTON, ControlKind.TRIGGER, ControlKind.SKILL ->
                     drawButton(canvas, element, alpha, faded)
+                ControlKind.STANCE -> drawStance(canvas, element, alpha, faded)
                 ControlKind.TRICK -> {
                     drawButton(canvas, element, alpha, faded)
                     if (trickOpen && trickPointer >= 0 &&
@@ -1193,6 +1227,11 @@ class TouchOverlayView @JvmOverloads constructor(
         /** How far a drag has to go to count as a fake shot, in dp. */
         private const val FAKE_SHOT_TRAVEL = 24f
 
+        // The stance chip: green on the attacking pad, steel blue on the
+        // defending one, so which half the thumb is in is legible at a glance.
+        private const val COLOR_STANCE_ATTACK = 0xFF22C55E.toInt()
+        private const val COLOR_STANCE_DEFEND = 0xFF38BDF8.toInt()
+
         // The Xbox 360 pad colours, because the game's own prompts use them
         private const val COLOR_A = 0xFF107C10.toInt()      // Emerald Green
         private const val COLOR_A_GLOW = 0xFF22C55E.toInt()
@@ -1219,6 +1258,43 @@ class TouchOverlayView @JvmOverloads constructor(
         private const val PS_TRIANGLE_GLOW = 0xFF4FD1A5.toInt()
     }
 
+    /**
+     * What a button says in the stance the pad is in: its attacking name, or the
+     * line for what it becomes without the ball. The title already reads the bit
+     * differently by possession, so nothing here changes what is sent.
+     */
+    private fun caption(element: ControlElement): String =
+        if (stance == PadStance.DEFEND && element.sub2.isNotEmpty()) element.sub2 else element.sub
+
+    /** The stance chip: ATK in green, DEF in blue, with the pressed halo. */
+    private fun drawStance(canvas: Canvas, element: ControlElement, alpha: Float, faded: Boolean) {
+        val r = radius(element)
+        val cx = centreX(element)
+        val cy = centreY(element)
+        val fade = if (faded) 0.45f else 1f
+        val defending = stance == PadStance.DEFEND
+        val colour = if (defending) COLOR_STANCE_DEFEND else COLOR_STANCE_ATTACK
+        if (isOn(element)) {
+            fill.color = Color.argb((alpha * fade * 90f).toInt().coerceIn(0, 255),
+                Color.red(colour), Color.green(colour), Color.blue(colour))
+            canvas.drawCircle(cx, cy, r * 1.10f, fill)
+        }
+        fill.color = Color.argb((alpha * fade * 205f).toInt().coerceIn(0, 255), 12, 16, 24)
+        canvas.drawCircle(cx, cy, r, fill)
+        stroke.color = Color.argb(
+            (alpha * fade * (if (isOn(element)) 255 else 210)).toInt().coerceIn(0, 255),
+            Color.red(colour), Color.green(colour), Color.blue(colour),
+        )
+        stroke.strokeWidth = max(1.5f, r * 0.09f)
+        canvas.drawCircle(cx, cy, r - stroke.strokeWidth * 0.5f, stroke)
+        text.textSize = r * 0.60f
+        text.color = Color.argb((alpha * fade * 255).toInt().coerceIn(0, 255), 248, 250, 252)
+        canvas.drawText(
+            if (defending) "DEF" else "ATK",
+            cx, cy - (text.descent() + text.ascent()) * 0.5f, text,
+        )
+    }
+
     private fun drawButton(canvas: Canvas, element: ControlElement, alpha: Float, faded: Boolean) {
         val r = radius(element)
         val cx = centreX(element)
@@ -1234,7 +1310,10 @@ class TouchOverlayView @JvmOverloads constructor(
         val isFaceButton = isA || isB || isX || isY
         val isRT = id == "rt"
         val isLT = id == "lt"
-        val isBumper = id == "lb" || id == "rb"
+        // By bit rather than by id, so the defending switch -- a second LB in
+        // reach of the right thumb -- draws like the bumper it is.
+        val isBumper = element.kind == ControlKind.BUTTON &&
+            (element.value == NativeBridge.LB || element.value == NativeBridge.RB)
         val isThumbClick = id == "l3" || id == "r3"
         val isMenu = id == "start" || id == "back"
 
@@ -1310,12 +1389,14 @@ class TouchOverlayView @JvmOverloads constructor(
             //    PlayStation symbol, or the Xbox letter.
             val ink = Color.argb((alpha * fadeFactor * 255).toInt().coerceIn(0, 255), 255, 255, 255)
             val shadow = Color.argb((alpha * fadeFactor * 140).toInt().coerceIn(0, 255), 0, 0, 0)
-            val actionSubtitle = when (id) {
-                "a" -> "PASS"
-                "x" -> "SHOOT"
-                "b" -> "CROSS"
-                "y" -> "THROUGH"
-                else -> ""
+            val actionSubtitle = caption(element).ifEmpty {
+                when (id) {
+                    "a" -> "PASS"
+                    "x" -> "SHOOT"
+                    "b" -> "CROSS"
+                    "y" -> "THROUGH"
+                    else -> ""
+                }
             }
 
             val glyphR = coreR * 0.90f
@@ -1381,14 +1462,15 @@ class TouchOverlayView @JvmOverloads constructor(
             stroke.strokeWidth = max(1.5f, r * 0.055f)
             canvas.drawCircle(cx, cy, r - stroke.strokeWidth * 0.5f, stroke)
 
-            text.textSize = r * (if (element.sub.isEmpty()) 0.52f else 0.46f)
+            val bumperCaption = caption(element)
+            text.textSize = r * (if (bumperCaption.isEmpty()) 0.52f else 0.46f)
             text.color = Color.WHITE
-            val labelY = if (element.sub.isEmpty()) cy - (text.descent() + text.ascent()) * 0.5f else cy - r * 0.06f
+            val labelY = if (bumperCaption.isEmpty()) cy - (text.descent() + text.ascent()) * 0.5f else cy - r * 0.06f
             canvas.drawText(label, cx, labelY, text)
-            if (element.sub.isNotEmpty()) {
+            if (bumperCaption.isNotEmpty()) {
                 subText.textSize = r * 0.27f
                 subText.color = Color.argb((alpha * fadeFactor * 220).toInt().coerceIn(0, 255), 226, 232, 240)
-                canvas.drawText(element.sub, cx, cy + r * 0.44f, subText)
+                canvas.drawText(bumperCaption, cx, cy + r * 0.44f, subText)
             }
         } else if (isThumbClick) {
             // Thumbstick Click (L3 / R3)
@@ -1423,11 +1505,11 @@ class TouchOverlayView @JvmOverloads constructor(
 
             text.textSize = r * (if (label.length > 5) 0.26f else 0.32f)
             text.color = Color.WHITE
-            canvas.drawText(label, cx, cy - (text.descent() + text.ascent()) * (if (element.sub.isEmpty()) 0.5f else 1.1f), text)
-            if (element.sub.isNotEmpty()) {
+            canvas.drawText(label, cx, cy - (text.descent() + text.ascent()) * (if (caption(element).isEmpty()) 0.5f else 1.1f), text)
+            if (caption(element).isNotEmpty()) {
                 subText.textSize = r * 0.24f
                 subText.color = Color.argb((alpha * fadeFactor * 200).toInt().coerceIn(0, 255), 148, 163, 184)
-                canvas.drawText(element.sub, cx, cy + r * 0.45f, subText)
+                canvas.drawText(caption(element), cx, cy + r * 0.45f, subText)
             }
         } else {
             // Fallback general button

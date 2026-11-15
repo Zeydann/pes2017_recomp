@@ -226,11 +226,61 @@ hideable, and under everything else. Not device-verified.
 
 ## Attacking and defending pads
 
-The title reports only menus or a match (`runtime/game_phase.h`, from whether the
-player entity exists), not possession. There is therefore **no automatic**
-attack/defence switching. Each control is arranged for both pads, the menus, or
-one stance, and the player switches the defending pad from Settings › Controls
-or the pause menu (`Prefs.defendingPad`).
+The title reports only menus or a match (`runtime/game_phase.h`, and in this
+build not even that -- see the note below), and **not possession**. There is
+therefore **no automatic** attack/defence switching. Each control is arranged
+for both pads, the menus, or one stance.
+
+### The stance chip
+
+The pad now carries one **stance chip** (`id: "stance"`, 40 dp, above the action
+diamond, match only, movable and hideable in the editor). **One tap** flips the
+attacking pad to the defending one and back, with a haptic tick and a short toast
+("Attacking pad" / "Defending pad") so an accidental flip is noticed and one tap
+undoes it. It writes the same `Prefs.defendingPad` the Settings switch and the
+pause menu write, so the three can never disagree. A thumb that lands and slides
+more than 18 dp off the chip is not counted as a tap.
+
+The chip holds **no pad bit**: a flip changes what the labels say and which
+controls are arranged for which half, never which bits a held finger is sending.
+It deliberately does not call `releaseEverything`, so another thumb holding pass
+keeps holding pass; a control that belongs to the other stance stops being sent
+(the state push skips what is not on screen) and its claim goes when the finger
+lifts.
+
+### Dual labels, and the near-thumb switch
+
+The title already reinterprets the same four buttons by possession; the pad says
+so. Each action button carries its second line (`sub2`) and draws it in place of
+the attacking name while the defending pad is out:
+
+| Button | Attacking | Defending | Defensive action |
+|---|---|---|---|
+| A | PASS | **PRESS** | Pressure / contain (hold); double-tap for the foot-out tackle |
+| B | CROSS | **TEAM** | Teammate pressure (hold; double-tap-and-hold for more players) |
+| X | SHOOT | **SLIDE** | Slide tackle |
+| Y | THROUGH | **GK** | Goalkeeper rush |
+| LB | LB | **SWITCH** | Player switch |
+| stick rim / RB | sprint | sprint | Defensive sprint (same 0.92/0.82 latch) |
+
+The far top-left LB is an **attacking** control now (`PhaseMask.ATTACK`): without
+the ball the switch has to be under the right thumb, so the defending pad has its
+own `switch` control at the left of the diamond, holding the same LB bit. No
+binding changes; a duplicate bit is harmless, and the two are never on screen
+together.
+
+**These labels are presentation, not remapping.** The game decides what A/B/X/Y
+mean from possession. The public sources also disagree on one of them: the
+official PES 2016 Xbox manual puts the slide tackle on X, while a 2017 guide puts
+it on B. That must be checked in the title before the labels are treated as
+fact; "match-up" is not part of PES 2017's documented defensive set and is
+deliberately absent here.
+
+**Phase signal caveat.** `runtime/title.h` still holds placeholders for the
+title's client states (`T_DATA_ClientStates = 0`), so `player::NowRunning()`
+answers `Unknown` and the app never learns that a match has started. The stance
+chip is therefore the only on-pitch way to change pads; automatic switching needs
+that address chain derived first.
 
 ## Verification
 
@@ -246,6 +296,10 @@ or the pause menu (`Prefs.defendingPad`).
   R3 clicks with a release between them, and the button sequencer clears.
 - `SwipeBindingsTest`: all 16 default combinations, the primary bits behind
   them, independence and unbound cases.
+- `DefensiveLayoutTest`: the stance chip and near-thumb switch ship on the right
+  pads, the four defensive names, that the chip holds no bit, and that neither
+  new control overlaps any other control on its own pad (a numeric clearance
+  test, so a later default move fails loudly).
 - `StickVectorTest`: normalisation for both stick modes.
 - The Kotlin tests need a JVM and Android SDK (not available in the cloud
   workspace); the C++ host checks in `tests/` pass (see `PROJECT_HANDOFF.md`).

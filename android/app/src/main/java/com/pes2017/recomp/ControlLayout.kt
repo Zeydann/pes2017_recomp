@@ -55,6 +55,15 @@ enum class ControlKind {
      * for.
      */
     TRICK,
+
+    /**
+     * The stance chip: one tap swaps the attacking pad for the defending one and
+     * back, with the labels following. It holds no bit of its own, so a flip
+     * can never leave a button or a trigger down; the title decides what the
+     * action buttons mean from possession, and this only changes what the pad
+     * says and which controls are arranged for which half of the game.
+     */
+    STANCE,
 }
 
 /** When a control belongs on screen. */
@@ -451,11 +460,11 @@ class ControlLayout private constructor(
             fun place(
                 id: String, kind: ControlKind, value: Int, label: String,
                 x: Float, y: Float, size: Float, alpha: Float = 0.45f, visible: Boolean = true,
-                shownWhen: PhaseMask = PhaseMask.ALWAYS, sub: String = "",
+                shownWhen: PhaseMask = PhaseMask.ALWAYS, sub: String = "", sub2: String = "",
             ) = ControlElement(
                 id, kind, value, label,
                 (if (x >= 0f) x else w + x) / w, (if (y >= 0f) y else h + y) / h,
-                size, alpha, visible, shownWhen = shownWhen, sub = sub,
+                size, alpha, visible, shownWhen = shownWhen, sub = sub, sub2 = sub2,
             )
 
             val centre = w / 2f
@@ -467,15 +476,35 @@ class ControlLayout private constructor(
                     // Right thumb: the four actions as the pad's diamond. `sub`
                     // is what the control does on the ball; the fake shot and
                     // the editor read it, so the words matter.
-                    place("a", ControlKind.BUTTON, NativeBridge.A, "A", -110f, -52f, 68f, sub = "PASS"),
-                    place("b", ControlKind.BUTTON, NativeBridge.B, "B", -52f, -110f, 68f, sub = "CROSS"),
-                    place("x", ControlKind.BUTTON, NativeBridge.X, "X", -168f, -110f, 68f, sub = "SHOOT"),
-                    place("y", ControlKind.BUTTON, NativeBridge.Y, "Y", -110f, -168f, 68f, sub = "THROUGH"),
+                    // The second line is what the same button does without the
+                    // ball. The title already decides that from possession; the
+                    // pad only has to say so (`sub2` is drawn in the defending
+                    // stance).
+                    place("a", ControlKind.BUTTON, NativeBridge.A, "A", -110f, -52f, 68f, sub = "PASS", sub2 = "PRESS"),
+                    place("b", ControlKind.BUTTON, NativeBridge.B, "B", -52f, -110f, 68f, sub = "CROSS", sub2 = "TEAM"),
+                    place("x", ControlKind.BUTTON, NativeBridge.X, "X", -168f, -110f, 68f, sub = "SHOOT", sub2 = "SLIDE"),
+                    place("y", ControlKind.BUTTON, NativeBridge.Y, "Y", -110f, -168f, 68f, sub = "THROUGH", sub2 = "GK"),
 
                     // The shoulders where a pad has them: L2 / L1 along the top left,
-                    // R1 / R2 along the top right, triggers outermost.
+                    // R1 / R2 along the top right, triggers outermost. LB is an
+                    // attacking control now: without the ball it is the player
+                    // switch, and the switch below is the one within reach.
                     place("lt", ControlKind.TRIGGER, 0, "LT", 44f, 76f, 56f),
-                    place("lb", ControlKind.BUTTON, NativeBridge.LB, "LB", 110f, 76f, 56f),
+                    place("lb", ControlKind.BUTTON, NativeBridge.LB, "LB", 110f, 76f, 56f,
+                        shownWhen = PhaseMask.ATTACK),
+
+                    // The defending player switch, one thumb slide left of pass
+                    // and clear of it and of the slide tackle: the top-left LB is
+                    // across the screen from the right thumb. Same LB bit, so no
+                    // binding changes; shown only on the defending pad.
+                    place("switch", ControlKind.BUTTON, NativeBridge.LB, "LB", -205f, -45f, 56f,
+                        shownWhen = PhaseMask.DEFEND, sub2 = "SWITCH"),
+
+                    // The stance chip: one tap flips the pad, the labels follow,
+                    // and nothing is held. Above the diamond, clear of the
+                    // shoot-to-pass drag, of Y, of RB and of the skill wheel.
+                    place("stance", ControlKind.STANCE, 0, "ATK", -150f, -232f, 40f, 0.55f,
+                        shownWhen = PhaseMask.MATCH),
                     place("rb", ControlKind.BUTTON, NativeBridge.RB, "RB", -110f, 76f, 56f),
                     place("rt", ControlKind.TRIGGER, 1, "RT", -44f, 76f, 56f),
 

@@ -33,6 +33,7 @@ ISO importing and the Bluetooth/USB gamepad path were not modified.
 | Manual attacking/defending pads | Implemented (editor arrangement, Settings and pause-menu switch); automatic switching is **not** implemented and must not be claimed |
 | Skill palette and flick skill stick with native capability probes | Previously implemented; palette kept, hidden by default |
 | Skill wheel (hold, 8 sectors, native playback) | Implemented; pure geometry unit-tested; not device-tested |
+| Stance chip, dual defensive labels, near-thumb switch | Implemented; defaults and clearance unit-tested; not device-tested |
 | Dribbling: close control, dummy, 2x RB speed burst, stop and face | Mapped onto existing controls; no new buttons; only the tap cadence is new code |
 | Multitouch and cancellation safety | Counted claims, per-pointer gestures, `ACTION_CANCEL`/pause clearing; unchanged and extended for the fake shot |
 | Bluetooth/USB controller | Previously implemented; unchanged |
@@ -70,6 +71,19 @@ ISO importing and the Bluetooth/USB gamepad path were not modified.
    The wheel only chooses an index: the runtime still owns the stick, and the
    left stick is always the player's exit.
 
+## Defending without possession detection
+
+The title does not report possession (and in this build the match-phase read is
+disabled too: `T_DATA_ClientStates` is still a placeholder), so the defending pad
+is the player's call. It is now one tap away: a **stance chip** above the action
+diamond (`ControlKind.STANCE`, no bit of its own) flips the pad, writes
+`Prefs.defendingPad`, and toasts which pad is out. The four action buttons carry
+their defensive names in `sub2` (PRESS / TEAM / SLIDE / GK), and the defending pad
+has its own near-thumb LB switch while the far top-left LB belongs to attack.
+The labels are presentation only -- the title reads the same bits by possession --
+and the slide-tackle button (X per the official Xbox manual, B per one 2017
+guide) still needs an in-title check. See `docs/touch-controls.md`.
+
 ## Tests actually executed
 
 Host C++ checks, compiled directly with `g++ -std=c++20 -I runtime` (the repo's
@@ -97,7 +111,7 @@ That is the previous 281 checks plus 196 + 97 and the texture store, with
 `bc_decoder_test` (needs Vulkan headers, absent here), `durable_test` (pulls in
 `ppc_recomp_shared.h`, which only the recompiled guest build generates), and
 every Kotlin/JUnit test, including the new `PadGesturesTest`,
-`StickVectorTest`, `SwipeBindingsTest`, `SkillWheelTest` and the existing
+`StickVectorTest`, `SwipeBindingsTest`, `SkillWheelTest`, `DefensiveLayoutTest` and the existing
 `TouchClaimsTest`,
 `SwipeClassifierTest`, `TouchMathTest`, `ControlLayoutPhaseTest` and
 `GamepadInputTest` -- this workspace has no JDK 17 and no Android SDK, and large

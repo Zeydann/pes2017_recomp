@@ -379,6 +379,8 @@
 
     <!-- Swipe control bindings -->
     <string name="swipe_bindings">Swipe directions</string>
+    <string name="stance_toast_attack">Attacking pad</string>
+    <string name="stance_toast_defend">Defending pad</string>
     <string name="skill_wheel">Skill wheel</string>
     <string name="skill_wheel_sector">%1$s: %2$s</string>
     <string name="skill_wheel_sector_title">Skill for this direction</string>

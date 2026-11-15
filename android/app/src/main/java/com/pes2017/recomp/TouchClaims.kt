@@ -56,7 +56,7 @@ internal class TouchClaims {
         // nothing at all until the thumb lifts. None of their `value`s is a
         // button mask, so none may reach newPresses.
         if (element.kind == ControlKind.STICK || element.kind == ControlKind.SKILL ||
-            element.kind == ControlKind.TRICK
+            element.kind == ControlKind.TRICK || element.kind == ControlKind.STANCE
         ) {
             byPointer[pointerId] = Claim(element, holds = false)
             if (element.kind == ControlKind.STICK) {

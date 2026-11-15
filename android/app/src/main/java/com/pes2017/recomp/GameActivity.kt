@@ -982,7 +982,9 @@ class GameActivity : AppCompatActivity(), NativeListener {
 
     private fun setDefendingPad(defending: Boolean) {
         prefs.defendingPad = defending
-        overlay.stance = if (defending) PadStance.DEFEND else PadStance.ATTACK
+        // One path for the pause menu and the on-pitch chip, so the two can
+        // never disagree about which pad is out.
+        overlay.setStance(if (defending) PadStance.DEFEND else PadStance.ATTACK)
     }
 
     /** Off / Minimal / Normal / Complete, as in Settings > Performance. */
