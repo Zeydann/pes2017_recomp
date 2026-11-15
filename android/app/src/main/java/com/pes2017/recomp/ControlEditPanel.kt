@@ -7,6 +7,7 @@ import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
 import android.widget.FrameLayout
+import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.TextView
@@ -66,9 +67,23 @@ class ControlEditPanel(
         orientation = LinearLayout.VERTICAL
         val dp = activity.resources.displayMetrics.density
         setPadding((4 * dp).roundToInt(), (4 * dp).roundToInt(), (4 * dp).roundToInt(), (4 * dp).roundToInt())
+        // A dark backing: the row floats over a bright pitch, and a button whose
+        // edges disappear is a button a player aims at and misses.
+        setBackgroundColor(0x99000000.toInt())
         val tools = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }
         val finishes = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }
-        addView(tools, LinearLayout.LayoutParams(
+        // The tools are wider than a phone held sideways once Swipe directions
+        // and the wheel join Arrangement and More. A scroller keeps every one of
+        // them reachable: with a plain row and END gravity the leftmost button
+        // -- Arrangement -- was measured off screen and could not be tapped.
+        val scroller = HorizontalScrollView(activity).apply {
+            isHorizontalScrollBarEnabled = false
+            isFillViewport = false
+            addView(tools, ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            ))
+        }
+        addView(scroller, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
         ))
         addView(finishes, LinearLayout.LayoutParams(
@@ -87,7 +102,8 @@ class ControlEditPanel(
     }
 
     /** The upper row of [actions]: the buttons that act on the selection. */
-    private fun toolRow(): LinearLayout = actions.getChildAt(0) as LinearLayout
+    private fun toolRow(): LinearLayout =
+        ((actions.getChildAt(0) as HorizontalScrollView).getChildAt(0) as LinearLayout)
     /** Shown while a swipe control or an action button is selected: what each direction sends. */
     private val swipes: Button = Button(activity).apply {
         setText(R.string.swipe_bindings)
@@ -117,6 +133,29 @@ class ControlEditPanel(
         setOnClickListener { pickArrangement() }
     }
 
+    /**
+     * Saving, loading and exporting layouts, one tap from the editor. The same
+     * dialog is under More, but a player who has just arranged a pad looks for
+     * Save first; burying it two menus deep is the reason it read as missing.
+     */
+    private val layouts: Button = Button(activity).apply {
+        setText(R.string.layout_menu)
+        textSize = 12f
+        minWidth = 0
+        minimumWidth = 0
+        setOnClickListener { showProfiles() }
+    }
+
+    /** TG1/TG2: which saved layout the toggle puts on screen. */
+    private val mapping: Button = Button(activity).apply {
+        setText(R.string.toggle_mapping)
+        textSize = 12f
+        minWidth = 0
+        minimumWidth = 0
+        visibility = View.GONE
+        setOnClickListener { pickToggleMapping() }
+    }
+
     private var current: ControlElement? = null
     private var attached = false
     private var atTop = false
@@ -134,10 +173,16 @@ class ControlEditPanel(
         toolRow().addView(arrangement, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
         ).apply { marginStart = (6 * dp).roundToInt() })
+        toolRow().addView(layouts, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+        ).apply { marginStart = (6 * dp).roundToInt() })
         toolRow().addView(swipes, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
         ).apply { marginStart = (6 * dp).roundToInt() })
         toolRow().addView(wheel, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+        ).apply { marginStart = (6 * dp).roundToInt() })
+        toolRow().addView(mapping, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
         ).apply { marginStart = (6 * dp).roundToInt() })
         val more = Button(activity).apply {
@@ -241,6 +286,21 @@ class ControlEditPanel(
 
     private fun save() = overlay.layout.save(activity)
 
+    /**
+     * Whether this control has per-direction swipes worth binding. The two
+     * shoulders and the two menu buttons do not: LB and RB are held as the
+     * modifiers of other actions, and Start/Select belong to the title's menus,
+     * so a direction on them was a setting that did nothing useful.
+     */
+    private fun offersSwipes(element: ControlElement): Boolean = when (element.kind) {
+        ControlKind.SWIPE, ControlKind.CUSTOM, ControlKind.TACTICAL -> true
+        ControlKind.BUTTON -> element.value != NativeBridge.LB &&
+            element.value != NativeBridge.RB &&
+            element.value != NativeBridge.START &&
+            element.value != NativeBridge.BACK
+        else -> false
+    }
+
     // ---- which pad a control belongs to --------------------------------------
 
     /**
@@ -250,7 +310,10 @@ class ControlEditPanel(
      * how a control is put on one of them.
      */
     private fun pickArrangement() {
-        val element = current ?: return
+        // The selection is mirrored on the overlay; fall back to it so a panel
+        // that has not been told about a tap yet still has a control to act on.
+        val element = current ?: overlay.selected
+        if (element == null) return
         val masks = arrayOf(PhaseMask.ALWAYS, PhaseMask.MENUS, PhaseMask.MATCH,
             PhaseMask.ATTACK, PhaseMask.DEFEND)
         val labels = arrayOf(
@@ -529,6 +592,10 @@ class ControlEditPanel(
             labels.add(activity.getString(R.string.edit_bind))
             actions.add { pickBinding(element) }
         }
+        if (element.kind == ControlKind.LATCH) {
+            labels.add(activity.getString(R.string.toggle_mapping))
+            actions.add { pickToggleMapping() }
+        }
         labels.add(activity.getString(R.string.edit_rename))
         actions.add { rename(element) }
         labels.add(
@@ -548,7 +615,7 @@ class ControlEditPanel(
         labels.add(activity.getString(R.string.edit_profiles))
         actions.add { showProfiles() }
         labels.add(activity.getString(R.string.layout_export))
-        actions.add { shareLayout(overlay.layout, activity.getString(R.string.edit_profiles)) }
+        actions.add { shareLayout(overlay.layout, activity.getString(R.string.layout_current)) }
         labels.add(activity.getString(R.string.layout_import))
         actions.add { importLayout() }
         AlertDialog.Builder(activity)
@@ -675,42 +742,54 @@ class ControlEditPanel(
      * The saved pads: five numbered places and as many named ones as the player
      * makes. A slot's name is its own -- renaming never renames a file -- so the
      * list reads back what was typed rather than a sanitised file name.
+     *
+     * Save, load and export are the first things in the list, and all five
+     * numbered places appear even before they hold a pad. They were once only
+     * reachable through a named "Save as" and an existing file, which is why a
+     * player could not find them at all.
      */
     private fun showProfiles() {
         val slots = ControlLayout.listSlots(activity)
-        val labels = ArrayList<String>(slots.size + 5)
-        val actions = ArrayList<() -> Unit>(slots.size + 5)
+        val labels = ArrayList<String>(slots.size + 12)
+        val actions = ArrayList<() -> Unit>(slots.size + 12)
+        labels.add(activity.getString(R.string.profile_save_as))
+        actions.add { saveCurrentAs() }
+        labels.add(activity.getString(R.string.layout_export_current))
+        actions.add { shareLayout(overlay.layout, activity.getString(R.string.layout_current)) }
         // The two factory pads stay one tap away: a player who wants the pad
         // back the way it shipped should not have to remember to delete a slot.
         labels.add(activity.getString(R.string.profile_modern))
         actions.add { loadBuiltIn(PROFILE_MODERN) }
         labels.add(activity.getString(R.string.profile_classic))
         actions.add { loadBuiltIn(PROFILE_CLASSIC) }
-        for (slot in slots) {
-            labels.add(
-                if (slot.numbered) {
-                    activity.getString(R.string.profile_slot, slot.id, slot.displayName)
-                } else {
-                    slot.displayName
-                },
-            )
+        for (id in (1..LayoutStore.MAX_NUMBERED).map { it.toString() }) {
+            val slot = slots.firstOrNull { it.id == id }
+            if (slot == null) {
+                labels.add(activity.getString(R.string.profile_slot_empty, id))
+                actions.add { saveToSlot(id) }
+            } else {
+                labels.add(activity.getString(R.string.profile_slot, id, slot.displayName))
+                actions.add { slotActions(slot) }
+            }
+        }
+        for (slot in slots.filter { !it.numbered }) {
+            labels.add(slot.displayName)
             actions.add { slotActions(slot) }
         }
-        labels.add(activity.getString(R.string.profile_save_as))
-        actions.add { saveCurrentAs() }
         labels.add(activity.getString(R.string.layout_import))
         actions.add { importLayout() }
         AlertDialog.Builder(activity)
-            .setTitle(R.string.edit_profiles)
+            .setTitle(R.string.layout_title)
             .setItems(labels.toTypedArray()) { _, which -> actions[which].invoke() }
             .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
-    /** Load, rename, duplicate, export or delete one saved pad. */
+    /** Load, overwrite, rename, duplicate, export or delete one saved pad. */
     private fun slotActions(slot: LayoutSlot) {
         val labels = arrayOf(
             activity.getString(R.string.profile_load),
+            activity.getString(R.string.profile_overwrite_current),
             activity.getString(R.string.profile_rename),
             activity.getString(R.string.profile_duplicate),
             activity.getString(R.string.layout_export),
@@ -721,11 +800,60 @@ class ControlEditPanel(
             .setItems(labels) { _, which ->
                 when (which) {
                     0 -> loadSlot(slot)
-                    1 -> renameSlot(slot)
-                    2 -> duplicateSlot(slot)
-                    3 -> exportSlot(slot)
+                    1 -> writeSlot(slot.id, slot.displayName)
+                    2 -> renameSlot(slot)
+                    3 -> duplicateSlot(slot)
+                    4 -> exportSlot(slot)
                     else -> confirmDeleteSlot(slot)
                 }
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    /** Saves the current pad into an empty numbered place under a typed name. */
+    private fun saveToSlot(id: String) {
+        val suggested = activity.getString(R.string.profile_default_name, id)
+        nameDialog(activity.getString(R.string.profile_save_as), suggested) { name ->
+            writeSlot(id, name)
+        }
+    }
+
+    /**
+     * TG1/TG2's mapping: the saved pads a toggle can switch to, plus "none".
+     * The mapping is per control, so the two toggles can land on different pads.
+     */
+    private fun pickToggleMapping() {
+        val element = current ?: overlay.selected ?: return
+        val slots = ControlLayout.listSlots(activity)
+        val labels = ArrayList<String>(slots.size + 1)
+        val ids = ArrayList<String>(slots.size + 1)
+        labels.add(activity.getString(R.string.button_none))
+        ids.add("")
+        for (slot in slots) {
+            labels.add(
+                if (slot.numbered) {
+                    activity.getString(R.string.profile_slot, slot.id, slot.displayName)
+                } else {
+                    slot.displayName
+                },
+            )
+            ids.add(slot.id)
+        }
+        val selected = ids.indexOf(element.toggleProfile).coerceAtLeast(0)
+        AlertDialog.Builder(activity)
+            .setTitle(
+                activity.getString(
+                    R.string.toggle_mapping_title,
+                    ControlLayout.labelFor(element, overlay.playStation),
+                ),
+            )
+            .setSingleChoiceItems(labels.toTypedArray(), selected) { dialog, which ->
+                remember()
+                element.toggleProfile = ids[which]
+                show(element)
+                save()
+                dialog.dismiss()
             }
             .setNegativeButton(R.string.cancel, null)
             .show()
@@ -910,12 +1038,13 @@ class ControlEditPanel(
     fun attach() {
         if (attached) return
         root.addView(view, params(top = false))
+        val margin = (6 * activity.resources.displayMetrics.density).roundToInt()
         root.addView(
             actions,
             FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
                 Gravity.TOP or Gravity.END,
-            ),
+            ).apply { topMargin = margin; marginEnd = margin },
         )
         root.addView(
             idle,
@@ -952,6 +1081,7 @@ class ControlEditPanel(
         if (element == null) {
             swipes.visibility = View.GONE
             wheel.visibility = View.GONE
+            mapping.visibility = View.GONE
         }
         val wantTop = element != null && element.yFracOn(overlay.stance) > 0.55f
         if (attached && wantTop != atTop) {
@@ -968,15 +1098,12 @@ class ControlEditPanel(
             return
         }
         title.text = activity.getString(R.string.edit_selected, ControlLayout.labelFor(element, overlay.playStation))
-        swipes.visibility =
-            if (element.kind == ControlKind.SWIPE || element.kind == ControlKind.BUTTON ||
-                element.kind == ControlKind.CUSTOM || element.kind == ControlKind.TACTICAL
-            ) {
-                View.VISIBLE
-            } else {
-                View.GONE
-            }
+        // L1/R1 and Start/Select are not swipe targets: the shoulders are the
+        // pad's modifiers and the menu buttons are the title's, so offering four
+        // directions for them only invited bindings that could not work.
+        swipes.visibility = if (offersSwipes(element)) View.VISIBLE else View.GONE
         wheel.visibility = if (element.kind == ControlKind.TRICK) View.VISIBLE else View.GONE
+        mapping.visibility = if (element.kind == ControlKind.LATCH) View.VISIBLE else View.GONE
         size.isEnabled = true
         opacity.isEnabled = true
         visible.isEnabled = true

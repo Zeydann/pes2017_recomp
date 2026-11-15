@@ -32,6 +32,18 @@ class LayoutSerializationTest {
     }
 
     @Test
+    fun aCustomTogglesMappingSurvivesAReload() {
+        val layout = ControlLayout.defaults(800f, 360f)
+        layout.find("tg1")!!.toggleProfile = "3"
+
+        val parsed = ControlLayout.parse(layout.toJson())!!
+
+        assertEquals("3", parsed.find("tg1")!!.toggleProfile)
+        // A toggle the player never mapped stays a plain toggle.
+        assertEquals("", parsed.find("tg2")!!.toggleProfile)
+    }
+
+    @Test
     fun aVersionSixFileIsMigratedOverTheDefaultsRatherThanDiscarded() {
         // No w/h, no role, no defend object: exactly what the previous build wrote.
         val old = """

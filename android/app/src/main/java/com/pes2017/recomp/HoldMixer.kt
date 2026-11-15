@@ -25,6 +25,14 @@ enum class HoldSource {
 
     /** A compound swipe's timed steps. */
     MACRO_SEQUENCE,
+
+    /**
+     * The modifier of a swipe on a button that is being held to charge. A
+     * charged chip shot is the modifier arriving while the shoot bit is already
+     * down, so this source rides alongside the thumb instead of being a timed
+     * step after the lift.
+     */
+    SWIPE_HOLD,
 }
 
 /**

@@ -247,6 +247,13 @@ data class ControlElement(
      * find the control under a finger.
      */
     var trickMoves: IntArray = IntArray(SkillMoves.COUNT) { -1 },
+    /**
+     * The saved layout this latch switches to when it is engaged, as a
+     * [LayoutStore] slot id, or "" for a plain toggle. Only the two custom
+     * toggles (tg1, tg2) use it: one tap puts that pad on screen, which is how a
+     * player keeps a defending arrangement and an attacking one a thumb apart.
+     */
+    var toggleProfile: String = "",
 ) {
     /** The move a wheel sector plays, or -1 for none and for a sector off the wheel. */
     fun trickMove(sector: Int): Int {
@@ -527,6 +534,9 @@ class ControlLayout private constructor(
             if (element.kind == ControlKind.TRICK) {
                 item.put("trick", JSONArray(element.trickMoves.toList()))
             }
+            // A custom toggle's mapping, written only when it has one, so an
+            // ordinary pad stays the file it always was.
+            if (element.toggleProfile.isNotEmpty()) item.put("profile", element.toggleProfile)
             array.put(item)
         }
         val root = JSONObject()
@@ -731,6 +741,12 @@ class ControlLayout private constructor(
                         element.setTrickMove(sector, moves.optInt(sector, element.trickMoves[sector]))
                     }
                 }
+                // A custom toggle's target layout. A slot that has since been
+                // deleted leaves the id in place: the player can point the
+                // toggle somewhere else, and the toggle itself still works.
+                if (item.has("profile")) {
+                    element.toggleProfile = item.optString("profile", "").trim()
+                }
                 item.optJSONArray("swipeActions")?.let { actions ->
                     for (index in 0 until min(DIRECTIONS.size, actions.length())) {
                         val entry = actions.optJSONObject(index) ?: continue
@@ -822,7 +838,11 @@ class ControlLayout private constructor(
             return store.list { _, text -> nameIn(text) }
         }
 
-        /** Saves the pad into [id], under [name]; false when it could not be written. */
+        /**
+         * Saves the pad into [id], under [name]; false when it could not be
+         * written. The id is the file, and the name lives inside it, so a save
+         * never renames the slot a TG1/TG2 mapping points at.
+         */
         fun saveSlot(context: Context, layout: ControlLayout, id: String, name: String): Boolean =
             store(context).write(id, withName(layout.toJson(), name.ifBlank { LayoutStore.prettyId(id) }))
 

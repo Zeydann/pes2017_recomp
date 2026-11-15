@@ -3,15 +3,21 @@ package com.pes2017.recomp
 import android.content.pm.ActivityInfo
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
+import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 
 /**
  * The control guide: the whole pad on one screen, read from the layout the
@@ -31,6 +37,10 @@ class ControlGuideActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        // Edge to edge, with the content padded inside the cutout and the
+        // gesture bar. Top-anchored content otherwise sits under the status
+        // bar or a punch-hole, where a thumb cannot reliably reach it.
+        goEdgeToEdge()
         val density = resources.displayMetrics.density
         fun dp(value: Int) = (value * density).toInt()
 
@@ -39,7 +49,13 @@ class ControlGuideActivity : AppCompatActivity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.rgb(8, 11, 16))
-            setPadding(dp(18), dp(12), dp(18), dp(12))
+        }
+        ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
+            val safe = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout(),
+            )
+            view.setPadding(safe.left + dp(18), safe.top + dp(12), safe.right + dp(18), safe.bottom + dp(12))
+            insets
         }
 
         val header = LinearLayout(this).apply {
@@ -55,11 +71,20 @@ class ControlGuideActivity : AppCompatActivity() {
         }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         header.addView(Button(this).apply {
             setText(R.string.guide_close)
-            textSize = 12f
-            minWidth = 0
-            minimumWidth = 0
+            textSize = 14f
+            isAllCaps = false
+            // A real target rather than a few letters at the screen's edge: the
+            // guide is opened with a thumb, in landscape, and Close is the only
+            // way back.
+            minWidth = dp(88)
+            minimumWidth = dp(88)
+            minHeight = dp(44)
+            minimumHeight = dp(44)
+            setPadding(dp(20), dp(8), dp(20), dp(8))
             setOnClickListener { finish() }
-        })
+        }, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+        ))
         root.addView(header)
         root.addView(TextView(this).apply {
             setText(R.string.guide_intro)
@@ -91,6 +116,23 @@ class ControlGuideActivity : AppCompatActivity() {
         addCard(column, R.string.guide_security, getString(R.string.guide_security_text))
 
         setContentView(root)
+        ViewCompat.requestApplyInsets(root)
+    }
+
+    /** Full screen into the cutout, as the match is, then padded by the insets. */
+    private fun goEdgeToEdge() {
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        WindowInsetsControllerCompat(window, window.decorView).apply {
+            hide(WindowInsetsCompat.Type.systemBars())
+            systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            val attributes = window.attributes
+            attributes.layoutInDisplayCutoutMode =
+                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+            window.attributes = attributes
+        }
     }
 
     private fun addCard(column: LinearLayout, title: Int, body: String) {

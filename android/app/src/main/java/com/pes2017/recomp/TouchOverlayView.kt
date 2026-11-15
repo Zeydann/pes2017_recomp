@@ -136,8 +136,19 @@ class TouchOverlayView @JvmOverloads constructor(
     private val mixer = HoldMixer()
 
     // The direction a thumb on an action button is heading for right now, for
-    // the arrows under it. The gesture itself is read on the lift, as ever.
+    // the arrows under it and the floating action name. The gesture itself is
+    // still sent on the lift; this is what the thumb can see in the meantime.
     private val liveSwipes = HashMap<Int, Swipe>()
+
+    // The modifier of the live direction, held alongside the button that is
+    // already down. A charged chip shot is LB arriving while X is held, so the
+    // swipe does not have to be a separate sequence after the lift. One at a
+    // time: a second thumb's gesture does not steal the first one's modifier.
+    private var liveSwipePointer = -1
+    private var liveSwipeButtonBits = 0
+    private var liveSwipeLeft = false
+    private var liveSwipeRight = false
+    private var liveSwipeSince = 0L
 
     // Reused by animateEffects: a fresh list per draw was one allocation a frame,
     // which is exactly what this pass is here to stop.
@@ -229,8 +240,11 @@ class TouchOverlayView @JvmOverloads constructor(
     }
 
     // A swipe is read when the finger lifts and sent as one pulse: it has no bit
-    // to hold, and a flick is over before the title's next poll anyway.
-    private val swipeClassifier = SwipeClassifier(minTravelPx = 18f * density)
+    // to hold, and a flick is over before the title's next poll anyway. The
+    // threshold is 10 dp -- a deliberate drag on a 64 dp button, not a flick
+    // across it -- and there is no time limit, because holding a button to
+    // charge and then dragging is how a charged variant is played.
+    private val swipeClassifier = SwipeClassifier(minTravelPx = 10f * density, maxDurationMs = 0L)
 
     // The left stick standing in for the d-pad, for an engine that cannot do it
     // itself (TouchMath.kt). Carried across pushes, because its hysteresis is
@@ -692,6 +706,11 @@ class TouchOverlayView @JvmOverloads constructor(
         mixer.set(
             HoldSource.MACRO_SEQUENCE, combo.buttons, combo.leftTrigger, combo.rightTrigger,
         )
+        // The modifier of a live swipe, held while the thumb is still charging
+        // the button. It ends with the thumb, in the same push as the lift.
+        mixer.set(
+            HoldSource.SWIPE_HOLD, liveSwipeButtonBits, liveSwipeLeft, liveSwipeRight,
+        )
         buttons = mixer.buttons
         leftTrigger = if (mixer.leftTrigger) 255 else 0
         rightTrigger = if (mixer.rightTrigger) 255 else 0
@@ -737,6 +756,7 @@ class TouchOverlayView @JvmOverloads constructor(
         floatPointer = -1
         pressAt.clear()
         liveSwipes.clear()
+        clearLiveSwipe()
         passDoubleTap.reset()
         swipeTrails.clear()
         skillReleaseUntil.clear()
@@ -901,18 +921,31 @@ class TouchOverlayView @JvmOverloads constructor(
                         }
                         ControlKind.SWIPE -> {
                             swipeClassifier.move(id, x, y)
-                            liveSwipes[id] = swipeClassifier.peek(id)
+                            val peek = swipeClassifier.peek(id)
+                            if (peek != (liveSwipes[id] ?: Swipe.NONE)) {
+                                liveSwipes[id] = peek
+                                if (peek != Swipe.NONE) triggerHaptic()
+                                changed = true
+                            }
                         }
                         ControlKind.BUTTON, ControlKind.CUSTOM, ControlKind.TACTICAL -> {
                             // The same four directions, on the control the thumb
                             // is already on. Only the drawing reads the peek;
-                            // the bit is sent when the finger lifts.
+                            // the bit is sent when the finger lifts. The redraw
+                            // is part of the change: without it the arrows and
+                            // the action name only appeared after the lift,
+                            // which made a working swipe look ignored.
                             swipeClassifier.move(id, x, y)
                             val peek = swipeClassifier.peek(id)
-                            // A direction lock ticks once, so the flick is known
-                            // to have registered before the thumb even lifts.
-                            if (peek != liveSwipes[id] && peek != Swipe.NONE) triggerHaptic()
-                            liveSwipes[id] = peek
+                            if (peek != (liveSwipes[id] ?: Swipe.NONE)) {
+                                liveSwipes[id] = peek
+                                updateLiveSwipe(id, element, peek)
+                                // A direction lock ticks once, so the flick is
+                                // known to have registered before the thumb
+                                // even lifts.
+                                if (peek != Swipe.NONE) triggerHaptic()
+                                changed = true
+                            }
                         }
                         ControlKind.TRICK -> {
                             if (id != trickPointer) continue
@@ -1011,9 +1044,13 @@ class TouchOverlayView @JvmOverloads constructor(
                 else -> moveStick(element, x, y)
             }
             ControlKind.DPAD -> dpadBits[pointerId] = dpadArm(element, x, y)
-            ControlKind.SWIPE -> swipeClassifier.begin(pointerId, x, y, SystemClock.uptimeMillis())
+            ControlKind.SWIPE -> swipeClassifier.begin(
+                pointerId, x, y, SystemClock.uptimeMillis(), SwipeClassifier.CARDINAL_DOMINANCE,
+            )
             ControlKind.BUTTON -> if (!element.toggle) {
-                swipeClassifier.begin(pointerId, x, y, SystemClock.uptimeMillis())
+                swipeClassifier.begin(
+                    pointerId, x, y, SystemClock.uptimeMillis(), SwipeClassifier.CARDINAL_DOMINANCE,
+                )
                 // Double-tapping pass is the one-two. The single tap is still a
                 // single pass: the pair only adds L1 + pass on the second press,
                 // so a tap that misses the window is simply two passes.
@@ -1026,8 +1063,12 @@ class TouchOverlayView @JvmOverloads constructor(
                 }
             }
             // A spare button holds no bit of its own: its centre tap and its four
-            // swipes are all read on the lift, like any other swipe.
-            ControlKind.CUSTOM -> swipeClassifier.begin(pointerId, x, y, SystemClock.uptimeMillis())
+            // swipes are all read on the lift, like any other swipe -- and with
+            // the same nearest-axis rule as the action buttons, so C1..C10 feel
+            // identical to pass, shoot, cross and through.
+            ControlKind.CUSTOM -> swipeClassifier.begin(
+                pointerId, x, y, SystemClock.uptimeMillis(), SwipeClassifier.CARDINAL_DOMINANCE,
+            )
             // The tactical button reads its four arms on the lift, like the
             // patch does; its centre tap is the fifth action and is bound the
             // same way, so nothing is sent while the thumb is down.
@@ -1035,8 +1076,15 @@ class TouchOverlayView @JvmOverloads constructor(
                 pointerId, x, y, SystemClock.uptimeMillis(), SwipeClassifier.CARDINAL_DOMINANCE,
             )
             // A toggle latches in TouchClaims itself, so there is nothing to
-            // send here: its command is held from the next push onwards.
-            ControlKind.LATCH -> Unit
+            // send here: its command is held from the next push onwards. The
+            // two custom toggles may also name a saved layout: engaging one
+            // puts that pad on screen, which is a mapping switch a thumb can
+            // perform without opening the editor.
+            ControlKind.LATCH -> if (claims.isToggled(element.id) &&
+                element.toggleProfile.isNotEmpty()
+            ) {
+                switchToProfile(element.toggleProfile)
+            }
             // One tap, one move: the runtime plays it on the skill stick and
             // holds the stick until its last frame, so nothing here has to.
             ControlKind.SKILL -> if (NativeBridge.skillStick) NativeBridge.nativeSkillPlay(element.value)
@@ -1301,8 +1349,92 @@ class TouchOverlayView @JvmOverloads constructor(
             Swipe.NONE
         }
         val action = element.swipeAction(direction)
-        if (SwipePriority.sendsSwipe(action)) emitSwipe(action)
+        // If the modifier was already held alongside the charging button, the
+        // title has the combination and the lift releases it; replaying the
+        // sequence would send the same command twice. A modifier that only
+        // became known as the thumb lifted still needs the timed sequence.
+        val alreadyHeld = liveSwipeHeldFor(action)
+        if (!alreadyHeld && SwipePriority.sendsSwipe(action)) emitSwipe(action)
+        clearLiveSwipe(pointerId)
         noteSwipeTrail(element, direction)
+    }
+
+    /**
+     * Keeps the modifier of the live swipe down beside the button that is being
+     * held. Only a button with a real held bit can do this: a spare or a
+     * tactical button sends nothing until the lift, so a modifier alone there
+     * would be a command with no button.
+     */
+    private fun updateLiveSwipe(pointerId: Int, element: ControlElement, direction: Swipe) {
+        if (element.kind != ControlKind.BUTTON) return
+        // A second thumb's swipe does not take the first one's modifier; it
+        // still gets its own sequence on the lift.
+        if (liveSwipePointer >= 0 && liveSwipePointer != pointerId && hasLiveModifier()) return
+        val action = if (direction == Swipe.NONE) SwipeAction.NONE else element.swipeAction(direction)
+        val modifierOnly = action.bound && !action.doubleTap && action.modifier != SwipeModifier.NONE
+        val buttons = if (modifierOnly) action.modifier.bit else 0
+        val left = modifierOnly && action.modifier == SwipeModifier.LT
+        val right = modifierOnly && action.modifier == SwipeModifier.RT
+        if (buttons == liveSwipeButtonBits && left == liveSwipeLeft && right == liveSwipeRight) {
+            return
+        }
+        if (buttons == 0 && !left && !right) {
+            liveSwipePointer = -1
+            liveSwipeSince = 0L
+        } else {
+            liveSwipePointer = pointerId
+            if (liveSwipeSince == 0L) liveSwipeSince = SystemClock.uptimeMillis()
+        }
+        liveSwipeButtonBits = buttons
+        liveSwipeLeft = left
+        liveSwipeRight = right
+        if (NativeBridge.isLoaded()) pushState()
+    }
+
+    private fun hasLiveModifier(): Boolean =
+        liveSwipeButtonBits != 0 || liveSwipeLeft || liveSwipeRight
+
+    /** Whether [action]'s modifier has been held long enough for the title to see it. */
+    private fun liveSwipeHeldFor(action: SwipeAction): Boolean {
+        if (!action.bound || action.doubleTap || action.modifier == SwipeModifier.NONE) return false
+        if (liveSwipeSince <= 0L) return false
+        val held = when (action.modifier) {
+            SwipeModifier.LT -> liveSwipeLeft
+            SwipeModifier.RT -> liveSwipeRight
+            else -> action.modifier.bit != 0 && (liveSwipeButtonBits and action.modifier.bit) != 0
+        }
+        if (!held) return false
+        return SystemClock.uptimeMillis() - liveSwipeSince >= LIVE_MODIFIER_MIN_MS
+    }
+
+    /** Lets go of the live swipe's modifier; the release push carries both bits up. */
+    private fun clearLiveSwipe(pointerId: Int = -1) {
+        if (pointerId >= 0 && pointerId != liveSwipePointer) return
+        liveSwipePointer = -1
+        liveSwipeSince = 0L
+        liveSwipeButtonBits = 0
+        liveSwipeLeft = false
+        liveSwipeRight = false
+    }
+
+    /**
+     * TG1/TG2's mapping: puts a saved pad on screen with no editor in sight.
+     * Everything is let go first -- the latch that asked for the switch
+     * included -- so no bit from the old pad can survive into the new one.
+     */
+    private fun switchToProfile(id: String) {
+        val loaded = ControlLayout.loadSlot(context, id)
+        if (loaded == null) {
+            Toast.makeText(context, R.string.profile_failed, Toast.LENGTH_SHORT).show()
+            return
+        }
+        releaseEverything()
+        layout.replaceWith(loaded)
+        selected = null
+        onSelectionChanged?.invoke(null)
+        onLayoutEdited?.invoke()
+        Toast.makeText(context, R.string.layout_switched, Toast.LENGTH_SHORT).show()
+        invalidate()
     }
 
     /** Remembers a released direction so its trail can fly out and fade. */
@@ -1636,6 +1768,9 @@ class TouchOverlayView @JvmOverloads constructor(
             // The released swipe's trail is drawn over its control, whatever the
             // phase: it is feedback for a gesture that has already been sent.
             drawSwipeTrail(canvas, element)
+            // The direction the thumb is holding right now, in words, beside the
+            // button. It stays until the finger lifts.
+            if (!editing) drawSwipeHud(canvas, element)
         }
         // Effects are pruned here, not only where they are drawn: a trail whose
         // control stopped being on screen would never be reached again, and the
@@ -1721,6 +1856,13 @@ class TouchOverlayView @JvmOverloads constructor(
 
         /** How long a released swipe's trail takes to fly out and fade. */
         private const val SWIPE_TRAIL_MS = 200L
+
+        /**
+         * How long a live swipe's modifier has to be down before the lift
+         * relies on it instead of replaying the timed sequence. One guest frame
+         * at 30 fps, so the title has certainly polled while both were held.
+         */
+        private const val LIVE_MODIFIER_MIN_MS = 40L
 
         /** The text size a label is measured at once, so its ratio can be reused. */
         private const val FIT_SAMPLE = 100f
@@ -2384,6 +2526,53 @@ class TouchOverlayView @JvmOverloads constructor(
             canvas.drawLine(tipX, tipY, backX + barbX, backY + barbY, notchPaint)
             canvas.drawLine(tipX, tipY, backX - barbX, backY - barbY, notchPaint)
         }
+    }
+
+    /**
+     * The action a live swipe would send, in a floating pill over the button:
+     * "Chip Shot" over a charging shoot button, "Low Cross" over cross. It is
+     * the same [SwipeClassifier.peek] the rim arrows read, so it appears as soon
+     * as a drag is far enough to count and stays there until the finger lifts --
+     * it is a state, not an animation to miss.
+     */
+    private fun drawSwipeHud(canvas: Canvas, element: ControlElement) {
+        if (element.kind != ControlKind.BUTTON && element.kind != ControlKind.CUSTOM &&
+            element.kind != ControlKind.TACTICAL
+        ) {
+            return
+        }
+        val direction = liveSwipe(element)
+        if (direction == Swipe.NONE) return
+        val action = element.swipeAction(direction)
+        if (!action.bound) return
+        val label = SwipeLabels.describe(element, action)
+        if (label.isEmpty()) return
+
+        val r = radius(element)
+        val cy = centreY(element)
+        val textSize = max(10f * density, r * 0.26f)
+        subText.textSize = textSize
+        val halfWidth = subText.measureText(label) * 0.5f + 9f * density
+        val height = textSize * 1.8f
+        // Above the button when there is room, below it otherwise, so the pill
+        // never leaves the screen on a control at the top edge.
+        val gap = 7f * density
+        val above = cy - r - gap - height >= 2f * density
+        val top = if (above) cy - r - gap - height else cy + r + gap
+        val cx = centreX(element).coerceIn(
+            halfWidth + 2f * density, max(halfWidth + 2f * density, width - halfWidth - 2f * density),
+        )
+        box.set(cx - halfWidth, top, cx + halfWidth, top + height)
+        fill.color = Color.argb(230, 9, 14, 22)
+        canvas.drawRoundRect(box, height / 2f, height / 2f, fill)
+        stroke.color = Color.argb(235, 56, 189, 248)
+        stroke.strokeWidth = max(1f, 1.4f * density)
+        canvas.drawRoundRect(box, height / 2f, height / 2f, stroke)
+        subText.color = Color.argb(255, 224, 242, 254)
+        canvas.drawText(
+            label, box.centerX(),
+            box.centerY() - (subText.descent() + subText.ascent()) / 2f, subText,
+        )
     }
 
     /**

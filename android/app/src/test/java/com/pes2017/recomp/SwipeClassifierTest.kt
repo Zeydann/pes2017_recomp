@@ -54,8 +54,39 @@ class SwipeClassifierTest {
     }
 
     @Test
-    fun aSlowDragIsNotASwipe() {
-        assertEquals(Swipe.NONE, flick(classifier(), 0f, -80f, atMs = 400L))
+    fun aHeldDragIsStillASwipe() {
+        // The pad sets no time limit: charging a shot and then choosing a
+        // variant is one deliberate gesture, not a slow flick to throw away.
+        assertEquals(Swipe.UP, flick(classifier(), 0f, -80f, atMs = 900L))
+    }
+
+    @Test
+    fun aTimeLimitStillRejectsASlideWhenTheCallerAsksForOne() {
+        val timed = SwipeClassifier(minTravelPx = 54f, maxDurationMs = 300L)
+        assertEquals(Swipe.NONE, flick(timed, 0f, -80f, atMs = 400L))
+        assertEquals(Swipe.UP, flick(timed, 0f, -80f, atMs = 120L))
+    }
+
+    @Test
+    fun thePadsShortThresholdReadsAnOrdinaryDrag() {
+        // 10 dp on a 64 dp button is a thumb moving off the spot, not a flick
+        // across the screen; the pad uses this threshold for every button.
+        val pad = SwipeClassifier(minTravelPx = 10f)
+        assertEquals(Swipe.RIGHT, flick(pad, 14f, 2f))
+        assertEquals(Swipe.NONE, flick(pad, 6f, 2f))
+    }
+
+    @Test
+    fun nearestAxisReadingHasNoDiagonalDeadBand() {
+        // Action buttons ask for dominance 1: a 45-degree drag is still a
+        // direction, because the thumb leaned somewhere.
+        val pad = SwipeClassifier(minTravelPx = 10f)
+        pad.begin(1, 100f, 100f, 0L, SwipeClassifier.CARDINAL_DOMINANCE)
+        pad.move(1, 171f, 29f)
+        assertEquals(Swipe.RIGHT, pad.end(1, 120L))
+        pad.begin(2, 100f, 100f, 0L, SwipeClassifier.CARDINAL_DOMINANCE)
+        pad.move(2, 171f, 172f)
+        assertEquals(Swipe.DOWN, pad.end(2, 120L))
     }
 
     @Test

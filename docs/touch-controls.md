@@ -44,13 +44,16 @@ How a compound swipe is emitted (`SwipeSequence`, scheduled by the overlay):
 | Binding | What the pad sends |
 |---|---|
 | `A` (plain) | one press pulse of A on the lift (the existing path) |
-| `LB + A` | LB down; 30 ms later LB+A; 120 ms later everything up |
-| `RT + X` | right trigger 255; 30 ms later RT + X; 120 ms later both up |
-| `B ×2` | B; 90 ms gap; B; clear |
+| `LB + A` | LB down; 50 ms later LB+A; 50 ms later everything up |
+| `RT + X` | right trigger 255; 50 ms later RT + X; 50 ms later both up |
+| `B ×2` | B; 50 ms gap; B; clear |
 
 The modifier leads the button by one step so the title reads it the way it
 reads a hand, the pair is held for several polls, and **every sequence ends
-with an all-clear step**. The overlay also calls `ComboHold.clear()` from every
+with an all-clear step**. A swipe on a button that is already held for a charge
+is the exception: its modifier is held live beside the button (see below), so
+the charge is not interrupted and the combination is already present when the
+thumb lifts. The overlay also calls `ComboHold.clear()` from every
 cancellation path -- lift of the next swipe, `ACTION_CANCEL`, pause, window
 focus loss, the editor, the pad being hidden -- so a modifier or trigger can
 never be left down. Only one compound swipe is in flight at a time; starting a
@@ -85,20 +88,35 @@ own base + modifier scheme:
 
 Caveats:
 
-- **Button swipes are direct.** A flick on an action button sends the direction
+- **Button swipes are direct.** A drag on an action button sends the direction
   the thumb ended on and nothing else. The fake shot's drag used to compete for
   the same gesture; it is gone, so `SwipePriority` only asks whether the
   direction was bound, and a bound direction always fires.
-- A slide holds the button normally for the whole travel and releases it on the
-  lift, so a plain tap is unchanged. A **bound** direction adds the sequence
-  above; an unbound one adds nothing.
+- **One rule for taps and swipes.** A thumb that lifts where it landed is a tap
+  and sends the control's normal action through its held bit and press pulse; a
+  thumb that ends 10 dp (about a sixth of a 64 dp button) away is a swipe. The
+  direction is the nearest axis, so a 45-degree drag is still read rather than
+  falling into a dead band, and there is **no time limit**: holding a button to
+  charge and then dragging is one deliberate gesture. The ten spares (C1–C10)
+  use exactly the same rule.
+- **Charging with a direction.** While the thumb is down on an action button and
+  a bound direction has a modifier, the modifier is held alongside the button
+  (`HoldSource.SWIPE_HOLD`). A chip shot is therefore LB arriving while X is
+  charging, and the lift releases both; the timed sequence is only used when the
+  modifier became known as the thumb left, so the command is never sent twice.
+- A floating label over the button names the live direction — "Chip Shot", "Low
+  Cross", "One-Two" — and stays until the finger lifts (`drawSwipeHud`,
+  `SwipeLabels`).
 - A double tap and a modifier can be stored in the same slot (the data model
   allows it), but the sequence builder gives the double tap precedence. The
   editor sets one at a time.
-- The sequences are timed for a title polling at 30-60 Hz: 30 ms is at least one
-  poll, 120 ms several. They have not been tuned on a device.
-- The dedicated SWIPE patch uses the same bindings and is independent of the
-  action buttons.
+- The sequences are timed for a title polling at 30-60 Hz: one 50 ms dwell is
+  at least one poll and usually two. They have not been tuned on a device.
+- The dedicated SWIPE patch uses the same bindings and the same nearest-axis
+  reading; it is independent of the action buttons.
+- L1/R1 and Start/Select are not swipe targets. The shoulders are the modifiers
+  other swipes already hold, and the menu buttons belong to the title, so the
+  editor no longer offers four directions for them.
 
 ## Double-tapping pass (the one-two)
 
@@ -110,6 +128,21 @@ The single tap is untouched. The first press already sent its pass bit, and the
 second press is a press of its own, so a tap that misses the window degrades
 into two ordinary passes rather than nothing at all. A completed pair is
 consumed, so three taps are a pair and a single rather than two pairs.
+
+## Layouts and the custom toggles
+
+The editor's **Layouts…** button (also under **More**) opens save, load and
+export directly: "Save current as…", "Export current layout…", the two factory
+pads, all five numbered slots (empty ones are still listed as save targets),
+every named pad and "Import layout…". Export writes a `pes17-controls` envelope
+to the cache and hands it to the system share sheet; import reads a document
+through the system picker and applies nothing unless the whole file validates.
+
+TG1 and TG2 each have their own **TG mapping** selector. A slot chosen there is
+put on screen when the toggle is engaged: one tap swaps the pad without opening
+the editor. The switch lets go of every bit and latch first, so nothing from the
+old arrangement can survive into the new one. A toggle with no mapping is still
+a plain latch, and the mapping is stored in the layout file as `profile`.
 
 ## The movement stick
 
