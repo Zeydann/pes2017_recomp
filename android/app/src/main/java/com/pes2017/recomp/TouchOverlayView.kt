@@ -50,6 +50,9 @@ class TouchOverlayView @JvmOverloads constructor(
     /** Told when a control was moved or resized, so the layout can be saved. */
     var onLayoutEdited: (() -> Unit)? = null
 
+    /** Called just before an editor gesture changes the layout, for undo. */
+    var onEditStarted: (() -> Unit)? = null
+
     var editing: Boolean = false
         set(value) {
             if (field == value) return
@@ -283,6 +286,21 @@ class TouchOverlayView @JvmOverloads constructor(
         pathEffect = DashPathEffect(floatArrayOf(10f * density, 8f * density), 0f)
     }
     private val path = Path()
+
+    // The short press light. Only the ids that have been touched since the view
+    // was made are in these maps, so an idle pad draws exactly what it drew
+    // before the theme existed.
+    private val pressAnimAt = HashMap<String, Long>()
+    private val releaseAnimAt = HashMap<String, Long>()
+    private var drawWorkNanos = 0L
+    private var drawSamples = 0
+    private var drawSlowFrames = 0
+
+    /** Set when the pad's own light has cost too much for three samples in a row. */
+    private var effectsDegraded = false
+
+    private val effects: Boolean
+        get() = !effectsDegraded && ControlTheme.animated(prefs.controlFx)
     private val box = RectF()
     private val tempRect = RectF()
 
@@ -294,16 +312,18 @@ class TouchOverlayView @JvmOverloads constructor(
 
     // ---- geometry ----------------------------------------------------------
 
-    private fun centreX(element: ControlElement) = element.xFrac * width
-    private fun centreY(element: ControlElement) = element.yFrac * height
-    private fun radius(element: ControlElement) = element.sizeDp * density * 0.5f
+    // Stance-aware: a control the player gave its own defending-pad place is
+    // drawn, hit-tested and edited there while that pad is out.
+    private fun centreX(element: ControlElement) = element.xFracOn(stance) * width
+    private fun centreY(element: ControlElement) = element.yFracOn(stance) * height
+    private fun radius(element: ControlElement) = element.sizeOn(stance) * density * 0.5f
 
     /** How far the knob travels inside its socket, as a fraction of the radius. */
     private val stickTravel = 0.62f
 
     /** The look area is a rectangle; everything else is a circle. */
     private fun rectOf(element: ControlElement, into: RectF) {
-        val halfWidth = element.sizeDp * density * 0.5f
+        val halfWidth = element.sizeOn(stance) * density * 0.5f
         val halfHeight = halfWidth * 0.62f
         into.set(
             centreX(element) - halfWidth, centreY(element) - halfHeight,
@@ -328,12 +348,24 @@ class TouchOverlayView @JvmOverloads constructor(
         // The editor sees everything, whatever the title is doing: a control
         // that is not on screen right now still has to be movable.
         val showAll = includeHidden || editing
+        // Nearest centre wins, not first in the list. The touch slack makes the
+        // hit areas of two neighbours overlap by a few dp; the thumb that lands
+        // in that strip means the control it is closest to, and the answer no
+        // longer depends on the order the file happens to list them in.
+        var nearest: ControlElement? = null
+        var nearestDistance = Float.MAX_VALUE
         for (element in layout.elements) {
             if (element.kind == ControlKind.LOOK) continue
             if (!available(element)) continue
             if (!showAll && !element.shownIn(gamePhase, stance)) continue
-            if (hit(element, x, y)) return element
+            if (!hit(element, x, y)) continue
+            val distance = hypot(centreX(element) - x, centreY(element) - y)
+            if (distance < nearestDistance) {
+                nearest = element
+                nearestDistance = distance
+            }
         }
+        if (nearest != null) return nearest
         // A floating movement stick is where the thumb lands, not where it was
         // drawn: in play its half of the screen is its own. Every control that
         // shares that half has been looked for already, so a shoulder button at
@@ -672,6 +704,7 @@ class TouchOverlayView @JvmOverloads constructor(
         }
         triggerHaptic()
         pressAt[pointerId] = floatArrayOf(x, y)
+        markPressed(element)
         // Pressed again inside its grace, a trigger is held, not released.
         if (element.kind == ControlKind.TRIGGER) triggerReleaseAt.remove(element.id)
         // A bounce of the sprint button is still a hold; it just does not need
@@ -713,7 +746,7 @@ class TouchOverlayView @JvmOverloads constructor(
                 // The fake shot's state belongs to the thumb that started on
                 // shoot; a press anywhere else drops whatever was left there.
                 fakeShots.remove(pointerId)
-                if (element.sub == "SHOOT") {
+                if (element.role == ControlRole.SHOOT) {
                     fakeShots[pointerId] = FakeShotGesture(FAKE_SHOT_TRAVEL * density)
                 }
             }
@@ -744,6 +777,7 @@ class TouchOverlayView @JvmOverloads constructor(
             return false
         }
         val released = claims.release(pointerId) ?: return false
+        markReleased(released.element)
         val pressedAt = pressAt.remove(pointerId)
         dpadBits.remove(pointerId)
         liveSwipes.remove(pointerId)
@@ -1007,6 +1041,7 @@ class TouchOverlayView @JvmOverloads constructor(
                 // one back on is impossible otherwise.
                 val element = elementAt(x, y, includeHidden = true)
                 if (element != null) {
+                    onEditStarted?.invoke()
                     select(element)
                     dragPointer = event.getPointerId(0)
                     dragElement = element
@@ -1026,7 +1061,7 @@ class TouchOverlayView @JvmOverloads constructor(
                 if (element != null && event.pointerCount == 2) {
                     pinching = true
                     pinchStartDistance = max(1f, spread(event))
-                    pinchStartSize = element.sizeDp
+                    pinchStartSize = element.sizeOn(stance)
                 }
             }
 
@@ -1034,8 +1069,10 @@ class TouchOverlayView @JvmOverloads constructor(
                 val element = dragElement ?: selected ?: return true
                 if (pinching && event.pointerCount >= 2) {
                     val scale = spread(event) / pinchStartDistance
-                    element.sizeDp = (pinchStartSize * scale)
-                        .coerceIn(minimumSize(element), maximumSize(element))
+                    element.setSize(
+                        (pinchStartSize * scale).coerceIn(minimumSize(element), maximumSize(element)),
+                        stance,
+                    )
                     dragMoved = true
                     onSelectionChanged?.invoke(element)
                     invalidate()
@@ -1053,8 +1090,8 @@ class TouchOverlayView @JvmOverloads constructor(
                 // Kept on screen, with a margin so nothing hides under the
                 // gesture bar or a punch-hole camera.
                 val margin = 8f * density
-                element.xFrac = (x.coerceIn(margin, width - margin)) / max(1, width)
-                element.yFrac = (y.coerceIn(margin, height - margin)) / max(1, height)
+                element.setX((x.coerceIn(margin, width - margin)) / max(1, width), stance)
+                element.setY((y.coerceIn(margin, height - margin)) / max(1, height), stance)
                 dragMoved = true
                 invalidate()
             }
@@ -1092,7 +1129,7 @@ class TouchOverlayView @JvmOverloads constructor(
         repeat(24) {
             var moved = false
             for (other in layout.elements) {
-                if (other === element || !other.visible || other.kind == ControlKind.LOOK) continue
+                if (other === element || !other.visibleIn(stance) || other.kind == ControlKind.LOOK) continue
                 val dx = centreX(element) - centreX(other)
                 val dy = centreY(element) - centreY(other)
                 val distance = hypot(dx, dy)
@@ -1105,8 +1142,8 @@ class TouchOverlayView @JvmOverloads constructor(
                 val r = radius(element) + margin
                 val x = (centreX(element) + ux * push).coerceIn(r, max(r, width - r))
                 val y = (centreY(element) + uy * push).coerceIn(r, max(r, height - r))
-                element.xFrac = x / width
-                element.yFrac = y / height
+                element.setX(x / width, stance)
+                element.setY(y / height, stance)
                 moved = true
             }
             if (!moved) {
@@ -1115,6 +1152,79 @@ class TouchOverlayView @JvmOverloads constructor(
             }
         }
         invalidate()
+    }
+
+    /** Notes the press for the light, if the pad is drawing any. */
+    private fun markPressed(element: ControlElement) {
+        if (!ControlTheme.animated(prefs.controlFx)) return
+        pressAnimAt[element.id] = SystemClock.uptimeMillis()
+        releaseAnimAt.remove(element.id)
+    }
+
+    /** Starts the fade after a lift; the control keeps its place and its glyph. */
+    private fun markReleased(element: ControlElement) {
+        if (!ControlTheme.animated(prefs.controlFx)) return
+        releaseAnimAt[element.id] = SystemClock.uptimeMillis()
+    }
+
+    /** How lit a control is right now, 0 when the pad is idle. */
+    private fun effectAmount(element: ControlElement, now: Long): Float {
+        if (!effects) return 0f
+        val down = pressAnimAt[element.id] ?: return 0f
+        val up = releaseAnimAt[element.id] ?: 0L
+        val held = isOn(element)
+        return ControlTheme.pressAmount(held, down, up, now)
+    }
+
+    /**
+     * Whether another frame is worth drawing, and forgets the lights that have
+     * finished. Only the view's own short animations ask for frames: there is
+     * no continuous loop while the pad is idle.
+     */
+    private fun animateEffects(now: Long): Boolean {
+        if (!effects) return false
+        var running = false
+        val finished = ArrayList<String>(2)
+        for ((id, down) in pressAnimAt) {
+            val up = releaseAnimAt[id] ?: 0L
+            val since = now - (if (up >= down) up else down)
+            if (since >= 0L && since <= ControlTheme.RELEASE_MS + ControlTheme.PULSE_MS) {
+                running = true
+            } else if (up >= down && up != 0L) {
+                finished.add(id)
+            }
+        }
+        for (id in finished) {
+            pressAnimAt.remove(id)
+            releaseAnimAt.remove(id)
+        }
+        return running
+    }
+
+    /**
+     * Keeps the pad from spending the match's frame budget on its own glow. The
+     * average is over thirty draws, so one slow frame (a texture upload, a
+     * notification) does not turn the light off.
+     */
+    private fun noteDrawCost(nanos: Long) {
+        if (!effects) return
+        drawWorkNanos += nanos
+        drawSamples++
+        if (drawSamples < 30) return
+        val average = drawWorkNanos / drawSamples
+        drawWorkNanos = 0L
+        drawSamples = 0
+        if (average <= ControlTheme.FRAME_BUDGET_NS) {
+            drawSlowFrames = 0
+            return
+        }
+        drawSlowFrames++
+        if (drawSlowFrames >= 3) {
+            effectsDegraded = true
+            pressAnimAt.clear()
+            releaseAnimAt.clear()
+            invalidate()
+        }
     }
 
     private fun minimumSize(element: ControlElement): Float =
@@ -1131,6 +1241,7 @@ class TouchOverlayView @JvmOverloads constructor(
     // ---- drawing ------------------------------------------------------------------
 
     override fun onDraw(canvas: Canvas) {
+        val drawStart = System.nanoTime()
         for (element in layout.elements) {
             // A palette button the runtime cannot play is not drawn at all: a
             // control that does nothing is worse than one that is not there.
@@ -1140,7 +1251,8 @@ class TouchOverlayView @JvmOverloads constructor(
             // over the pitch.
             if (!editing && !element.shownIn(gamePhase, stance)) continue
             val faded = editing && !element.shownIn(gamePhase, stance)
-            val alpha = if (editing) max(0.28f, element.alpha) else element.alpha
+            val stanceAlpha = element.alphaOn(stance)
+            val alpha = if (editing) max(0.28f, stanceAlpha) else stanceAlpha
             when (element.kind) {
                 ControlKind.LOOK -> drawLook(canvas, element, faded)
                 ControlKind.STICK -> drawStick(canvas, element, alpha, faded)
@@ -1160,6 +1272,8 @@ class TouchOverlayView @JvmOverloads constructor(
             }
             if (editing && element === selected) drawSelection(canvas, element)
         }
+        if (animateEffects(SystemClock.uptimeMillis())) postInvalidateOnAnimation()
+        noteDrawCost(System.nanoTime() - drawStart)
     }
 
     /**
@@ -1340,13 +1454,37 @@ class TouchOverlayView @JvmOverloads constructor(
             else -> 0xFF94A3B8.toInt()
         }
 
-        // Refined pressed-state aura feedback
-        if (pressed) {
+        // The press light: an aura that grows on the press and fades on the
+        // lift. With effects off it falls back to the flat disc this control
+        // always had, so the pad reads the same, just without the motion.
+        val fx = effectAmount(element, SystemClock.uptimeMillis())
+        if (fx > 0f) {
+            fill.color = Color.argb(
+                (alpha * fadeFactor * (70f + 45f * fx)).toInt().coerceIn(0, 255),
+                Color.red(glowColor), Color.green(glowColor), Color.blue(glowColor),
+            )
+            canvas.drawCircle(cx, cy, r * (1.08f + 0.05f * fx), fill)
+            if (ControlTheme.pulsed(prefs.controlFx)) {
+                stroke.color = Color.argb(
+                    (alpha * fadeFactor * 110f * fx).toInt().coerceIn(0, 255),
+                    Color.red(glowColor), Color.green(glowColor), Color.blue(glowColor),
+                )
+                stroke.strokeWidth = max(1f, r * 0.022f)
+                canvas.drawCircle(cx, cy, r * (1.16f + 0.12f * fx), stroke)
+            }
+        } else if (pressed) {
             fill.color = Color.argb(
                 (alpha * fadeFactor * 90).toInt().coerceIn(0, 255),
                 Color.red(glowColor), Color.green(glowColor), Color.blue(glowColor),
             )
             canvas.drawCircle(cx, cy, r * 1.08f, fill)
+        }
+
+        val pressScale = ControlTheme.scale(fx)
+        val scaled = pressScale < 0.999f
+        if (scaled) {
+            canvas.save()
+            canvas.scale(pressScale, pressScale, cx, cy)
         }
 
         if (isFaceButton) {
@@ -1522,6 +1660,7 @@ class TouchOverlayView @JvmOverloads constructor(
             text.textSize = r * (if (element.label.length > 2) 0.52f else 0.8f)
             canvas.drawText(element.label, cx, cy - (text.descent() + text.ascent()) * 0.5f, text)
         }
+        if (scaled) canvas.restore()
     }
 
     /** Whether any of this control's four directions sends something. */

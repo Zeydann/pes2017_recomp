@@ -7,6 +7,12 @@ import java.io.File
 import kotlin.math.max
 import kotlin.math.min
 
+/** The retuned pad: the default for fresh installs. */
+const val PROFILE_MODERN = "modern"
+
+/** The spacing before the 64 dp retune, kept for players who liked it. */
+const val PROFILE_CLASSIC = "classic"
+
 /** What a control does when it is touched. */
 enum class ControlKind {
     /** A round button that holds one of the pad's bits while it is down. */
@@ -91,6 +97,31 @@ enum class PadStance {
 }
 
 /**
+ * What an action button does, independent of the words printed on it. A player
+ * may rename `SHOOT` to anything; the fake shot must still know which button
+ * fires the shot, so behaviour reads this rather than the caption.
+ */
+enum class ControlRole {
+    NONE,
+    PASS,
+    SHOOT,
+    CROSS,
+    THROUGH,
+    ;
+
+    companion object {
+        /** The role that belongs to a pad bit, by the title's default binding. */
+        fun of(bit: Int): ControlRole = when (bit) {
+            NativeBridge.A -> PASS
+            NativeBridge.B -> CROSS
+            NativeBridge.X -> SHOOT
+            NativeBridge.Y -> THROUGH
+            else -> NONE
+        }
+    }
+}
+
+/**
  * What the title is doing, as the runtime reports it. [STARTING] and [UNKNOWN]
  * keep the menus' controls: a build that cannot tell says nothing, and hiding a
  * d-pad because of a guess would be worse than leaving it where the player put
@@ -125,8 +156,8 @@ data class ControlElement(
     val id: String,
     val kind: ControlKind,
     /** The pad bit (BUTTON), or which trigger (TRIGGER: 0 left, 1 right). */
-    val value: Int,
-    val label: String,
+    var value: Int,
+    var label: String,
     var xFrac: Float,
     var yFrac: Float,
     var sizeDp: Float,
@@ -135,9 +166,20 @@ data class ControlElement(
     /** Tap to hold, tap again to let go. */
     var toggle: Boolean = false,
     /** What it does on the ball (or, for a stick, a short name), drawn on the control. */
-    val sub: String = "",
+    var sub: String = "",
     /** What it does without the ball -- defending -- drawn smaller beneath. */
-    val sub2: String = "",
+    var sub2: String = "",
+    /** What the control does, for behaviour that must survive a renamed label. */
+    var role: ControlRole = ControlRole.NONE,
+    // Geometry for the defending pad, when the player wants the same control
+    // somewhere else (or a different size) with the ball at their feet. Null
+    // means "the same as attacking", so a layout made before this keeps the
+    // single position it always had.
+    var defendX: Float? = null,
+    var defendY: Float? = null,
+    var defendSize: Float? = null,
+    var defendAlpha: Float? = null,
+    var defendVisible: Boolean? = null,
     /** Which of the title's screens it belongs to. */
     var shownWhen: PhaseMask = PhaseMask.ALWAYS,
     // What a SWIPE sends for each direction. 0 is "nothing", which is how a
@@ -183,7 +225,75 @@ data class ControlElement(
     }
     /** Whether it is on screen at all: the player's switch, the phase and the pad, all three. */
     fun shownIn(phase: GamePhase, stance: PadStance = PadStance.ATTACK): Boolean =
-        visible && phase.shows(shownWhen, stance)
+        visibleIn(stance) && phase.shows(shownWhen, stance)
+
+    // ---- per-stance geometry ------------------------------------------------
+
+    /** The horizontal position on [stance]'s pad. */
+    fun xFracOn(stance: PadStance): Float =
+        if (stance == PadStance.DEFEND) defendX ?: xFrac else xFrac
+
+    /** The vertical position on [stance]'s pad. */
+    fun yFracOn(stance: PadStance): Float =
+        if (stance == PadStance.DEFEND) defendY ?: yFrac else yFrac
+
+    /** The size on [stance]'s pad. */
+    fun sizeOn(stance: PadStance): Float =
+        if (stance == PadStance.DEFEND) defendSize ?: sizeDp else sizeDp
+
+    /** The opacity on [stance]'s pad. */
+    fun alphaOn(stance: PadStance): Float =
+        if (stance == PadStance.DEFEND) defendAlpha ?: alpha else alpha
+
+    /** Whether the player shows it on [stance]'s pad. */
+    fun visibleIn(stance: PadStance): Boolean =
+        if (stance == PadStance.DEFEND) defendVisible ?: visible else visible
+
+    /** Whether this control has its own defending-pad geometry at all. */
+    fun hasDefendOverride(): Boolean =
+        defendX != null || defendY != null || defendSize != null ||
+            defendAlpha != null || defendVisible != null
+
+    // The editor writes through these, so a change made while the defending
+    // pad is out lands on the defending copy rather than moving both.
+    fun setX(x: Float, stance: PadStance) {
+        if (stance == PadStance.DEFEND) defendX = x else xFrac = x
+    }
+
+    fun setY(y: Float, stance: PadStance) {
+        if (stance == PadStance.DEFEND) defendY = y else yFrac = y
+    }
+
+    fun setSize(size: Float, stance: PadStance) {
+        if (stance == PadStance.DEFEND) defendSize = size else sizeDp = size
+    }
+
+    fun setAlpha(value: Float, stance: PadStance) {
+        if (stance == PadStance.DEFEND) defendAlpha = value else alpha = value
+    }
+
+    fun setVisible(value: Boolean, stance: PadStance) {
+        if (stance == PadStance.DEFEND) defendVisible = value else visible = value
+    }
+
+    /** Starts a distinct defending-pad copy at today's attacking values. */
+    fun splitStance() {
+        if (hasDefendOverride()) return
+        defendX = xFrac
+        defendY = yFrac
+        defendSize = sizeDp
+        defendAlpha = alpha
+        defendVisible = true
+    }
+
+    /** Drops the defending-pad copy, so both pads share the attacking values again. */
+    fun mergeStance() {
+        defendX = null
+        defendY = null
+        defendSize = null
+        defendAlpha = null
+        defendVisible = null
+    }
 
     /**
      * What one swipe direction sends on this control: its own pad bit, or 0 for
@@ -237,23 +347,66 @@ data class ControlElement(
 class ControlLayout private constructor(
     val elements: MutableList<ControlElement>,
     /** The window the defaults were laid out for, so a reset puts things back there. */
-    private val widthDp: Float,
-    private val heightDp: Float,
+    val widthDp: Float,
+    val heightDp: Float,
+    /** Which factory pad a reset restores: [PROFILE_MODERN] or [PROFILE_CLASSIC]. */
+    var profile: String = PROFILE_MODERN,
 ) {
+
+    /** Ids the player took off the pad, so a reload does not put them back. */
+    private val removed = LinkedHashSet<String>()
 
     fun find(id: String): ControlElement? = elements.firstOrNull { it.id == id }
 
+    /** Puts a control back on the pad; a second copy of one id is refused. */
+    fun add(element: ControlElement): Boolean {
+        if (find(element.id) != null) return false
+        removed.remove(element.id)
+        elements.add(element)
+        return true
+    }
+
+    /** Takes a control off the pad, remembering it so a reload honours the choice. */
+    fun remove(id: String): Boolean {
+        if (id == "stick" || id == "look") return false
+        val had = elements.removeAll { it.id == id }
+        if (had) removed.add(id)
+        return had
+    }
+
     fun resetAll() {
-        val fresh = defaults(widthDp, heightDp)
+        val fresh = defaults(widthDp, heightDp, profile)
         elements.clear()
         elements.addAll(fresh.elements)
+        removed.clear()
     }
 
     fun reset(id: String) {
-        val fresh = defaults(widthDp, heightDp).find(id) ?: return
+        val fresh = defaults(widthDp, heightDp, profile).find(id) ?: return
         val index = elements.indexOfFirst { it.id == id }
-        if (index >= 0) elements[index] = fresh
+        if (index >= 0) elements[index] = fresh else elements.add(fresh)
+        removed.remove(id)
     }
+
+    /** Copies another pad over this one, for undo, profiles and backup restore. */
+    fun replaceWith(other: ControlLayout) {
+        elements.clear()
+        elements.addAll(other.elements)
+        removed.clear()
+        removed.addAll(other.removed)
+        profile = other.profile
+    }
+
+    /** Restores a snapshot written by [toJson]; false if it cannot be read. */
+    fun restoreFrom(json: String): Boolean {
+        val parsed = parse(json, widthDp, heightDp) ?: return false
+        replaceWith(parsed)
+        return true
+    }
+
+    /** The controls a fresh pad has that this one does not: the add palette. */
+    fun missingControls(): List<ControlElement> =
+        defaults(widthDp, heightDp, profile).elements.filter { find(it.id) == null }
 
     fun toJson(): String {
         val array = JSONArray()
@@ -267,6 +420,21 @@ class ControlLayout private constructor(
             item.put("visible", element.visible)
             item.put("toggle", element.toggle)
             item.put("when", element.shownWhen.name)
+            item.put("role", element.role.name)
+            item.put("label", element.label)
+            if (element.sub.isNotEmpty()) item.put("sub", element.sub)
+            if (element.sub2.isNotEmpty()) item.put("sub2", element.sub2)
+            // Only a control the player has given a separate defending pad
+            // writes the object; every other control stays one set of numbers.
+            if (element.hasDefendOverride()) {
+                val defend = JSONObject()
+                element.defendX?.let { defend.put("x", it.toDouble()) }
+                element.defendY?.let { defend.put("y", it.toDouble()) }
+                element.defendSize?.let { defend.put("size", it.toDouble()) }
+                element.defendAlpha?.let { defend.put("alpha", it.toDouble()) }
+                element.defendVisible?.let { defend.put("visible", it) }
+                item.put("defend", defend)
+            }
             if (element.swipeUp != 0 || element.swipeDown != 0 ||
                 element.swipeLeft != 0 || element.swipeRight != 0 || element.swipeTap != 0
             ) {
@@ -303,13 +471,25 @@ class ControlLayout private constructor(
         }
         val root = JSONObject()
         root.put("version", FORMAT_VERSION)
+        root.put("w", widthDp.toDouble())
+        root.put("h", heightDp.toDouble())
+        root.put("profile", profile)
         root.put("elements", array)
+        if (removed.isNotEmpty()) root.put("removed", JSONArray(removed.toList()))
         return root.toString(2)
     }
 
     fun save(context: Context) {
         try {
             val file = File(context.filesDir, FILE_NAME)
+            // The file being replaced becomes the one-generation backup, so a
+            // reset or a bad edit can always be walked back once.
+            if (file.exists()) {
+                try {
+                    file.copyTo(File(context.filesDir, BACKUP_NAME), overwrite = true)
+                } catch (_: Throwable) {
+                }
+            }
             // Written beside and moved into place: a layout being saved as
             // the process is killed must not leave a half-written file that
             // the next start cannot read.
@@ -325,9 +505,24 @@ class ControlLayout private constructor(
         }
     }
 
+    /** Restores the previous saved pad; false when there is no backup. */
+    fun restoreBackup(context: Context): Boolean {
+        val text = try {
+            File(context.filesDir, BACKUP_NAME).readText()
+        } catch (_: Throwable) {
+            return false
+        }
+        if (!restoreFrom(text)) return false
+        save(context)
+        return true
+    }
+
     companion object {
         private const val FILE_NAME = "controls.json"
-        private const val FORMAT_VERSION = 6
+        private const val BACKUP_NAME = "controls.backup.json"
+        private const val BROKEN_NAME = "controls.broken.json"
+        private const val PROFILE_PREFIX = "controls_profile_"
+        private const val FORMAT_VERSION = 7
 
         /** The four directions, in the order the file and the editor list them. */
         private val DIRECTIONS = arrayOf(Swipe.UP, Swipe.DOWN, Swipe.LEFT, Swipe.RIGHT)
@@ -349,86 +544,208 @@ class ControlLayout private constructor(
             }
             val widthDp = max(widthPx, heightPx) / metrics.density
             val heightDp = min(widthPx, heightPx) / metrics.density
-            val layout = defaults(widthDp, heightDp)
+            val fallback = defaults(widthDp, heightDp)
             val file = File(context.filesDir, FILE_NAME)
-            if (!file.exists()) return layout
-            try {
-                val root = JSONObject(file.readText())
-                val version = root.optInt("version", 1)
-                if (version < FORMAT_VERSION) {
-                    // An older layout (the shooter's look area, the d-pad, the old places): start over.
-                    try { file.delete() } catch (_: Throwable) {}
-                    return layout
-                }
-                val array = root.optJSONArray("elements") ?: return layout
-                for (i in 0 until array.length()) {
-                    val item = array.optJSONObject(i) ?: continue
-                    // Only what the app still knows about: an element dropped
-                    // in a later version is ignored rather than resurrected,
-                    // and a new one keeps its default.
-                    val element = layout.find(item.optString("id")) ?: continue
-                    element.xFrac = item.optDouble("x", element.xFrac.toDouble())
-                        .toFloat().coerceIn(0.02f, 0.98f)
-                    element.yFrac = item.optDouble("y", element.yFrac.toDouble())
-                        .toFloat().coerceIn(0.02f, 0.98f)
-                    element.sizeDp = item.optDouble("size", element.sizeDp.toDouble())
-                        .toFloat().coerceIn(32f, 900f)
-                    element.alpha = item.optDouble("alpha", element.alpha.toDouble())
-                        .toFloat().coerceIn(0.05f, 1f)
-                    element.visible = item.optBoolean("visible", element.visible)
-                    element.toggle = item.optBoolean("toggle", element.toggle)
-                    // Optional: a layout written before phases existed leaves the
-                    // element where it always was, and the version stays put so
-                    // nobody loses their pad over one new field.
-                    element.shownWhen = runCatching {
-                        PhaseMask.valueOf(item.optString("when", element.shownWhen.name))
-                    }.getOrDefault(element.shownWhen)
-                    item.optJSONArray("swipes")?.let { swipes ->
-                        element.swipeUp = swipes.optInt(0, element.swipeUp)
-                        element.swipeDown = swipes.optInt(1, element.swipeDown)
-                        element.swipeLeft = swipes.optInt(2, element.swipeLeft)
-                        element.swipeRight = swipes.optInt(3, element.swipeRight)
-                        element.swipeTap = swipes.optInt(4, element.swipeTap)
-                        // A file written before compound bindings held plain
-                        // bits only: the defaults' modifiers and double taps
-                        // must not attach themselves to the player's bits. A
-                        // file with `swipeActions` re-applies them below.
-                        element.swipeUpMod = SwipeModifier.NONE
-                        element.swipeDownMod = SwipeModifier.NONE
-                        element.swipeLeftMod = SwipeModifier.NONE
-                        element.swipeRightMod = SwipeModifier.NONE
-                        element.swipeUpDouble = false
-                        element.swipeDownDouble = false
-                        element.swipeLeftDouble = false
-                        element.swipeRightDouble = false
-                    }
-                    // Optional and additive: a player's saved layout keeps its
-                    // plain bits, and the compound half is read over the top
-                    // when this build wrote it.
-                    item.optJSONArray("trick")?.let { moves ->
-                        for (sector in 0 until min(element.trickMoves.size, moves.length())) {
-                            element.setTrickMove(sector, moves.optInt(sector, element.trickMoves[sector]))
-                        }
-                    }
-                    item.optJSONArray("swipeActions")?.let { actions ->
-                        for (index in 0 until min(DIRECTIONS.size, actions.length())) {
-                            val entry = actions.optJSONObject(index) ?: continue
-                            val modifier = runCatching {
-                                SwipeModifier.valueOf(entry.optString("m", SwipeModifier.NONE.name))
-                            }.getOrDefault(SwipeModifier.NONE)
-                            element.setSwipeAction(
-                                DIRECTIONS[index],
-                                SwipeAction(entry.optInt("b", element.swipeBit(DIRECTIONS[index])),
-                                    modifier, entry.optBoolean("d", false)),
-                            )
-                        }
-                    }
-                }
+            if (!file.exists()) return fallback
+            val text = try {
+                file.readText()
             } catch (_: Throwable) {
-                return defaults(widthDp, heightDp)
+                return fallback
             }
-            return layout
+            val parsed = parse(text, widthDp, heightDp)
+            if (parsed == null) {
+                // Kept, not deleted: the file may come from a newer build, and
+                // destroying a player's pad to recover from it is worse than
+                // starting this session on the factory one.
+                try {
+                    file.copyTo(File(context.filesDir, BROKEN_NAME), overwrite = true)
+                } catch (_: Throwable) {
+                }
+                return fallback
+            }
+            return parsed
         }
+
+        /**
+         * Reads a pad written by [toJson]. Every version is migrated onto the
+         * current defaults rather than discarded: an element this build does
+         * not know is left out, and one it has gained keeps its default. A null
+         * means the text is not a layout at all (or comes from a newer build).
+         */
+        fun parse(text: String, fallbackWidthDp: Float = 800f, fallbackHeightDp: Float = 360f): ControlLayout? {
+            return try {
+                val root = JSONObject(text)
+                if (root.optInt("version", 1) > FORMAT_VERSION) return null
+                val widthDp = root.optDouble("w", fallbackWidthDp.toDouble())
+                    .toFloat().coerceIn(320f, 2400f)
+                val heightDp = root.optDouble("h", fallbackHeightDp.toDouble())
+                    .toFloat().coerceIn(240f, 1600f)
+                val profile = root.optString("profile", PROFILE_MODERN)
+                val layout = defaults(widthDp, heightDp, profile)
+                applyJson(root, layout)
+                sanitize(layout)
+                layout
+            } catch (_: Throwable) {
+                null
+            }
+        }
+
+        private fun applyJson(root: JSONObject, layout: ControlLayout) {
+            val array = root.optJSONArray("elements") ?: return
+            for (i in 0 until array.length()) {
+                val item = array.optJSONObject(i) ?: continue
+                // Only what the app still knows about: an element dropped in a
+                // later version is ignored rather than resurrected, and a new
+                // one keeps its default.
+                val element = layout.find(item.optString("id")) ?: continue
+                element.xFrac = item.optDouble("x", element.xFrac.toDouble())
+                    .toFloat().coerceIn(0.02f, 0.98f)
+                element.yFrac = item.optDouble("y", element.yFrac.toDouble())
+                    .toFloat().coerceIn(0.02f, 0.98f)
+                element.sizeDp = item.optDouble("size", element.sizeDp.toDouble())
+                    .toFloat().coerceIn(32f, 900f)
+                element.alpha = item.optDouble("alpha", element.alpha.toDouble())
+                    .toFloat().coerceIn(0.05f, 1f)
+                element.visible = item.optBoolean("visible", element.visible)
+                element.toggle = item.optBoolean("toggle", element.toggle)
+                if (item.has("label")) element.label = item.optString("label", element.label).take(8)
+                if (item.has("sub")) element.sub = item.optString("sub", element.sub).take(8)
+                if (item.has("sub2")) element.sub2 = item.optString("sub2", element.sub2).take(8)
+                element.role = if (item.has("role")) {
+                    runCatching {
+                        ControlRole.valueOf(item.optString("role", element.role.name))
+                    }.getOrDefault(ControlRole.of(element.value))
+                } else {
+                    // Files from before roles: the title's default binding.
+                    ControlRole.of(element.value)
+                }
+                // Optional: a layout written before phases existed leaves the
+                // element where it always was, and the version stays put so
+                // nobody loses their pad over one new field.
+                element.shownWhen = runCatching {
+                    PhaseMask.valueOf(item.optString("when", element.shownWhen.name))
+                }.getOrDefault(element.shownWhen)
+                // The defending-pad copy, when the player made one.
+                item.optJSONObject("defend")?.let { defend ->
+                    if (defend.has("x")) element.defendX = defend.optDouble("x", element.xFrac.toDouble())
+                        .toFloat().coerceIn(0.02f, 0.98f)
+                    if (defend.has("y")) element.defendY = defend.optDouble("y", element.yFrac.toDouble())
+                        .toFloat().coerceIn(0.02f, 0.98f)
+                    if (defend.has("size")) element.defendSize = defend.optDouble("size", element.sizeDp.toDouble())
+                        .toFloat().coerceIn(32f, 900f)
+                    if (defend.has("alpha")) element.defendAlpha = defend.optDouble("alpha", element.alpha.toDouble())
+                        .toFloat().coerceIn(0.05f, 1f)
+                    if (defend.has("visible")) element.defendVisible = defend.optBoolean("visible", element.visible)
+                }
+                item.optJSONArray("swipes")?.let { swipes ->
+                    element.swipeUp = swipes.optInt(0, element.swipeUp)
+                    element.swipeDown = swipes.optInt(1, element.swipeDown)
+                    element.swipeLeft = swipes.optInt(2, element.swipeLeft)
+                    element.swipeRight = swipes.optInt(3, element.swipeRight)
+                    element.swipeTap = swipes.optInt(4, element.swipeTap)
+                    // A file written before compound bindings held plain bits
+                    // only: the defaults' modifiers and double taps must not
+                    // attach themselves to the player's bits. A file with
+                    // `swipeActions` re-applies them below.
+                    element.swipeUpMod = SwipeModifier.NONE
+                    element.swipeDownMod = SwipeModifier.NONE
+                    element.swipeLeftMod = SwipeModifier.NONE
+                    element.swipeRightMod = SwipeModifier.NONE
+                    element.swipeUpDouble = false
+                    element.swipeDownDouble = false
+                    element.swipeLeftDouble = false
+                    element.swipeRightDouble = false
+                }
+                // Optional and additive: a player's saved layout keeps its
+                // plain bits, and the compound half is read over the top when
+                // this build wrote it.
+                item.optJSONArray("trick")?.let { moves ->
+                    for (sector in 0 until min(element.trickMoves.size, moves.length())) {
+                        element.setTrickMove(sector, moves.optInt(sector, element.trickMoves[sector]))
+                    }
+                }
+                item.optJSONArray("swipeActions")?.let { actions ->
+                    for (index in 0 until min(DIRECTIONS.size, actions.length())) {
+                        val entry = actions.optJSONObject(index) ?: continue
+                        val modifier = runCatching {
+                            SwipeModifier.valueOf(entry.optString("m", SwipeModifier.NONE.name))
+                        }.getOrDefault(SwipeModifier.NONE)
+                        element.setSwipeAction(
+                            DIRECTIONS[index],
+                            SwipeAction(entry.optInt("b", element.swipeBit(DIRECTIONS[index])),
+                                modifier, entry.optBoolean("d", false)),
+                        )
+                    }
+                }
+            }
+            // Controls the player removed stay removed; an id the file has no
+            // element for was never on the pad to begin with.
+            root.optJSONArray("removed")?.let { gone ->
+                for (i in 0 until gone.length()) {
+                    val id = gone.optString(i, "")
+                    if (id.isNotEmpty()) layout.remove(id)
+                }
+            }
+        }
+
+        /**
+         * Repairs a layout that could not be read cleanly: the movement stick
+         * and the camera region are not optional, and a pad with almost nothing
+         * left on it is indistinguishable from a broken file, so it starts over.
+         */
+        private fun sanitize(layout: ControlLayout) {
+            for (id in listOf("stick", "look")) {
+                if (layout.find(id) == null) {
+                    defaults(layout.widthDp, layout.heightDp, layout.profile).find(id)
+                        ?.let { layout.elements.add(it) }
+                }
+            }
+            if (layout.elements.count { it.visible } < 3) layout.resetAll()
+        }
+
+        // ---- profiles ------------------------------------------------------
+
+        private fun profileFile(context: Context, name: String): File? {
+            val safe = name.trim().lowercase().replace(Regex("[^a-z0-9_-]"), "_")
+            if (safe.isEmpty()) return null
+            return File(context.filesDir, PROFILE_PREFIX + safe + ".json")
+        }
+
+        /** Saves the pad as a named profile; false when the name is unusable. */
+        fun saveProfile(context: Context, layout: ControlLayout, name: String): Boolean {
+            val file = profileFile(context, name) ?: return false
+            return try {
+                file.writeText(layout.toJson())
+                true
+            } catch (_: Throwable) {
+                false
+            }
+        }
+
+        fun listProfiles(context: Context): List<String> {
+            val files = context.filesDir.listFiles() ?: return emptyList()
+            return files
+                .filter { it.name.startsWith(PROFILE_PREFIX) && it.name.endsWith(".json") }
+                .map { it.name.removePrefix(PROFILE_PREFIX).removeSuffix(".json") }
+                .sorted()
+        }
+
+        fun loadProfile(context: Context, name: String): ControlLayout? {
+            val file = profileFile(context, name) ?: return null
+            val text = try {
+                file.readText()
+            } catch (_: Throwable) {
+                return null
+            }
+            return parse(text)
+        }
+
+        fun deleteProfile(context: Context, name: String): Boolean {
+            val file = profileFile(context, name) ?: return false
+            return file.delete()
+        }
+
+        fun hasBackup(context: Context): Boolean = File(context.filesDir, BACKUP_NAME).exists()
 
         /**
          * Where everything starts: a football pad laid out for thumbs, the way
@@ -452,7 +769,11 @@ class ControlLayout private constructor(
          * The game's default binding, for reference: Cross pass, Circle shoot,
          * Square lob / cross, Triangle through pass, R1 sprint, L1 change player.
          */
-        fun defaults(widthDp: Float = 800f, heightDp: Float = 360f): ControlLayout {
+        fun defaults(
+            widthDp: Float = 800f,
+            heightDp: Float = 360f,
+            profile: String = PROFILE_MODERN,
+        ): ControlLayout {
             val w = max(widthDp, 320f)
             val h = max(heightDp, 240f)
 
@@ -465,6 +786,7 @@ class ControlLayout private constructor(
                 id, kind, value, label,
                 (if (x >= 0f) x else w + x) / w, (if (y >= 0f) y else h + y) / h,
                 size, alpha, visible, shownWhen = shownWhen, sub = sub, sub2 = sub2,
+                role = ControlRole.of(value),
             )
 
             val centre = w / 2f
@@ -480,10 +802,14 @@ class ControlLayout private constructor(
                     // ball. The title already decides that from possession; the
                     // pad only has to say so (`sub2` is drawn in the defending
                     // stance).
-                    place("a", ControlKind.BUTTON, NativeBridge.A, "A", -110f, -52f, 68f, sub = "PASS", sub2 = "PRESS"),
-                    place("b", ControlKind.BUTTON, NativeBridge.B, "B", -52f, -110f, 68f, sub = "CROSS", sub2 = "TEAM"),
-                    place("x", ControlKind.BUTTON, NativeBridge.X, "X", -168f, -110f, 68f, sub = "SHOOT", sub2 = "SLIDE"),
-                    place("y", ControlKind.BUTTON, NativeBridge.Y, "Y", -110f, -168f, 68f, sub = "THROUGH", sub2 = "GK"),
+                    // 64 dp across: the diamond's diagonals now clear by 7.5 dp
+                    // with both touch slacks counted, instead of the old 68 dp
+                    // pad's 2 dp. Pass sits a little higher so the gap to B and
+                    // X is the same in both directions.
+                    place("a", ControlKind.BUTTON, NativeBridge.A, "A", -110f, -54f, 64f, sub = "PASS", sub2 = "PRESS"),
+                    place("b", ControlKind.BUTTON, NativeBridge.B, "B", -48f, -110f, 64f, sub = "CROSS", sub2 = "TEAM"),
+                    place("x", ControlKind.BUTTON, NativeBridge.X, "X", -172f, -110f, 64f, sub = "SHOOT", sub2 = "SLIDE"),
+                    place("y", ControlKind.BUTTON, NativeBridge.Y, "Y", -110f, -172f, 64f, sub = "THROUGH", sub2 = "GK"),
 
                     // The shoulders where a pad has them: L2 / L1 along the top left,
                     // R1 / R2 along the top right, triggers outermost. LB is an
@@ -497,7 +823,7 @@ class ControlLayout private constructor(
                     // and clear of it and of the slide tackle: the top-left LB is
                     // across the screen from the right thumb. Same LB bit, so no
                     // binding changes; shown only on the defending pad.
-                    place("switch", ControlKind.BUTTON, NativeBridge.LB, "LB", -205f, -45f, 56f,
+                    place("switch", ControlKind.BUTTON, NativeBridge.LB, "LB", -212f, -45f, 56f,
                         shownWhen = PhaseMask.DEFEND, sub2 = "SWITCH"),
 
                     // The stance chip: one tap flips the pad, the labels follow,
@@ -571,11 +897,31 @@ class ControlLayout private constructor(
                     place("start", ControlKind.BUTTON, NativeBridge.START, "START", centre + 60f, 37f, 54f, 0.75f),
                     place("back", ControlKind.BUTTON, NativeBridge.BACK, "SELECT", centre - 40f, 37f, 54f, 0.75f),
                 ),
-                widthDp, heightDp,
+                widthDp, heightDp, profile,
             )
+            if (profile == PROFILE_CLASSIC) applyClassicSpacing(pad, w, h)
             applyDefaultSwipes(pad)
             applyDefaultTrick(pad)
             return pad
+        }
+
+        /**
+         * The pad as it was before the retune: 68 dp actions, the old diamond
+         * and the old switch spot. Offered as a profile so an update does not
+         * move a thumb that had learned where things were.
+         */
+        private fun applyClassicSpacing(pad: ControlLayout, w: Float, h: Float) {
+            fun place(id: String, x: Float, y: Float, size: Float) {
+                val element = pad.find(id) ?: return
+                element.xFrac = (if (x >= 0f) x else w + x) / w
+                element.yFrac = (if (y >= 0f) y else h + y) / h
+                element.sizeDp = size
+            }
+            place("a", -110f, -52f, 68f)
+            place("b", -52f, -110f, 68f)
+            place("x", -168f, -110f, 68f)
+            place("y", -110f, -168f, 68f)
+            place("switch", -205f, -45f, 56f)
         }
 
         /**

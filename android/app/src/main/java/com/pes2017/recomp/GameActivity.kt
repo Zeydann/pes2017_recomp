@@ -920,6 +920,9 @@ class GameActivity : AppCompatActivity(), NativeListener {
         val labels = mutableListOf(
             getString(R.string.resume) to { _: android.content.DialogInterface -> },
             getString(R.string.edit_controls) to { _: android.content.DialogInterface -> beginEditing() },
+            getString(R.string.controls_guide) to { _: android.content.DialogInterface ->
+                startActivity(Intent(this, ControlGuideActivity::class.java))
+            },
         )
         // Macros are a test tool: only with developer tools on (Settings > Advanced).
         // Recording has its own button beside Menu; playing is picked here.

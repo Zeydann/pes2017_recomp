@@ -282,6 +282,114 @@ answers `Unknown` and the app never learns that a match has started. The stance
 chip is therefore the only on-pitch way to change pads; automatic switching needs
 that address chain derived first.
 
+## The pad's look
+
+The pad is drawn with a small shared palette (`ControlTheme`): near-black glass
+under every control, a coloured rim per family, and a white specular arc on the
+face buttons. Effects are **SUBTLE by default**: on a press the control settles
+by 4 % over 90 ms and a soft aura in its own accent grows; on the lift the light
+fades over 140 ms. There is no idle animation and no full-screen tint, so the
+pitch stays readable and a resting pad costs exactly what it did before.
+
+- `Prefs.controlFx` is `subtle` (default), `full` (adds an expanding ring) or
+  `off` (flat colours, no frames). Settings → Controls → **Touch effects**
+  toggles subtle/off.
+- Frames are requested only while a press is inside its 90 + 140 ms window
+  (`postInvalidateOnAnimation`); an idle pad does not redraw itself.
+- The overlay times its own draw. If the average exceeds 6 ms over thirty
+  draws for three samples in a row, effects turn themselves off for the rest
+  of the session; the controls stay exactly where they are.
+- Durations are fixed and short (90/140 ms), so the pad never feels like it
+  is animating at the player rather than responding to them.
+
+## Spacing and the gesture corridor
+
+The factory pad (`PROFILE_MODERN`, 800 × 360 reference) puts the four actions
+64 dp across, spread a little wider than the old diamond:
+A `-110, -54`, B `-48, -110`, X `-172, -110`, Y `-110, -172` (all from the
+nearest edge). With both 6 dp touch slacks counted, every diagonal pair now
+clears by **7.5 dp** instead of 1–2 dp. The defending switch moved to
+`-212, -45` and clears X by 4.3 dp while staying 17 dp above the bottom edge.
+`PROFILE_CLASSIC` restores the previous 68 dp diamond and switch position
+verbatim for anyone who preferred it.
+
+Two rules keep it honest:
+
+- **Nearest centre wins.** Two hit areas can still overlap by the slack. The
+  control whose centre is closest to the finger is the one claimed, regardless
+  of the order in the file (the old code took the first in the list).
+- **Gesture corridors.** `GestureCorridor` checks each bound direction as a
+  32 dp line from the button's centre: it must end inside the usable screen
+  (8 dp side margin, 16 dp bottom inset) and must not pass within another
+  control's radius plus slack. The editor prints "Swipe tracks clear" or the
+  direction and what blocks it; `TouchGeometryTest` walks all sixteen default
+  bindings and the skill ring.
+
+## Input safety, in invariants
+
+1. **Ownership.** A bit exists only because a pointer is claimed by the control
+   that owns it; `pushState` reads claims, never raw coordinates.
+2. **Movement is movement.** The stick branch writes stick axes only. The
+   sprint latch writes only RB. No stick position can become A/B/X/Y.
+3. **Swipes are local.** A swipe starts only on a `BUTTON` or the `SWIPE`
+   patch, and is read only on that finger's lift. A finger that landed on the
+   stick can never produce a swipe.
+4. **The fake shot is local.** Only a button whose **role** is `SHOOT` arms it.
+   Roles survive renaming, so a cosmetic label cannot move the gesture.
+5. **The stance chip holds nothing** and does not release another thumb's
+   button; controls that leave the pad simply stop being sent.
+6. **Nothing survives a cancel.** Pause, hide, focus loss and `ACTION_CANCEL`
+   cancel the wheel timer, combos, trigger grace, pulses and held arms.
+
+## Customizing the pad
+
+Settings → Controls → **Arrange** (or pause → Edit controls) opens the same
+editor as before, with a **More…** menu on the strip:
+
+- **Change binding…** for an action button: any pad bit, or none. The role
+  follows the bit automatically (A pass, B cross, X shoot, Y through).
+- **Rename…**: the printed name and the on-ball caption. Behaviour uses the
+  role, not the text.
+- **Different on the defending pad**: snapshots the control's current place,
+  size, opacity and visibility into a defending copy. While the DEF pad is out,
+  dragging and the sliders edit that copy; choose the menu again to merge it.
+- **Add a control…**: restores any factory control the player removed (d-pad,
+  L3/R3, skill palette, second LB, and so on). The movement stick and camera
+  region cannot be removed.
+- **Remove this control.** Undo brings it back; the removal is remembered in
+  the file.
+- **Undo / Redo**: twenty snapshots per editing session, including drags and
+  pinch-resizes.
+- **Profiles…**: load the Modern or Classic factory pad, save the current pad
+  under a name, or load/delete a saved profile. Profiles are plain JSON files
+  beside `controls.json`.
+
+## Saving, repair and the way back
+
+`controls.json` is now **version 7**. Older files are migrated onto the current
+defaults (positions, sizes, swipes and wheel kept; unknown ids dropped; new
+controls defaulted) instead of being deleted as before. The file records the
+per-stance copy, role, display names, and removed controls.
+
+- Every `save()` rotates the previous file to `controls.backup.json`.
+- If the file cannot be parsed, it is copied to `controls.broken.json` and the
+  session starts on the factory pad; nothing is deleted.
+- On load, the movement stick and camera region are restored if missing, and a
+  pad with fewer than three visible controls is treated as broken and reset.
+- **Restore default controls** (Settings → Controls, and the editor's Reset
+  all) confirms, saves the current pad as the backup, then writes the factory
+  pad for the active profile.
+- **Restore last backup** brings back the one generation kept.
+
+## The control guide
+
+`ControlGuideActivity` is a full-screen, landscape guide reached from the
+launcher (**Controls guide**) and from the pause menu. Its cards read the
+player's **current** layout: the live wheel sectors, the defending labels, and
+every bound swipe on the action buttons, plus essentials, dribbling, input
+safety and where the editor lives. It is built from the same glass/accent
+tokens as the pad and has no image assets to drift out of date.
+
 ## Verification
 
 - `PadGesturesTest`: sprint latch and fake-shot arming, every compound sequence
@@ -300,6 +408,15 @@ that address chain derived first.
   pads, the four defensive names, that the chip holds no bit, and that neither
   new control overlaps any other control on its own pad (a numeric clearance
   test, so a later default move fails loudly).
+- `TouchGeometryTest`: the retuned diamond keeps at least 6 dp between every
+  pair, every default swipe's corridor is clear, the skill ring clears every
+  control on the attacking pad, and the new controls stay out of the bottom
+  gesture inset.
+- `LayoutSerializationTest`: a v7 round trip keeps roles, names and the
+  defending copy; a v6 file is migrated rather than dropped; a removed control
+  stays removed across a reload; the stick cannot be removed; `resetAll`
+  restores 64 dp modern spacing; the Classic profile is 68 dp; unreadable and
+  newer files are refused without throwing.
 - `StickVectorTest`: normalisation for both stick modes.
 - The Kotlin tests need a JVM and Android SDK (not available in the cloud
   workspace); the C++ host checks in `tests/` pass (see `PROJECT_HANDOFF.md`).

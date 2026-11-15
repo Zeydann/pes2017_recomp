@@ -310,6 +310,8 @@
     <string name="gamepad_p2_hint">Touch controls stay player 1; the first physical controller drives player 2. Takes effect when a match is started.</string>
     <string name="gamepad_hint">Turn off to ignore controllers entirely. Some phones report an accessory as a gamepad with a stick that is not centred, which makes a player run on his own.</string>
     <string name="vibration">Vibration</string>
+    <string name="control_fx">Touch effects</string>
+    <string name="control_fx_hint">Soft glow and a short press animation on the pad. Turn off if the pad feels heavy or the phone runs warm.</string>
     <string name="flick_skill_stick">Flick the skill stick</string>
     <string name="flick_skill_stick_hint">Read feints from the flick of your thumb instead of its position on the stick. Eight directions, with a moment of nothing between them, so \"left, then right\" is two moves rather than one circle. Turn off for the older stick that follows the thumb exactly.</string>
     <string name="stick_mode">Movement stick</string>
@@ -395,4 +397,63 @@
     <string name="swipe_left">Left</string>
     <string name="swipe_right">Right</string>
     <string name="button_none">Nothing</string>
+
+    <!-- Pad editor: the deeper actions, and the corridor warning. -->
+    <string name="edit_more">More…</string>
+    <string name="clearance_clear">Swipe tracks clear</string>
+    <string name="clearance_blocked">%1$s blocked by %2$s</string>
+    <string name="nothing_to_undo">Nothing to undo</string>
+    <string name="nothing_to_redo">Nothing to redo</string>
+    <string name="edit_bind">Change binding…</string>
+    <string name="edit_rename">Rename…</string>
+    <string name="edit_label">Pad name</string>
+    <string name="edit_caption">On-ball caption</string>
+    <string name="edit_defend_split">Different on the defending pad</string>
+    <string name="edit_defend_merge">Use the attacking position again</string>
+    <string name="edit_add">Add a control…</string>
+    <string name="edit_add_none">Every control is already on the pad</string>
+    <string name="edit_remove">Remove this control</string>
+    <string name="edit_remove_required">The movement stick and the camera region are required</string>
+    <string name="edit_remove_confirm">Take %1$s off the pad? Restore defaults brings it back.</string>
+    <string name="edit_undo">Undo</string>
+    <string name="edit_redo">Redo</string>
+    <string name="edit_profiles">Profiles…</string>
+    <string name="profile_modern">Modern pad (default)</string>
+    <string name="profile_classic">Classic spacing</string>
+    <string name="profile_save_as">Save current as…</string>
+    <string name="profile_name">Profile name</string>
+    <string name="profile_saved">Profile saved</string>
+    <string name="profile_failed">Could not save that profile</string>
+    <string name="profile_load">Load</string>
+    <string name="profile_delete">Delete</string>
+
+    <!-- Settings: the failsafe. -->
+    <string name="restore_defaults">Restore default controls</string>
+    <string name="restore_defaults_hint">Puts every control back where the factory pad has it. Your current pad is kept as a backup first.</string>
+    <string name="restore_defaults_done">Controls restored</string>
+    <string name="restore_backup">Restore last backup</string>
+    <string name="restore_backup_hint">Brings back the pad from before the last reset or edit.</string>
+    <string name="restore_backup_done">Backup restored</string>
+    <string name="backup_missing">There is no backup yet</string>
+    <string name="restore_confirm_title">Restore default controls?</string>
+    <string name="restore_confirm_text">Every control goes back to the factory position, size and binding. The pad you have now is saved as a backup, and “Restore last backup” brings it back.</string>
+
+    <!-- The control guide. -->
+    <string name="controls_guide">Controls guide</string>
+    <string name="guide_intro">Everything the pad can do, read from the controls you are using now.</string>
+    <string name="guide_essentials">Essentials</string>
+    <string name="guide_essentials_text">Left thumb: move. The stick floats to where you land on the left half, or stays in its socket if you prefer it fixed. Push it to the rim to sprint, and it stays running until you pull back inside the release point. Right thumb: the action diamond.</string>
+    <string name="guide_dribbling">Dribbling</string>
+    <string name="guide_dribbling_text">Roll a thumb between pass, cross, shoot and through ball without lifting: the direction you leave in is read as a swipe. Hold RB and centre the stick to dummy. Tap RB twice for the burst.</string>
+    <string name="guide_wheel">Skill wheel</string>
+    <string name="guide_wheel_text">Hold SKILL for a moment and a ring of eight moves opens under your thumb. Slide into a sector and lift. A quick tap does nothing, so a resting thumb cannot set off a feint.</string>
+    <string name="guide_defending">Defending</string>
+    <string name="guide_defending_text">Tap the ATK/DEF chip to flip the pad. The action buttons keep their positions and gain a second label: press, team, slide and goalkeeper. The near-thumb LB switches player; the far LB is the attacking copy.</string>
+    <string name="guide_swipes">Swipes</string>
+    <string name="guide_swipes_text">Each action button can send a different command in each of its four directions. The arrows on the rim show what is bound; the editor lists every direction and warns when a track is blocked.</string>
+    <string name="guide_customization">Customization</string>
+    <string name="guide_customization_text">Pause and choose Edit controls, or Settings, Controls, Arrange. Move, resize, fade, hide, rebind, rename or remove any control, give one a different place on the defending pad, undo a mistake, or save the whole pad as a profile. Restore default controls is always one tap away.</string>
+    <string name="guide_security">Input safety</string>
+    <string name="guide_security_text">A touch belongs to the control it lands on until that finger lifts. Movement never becomes a shot, a swipe belongs to the button it started on, and the stance chip holds nothing down.</string>
+    <string name="guide_close">Close</string>
 </resources>

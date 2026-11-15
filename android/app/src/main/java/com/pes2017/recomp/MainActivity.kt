@@ -151,6 +151,10 @@ class MainActivity : AppCompatActivity() {
             showDetail(getString(R.string.graphics_driver), getString(R.string.driver_hint))
             startActivity(Intent(this, DriverActivity::class.java))
         }
+        findViewById<Button>(R.id.controls_guide).setOnClickListener {
+            select(it as Button)
+            startActivity(Intent(this, ControlGuideActivity::class.java))
+        }
         findViewById<Button>(R.id.settings).setOnClickListener {
             select(it as Button)
             showDetail(getString(R.string.entry_settings), getString(R.string.settings_hint))

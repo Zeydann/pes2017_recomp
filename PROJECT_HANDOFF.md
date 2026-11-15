@@ -1,6 +1,6 @@
 # PES 2017 Android — Project Handoff
 
-Last updated: 2026-11-14 (verification pass)
+Last updated: 2026-11-15 (touch-controls overhaul)
 
 ## Repository and branch
 
@@ -29,7 +29,11 @@ ISO importing and the Bluetooth/USB gamepad path were not modified.
 | Fake shot, Shoot → drag → Pass, cancelling the shot | Corrected to PES 2017's actual cancel rule (pass pressed while shoot is held); arming unit-tested; **not device-verified** |
 | Visible arrows and live direction feedback | Implemented; not device-tested |
 | Camera / LOOK region with sensitivity, smoothing, saturation, invert | Input path traced to the right stick; not device-tested; no separate user deadzone (see docs) |
-| Layout editor: move, resize, opacity, visibility, toggle, snap, keep-apart, reset, arrangement, per-button swipes | Implemented; add/remove of new controls is **not** implemented (controls can be hidden/shown) |
+| Layout editor: move, resize, opacity, visibility, toggle, snap, keep-apart, reset, arrangement, per-button swipes | Implemented, plus binding picker, display-name editing, per-stance defending copy, add/remove from the factory palette, 20-step undo/redo and named profiles |
+| Visual theme: glass surfaces, accent rims, short press glow/scale, draw-time safeguard, effects off switch | Implemented; pure timing helpers; **not device-profiled** |
+| Swipe corridors and collision-free spacing | 64 dp retune + nearest-centre hit testing + corridor checker and editor warning; geometrically unit-tested |
+| Failsafe: schema v7 migration, backup, repair-on-load, Restore defaults / Restore backup | Implemented; migration and reset unit-tested |
+| Control guide (launcher and pause menu, live bindings) | Implemented; not device-viewed |
 | Manual attacking/defending pads | Implemented (editor arrangement, Settings and pause-menu switch); automatic switching is **not** implemented and must not be claimed |
 | Skill palette and flick skill stick with native capability probes | Previously implemented; palette kept, hidden by default |
 | Skill wheel (hold, 8 sectors, native playback) | Implemented; pure geometry unit-tested; not device-tested |
@@ -84,6 +88,32 @@ The labels are presentation only -- the title reads the same bits by possession 
 and the slide-tackle button (X per the official Xbox manual, B per one 2017
 guide) still needs an in-title check. See `docs/touch-controls.md`.
 
+## Touch-controls overhaul (2026-11-15)
+
+- **Look.** `ControlTheme` gives the pad one palette: near-black glass, a rim
+  in each family's accent, a specular arc on the face buttons, and a short
+  press light (4 % settle over 90 ms, 140 ms fade). SUBTLE is the default;
+  FULL adds an expanding ring; OFF is flat. Frames are only requested inside
+  the press window, and the overlay turns its own effects off for the session
+  if its draw averages over 6 ms for three samples.
+- **Spacing.** Actions are 64 dp and pushed 4 dp outward: diagonals now clear
+  by 7.5 dp (was 1-2 dp). Switch moved to `-212, -45`. `PROFILE_CLASSIC`
+  restores the old pad exactly. Hit testing is nearest-centre, not list order.
+  `GestureCorridor` checks every bound direction for edge room and neighbours;
+  the editor reports it.
+- **Safety.** Stick and sprint latch still write only their own axes/bits;
+  swipes are local to the button; the fake shot now keys off `ControlRole`
+  (`SHOOT`) rather than the printed `sub`, so renaming cannot move it.
+- **Customization.** Editor "More…": change binding, rename, defending-pad
+  copy, add/remove control, undo/redo, profiles (Modern, Classic, named).
+- **Failsafe.** `controls.json` is v7; older files are migrated instead of
+  deleted; every save rotates `controls.backup.json`; unreadable files are
+  copied to `controls.broken.json` and the session starts on defaults;
+  Settings has Restore defaults and Restore last backup.
+- **Guide.** `ControlGuideActivity` from the launcher and the pause menu, with
+  cards built from the player's current layout (wheel sectors, defending
+  labels, bound swipes).
+
 ## Tests actually executed
 
 Host C++ checks, compiled directly with `g++ -std=c++20 -I runtime` (the repo's
@@ -111,11 +141,12 @@ That is the previous 281 checks plus 196 + 97 and the texture store, with
 `bc_decoder_test` (needs Vulkan headers, absent here), `durable_test` (pulls in
 `ppc_recomp_shared.h`, which only the recompiled guest build generates), and
 every Kotlin/JUnit test, including the new `PadGesturesTest`,
-`StickVectorTest`, `SwipeBindingsTest`, `SkillWheelTest`, `DefensiveLayoutTest` and the existing
-`TouchClaimsTest`,
-`SwipeClassifierTest`, `TouchMathTest`, `ControlLayoutPhaseTest` and
-`GamepadInputTest` -- this workspace has no JDK 17 and no Android SDK, and large
-downloads were deliberately not started.
+`StickVectorTest`, `SwipeBindingsTest`, `SkillWheelTest`, `DefensiveLayoutTest`,
+`TouchGeometryTest` and `LayoutSerializationTest`, and the existing
+`TouchClaimsTest`, `SwipeClassifierTest`, `TouchMathTest`,
+`ControlLayoutPhaseTest` and `GamepadInputTest` -- this workspace has no JDK 17
+and no Android SDK, and large downloads were deliberately not started. The two
+new test classes compile only by inspection here and have **not been run**.
 
 Static checks done: every modified Kotlin file balances its delimiters; every
 `res/**/*.xml` parses; `R.string`/`R.id` references resolve.

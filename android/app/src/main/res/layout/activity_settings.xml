@@ -502,6 +502,19 @@
                         android:text="@string/vibration" />
 
                     <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/control_fx"
+                        style="@style/SettingSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/control_fx" />
+
+                    <TextView
+                        style="@style/SettingHint"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/control_fx_hint" />
+
+                    <androidx.appcompat.widget.SwitchCompat
                         android:id="@+id/flick_skill_stick"
                         style="@style/SettingSwitch"
                         android:layout_width="match_parent"
@@ -619,6 +632,32 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="@string/arrange_controls_hint" />
+
+                    <Button
+                        android:id="@+id/restore_defaults"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:text="@string/restore_defaults" />
+
+                    <TextView
+                        style="@style/SettingHint"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/restore_defaults_hint" />
+
+                    <Button
+                        android:id="@+id/restore_backup"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="@string/restore_backup" />
+
+                    <TextView
+                        style="@style/SettingHint"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/restore_backup_hint" />
 
                 </LinearLayout>
 

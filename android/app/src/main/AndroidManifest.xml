@@ -106,6 +106,14 @@
             tools:ignore="DiscouragedApi,LockedOrientationActivity" />
 
         <activity
+            android:name=".ControlGuideActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
+            android:label="@string/controls_guide"
+            android:parentActivityName=".MainActivity"
+            android:theme="@style/Theme.PES17" />
+
+        <activity
             android:name=".ControlsEditorActivity"
             android:exported="false"
             android:parentActivityName=".SettingsActivity"

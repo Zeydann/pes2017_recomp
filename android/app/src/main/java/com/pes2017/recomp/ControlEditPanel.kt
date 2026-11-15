@@ -5,10 +5,12 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
+import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.widget.SwitchCompat
 import kotlin.math.roundToInt
@@ -30,6 +32,7 @@ class ControlEditPanel(
 ) {
     private val view: View = activity.layoutInflater.inflate(R.layout.edit_panel, root, false)
     private val title: TextView = view.findViewById(R.id.edit_title)
+    private val clearance: TextView = view.findViewById(R.id.edit_clearance)
     private val size: SeekBar = view.findViewById(R.id.edit_size)
     private val opacity: SeekBar = view.findViewById(R.id.edit_opacity)
     private val visible: SwitchCompat = view.findViewById(R.id.edit_visible)
@@ -110,6 +113,16 @@ class ControlEditPanel(
         actions.addView(wheel, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
         ).apply { marginStart = (6 * dp).roundToInt() })
+        val more = Button(activity).apply {
+            setText(R.string.edit_more)
+            textSize = 12f
+            minWidth = 0
+            minimumWidth = 0
+            setOnClickListener { showMore() }
+        }
+        actions.addView(more, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+        ).apply { marginStart = (6 * dp).roundToInt() })
         size.max = 100
         opacity.max = 100
         size.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
@@ -118,36 +131,47 @@ class ControlEditPanel(
                 val element = current ?: return
                 val smallest = if (element.kind == ControlKind.LOOK) 120f else 36f
                 val largest = if (element.kind == ControlKind.LOOK) 900f else 200f
-                element.sizeDp = smallest + (largest - smallest) * (value / 100f)
+                element.setSize(
+                    smallest + (largest - smallest) * (value / 100f), overlay.stance,
+                )
                 overlay.refresh()
             }
 
-            override fun onStartTrackingTouch(bar: SeekBar) = Unit
+            override fun onStartTrackingTouch(bar: SeekBar) {
+                remember()
+            }
+
             override fun onStopTrackingTouch(bar: SeekBar) {
                 // Grown into a neighbour: step it aside.
                 current?.let { overlay.keepApart(it) }
                 save()
+                current?.let { show(it) }
             }
         })
         opacity.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(bar: SeekBar, value: Int, fromUser: Boolean) {
                 if (!fromUser) return
                 val element = current ?: return
-                element.alpha = (value / 100f).coerceIn(0.05f, 1f)
+                element.setAlpha((value / 100f).coerceIn(0.05f, 1f), overlay.stance)
                 overlay.refresh()
             }
 
-            override fun onStartTrackingTouch(bar: SeekBar) = Unit
+            override fun onStartTrackingTouch(bar: SeekBar) {
+                remember()
+            }
+
             override fun onStopTrackingTouch(bar: SeekBar) = save()
         })
         visible.setOnCheckedChangeListener { _, checked ->
             val element = current ?: return@setOnCheckedChangeListener
-            if (element.visible == checked) return@setOnCheckedChangeListener
-            element.visible = checked
+            if (element.visibleIn(overlay.stance) == checked) return@setOnCheckedChangeListener
+            remember()
+            element.setVisible(checked, overlay.stance)
             if (checked) overlay.keepApart(element)
             overlay.refresh()
             save()
         }
+        overlay.onEditStarted = { remember() }
         toggle.setOnCheckedChangeListener { _, checked ->
             val element = current ?: return@setOnCheckedChangeListener
             element.toggle = checked
@@ -156,6 +180,7 @@ class ControlEditPanel(
         snap.setOnCheckedChangeListener { _, checked -> overlay.snapToGrid = checked }
         actions.findViewById<Button>(R.id.edit_reset_one).setOnClickListener {
             val element = current ?: return@setOnClickListener
+            remember()
             overlay.layout.reset(element.id)
             val fresh = overlay.layout.find(element.id)
             if (fresh != null) overlay.keepApart(fresh)
@@ -170,6 +195,7 @@ class ControlEditPanel(
                 .setMessage(R.string.reset_all_explained)
                 .setNegativeButton(R.string.cancel, null)
                 .setPositiveButton(R.string.reset) { _, _ ->
+                    remember()
                     overlay.layout.resetAll()
                     overlay.select(null)
                     overlay.refresh()
@@ -204,6 +230,7 @@ class ControlEditPanel(
         AlertDialog.Builder(activity)
             .setTitle(R.string.arrangement)
             .setSingleChoiceItems(labels, masks.indexOf(element.shownWhen)) { dialog, which ->
+                remember()
                 element.shownWhen = masks[which]
                 overlay.refresh()
                 show(element)
@@ -253,10 +280,13 @@ class ControlEditPanel(
         AlertDialog.Builder(activity)
             .setTitle(R.string.swipe_direction)
             .setItems(labels) { _, which ->
+                remember()
                 setSwipeBinding(element, direction, options[which])
                 // Shown straight away: an unbound swipe stays hidden, and a
                 // player who has just bound one expects to see it.
-                if (options[which].bound && !element.visible) element.visible = true
+                if (options[which].bound && !element.visibleIn(overlay.stance)) {
+                    element.setVisible(true, overlay.stance)
+                }
                 overlay.refresh()
                 show(element)
                 save()
@@ -323,6 +353,7 @@ class ControlEditPanel(
         AlertDialog.Builder(activity)
             .setTitle(R.string.skill_wheel_sector_title)
             .setItems(labels) { _, which ->
+                remember()
                 element.setTrickMove(sector, if (which == 0) -1 else which - 1)
                 overlay.refresh()
                 show(element)
@@ -382,6 +413,286 @@ class ControlEditPanel(
         else -> "D-PAD RIGHT"
     }
 
+    // ---- the deeper editor --------------------------------------------------
+
+    /** Twenty steps of undo: a pad is small, and a snapshot is its json. */
+    private val history = ArrayDeque<String>()
+    private val future = ArrayDeque<String>()
+
+    private fun remember() {
+        history.addLast(overlay.layout.toJson())
+        while (history.size > 20) history.removeFirst()
+        future.clear()
+    }
+
+    private fun undo() {
+        if (history.isEmpty()) {
+            Toast.makeText(activity, R.string.nothing_to_undo, Toast.LENGTH_SHORT).show()
+            return
+        }
+        val snapshot = history.removeLast()
+        future.addLast(overlay.layout.toJson())
+        restore(snapshot)
+    }
+
+    private fun redo() {
+        if (future.isEmpty()) {
+            Toast.makeText(activity, R.string.nothing_to_redo, Toast.LENGTH_SHORT).show()
+            return
+        }
+        val snapshot = future.removeLast()
+        history.addLast(overlay.layout.toJson())
+        restore(snapshot)
+    }
+
+    private fun restore(snapshot: String) {
+        if (!overlay.layout.restoreFrom(snapshot)) return
+        overlay.select(null)
+        show(null)
+        overlay.refresh()
+        save()
+    }
+
+    /**
+     * The corridor each swipe has to travel, or what stands in it. This is the
+     * warning the plan promised: a direction bound towards the edge or through
+     * a neighbour is still allowed, but the player hears about it here rather
+     * than from a flick that did nothing.
+     */
+    private fun showClearance(element: ControlElement) {
+        if (element.kind != ControlKind.BUTTON && element.kind != ControlKind.SWIPE) {
+            clearance.visibility = View.GONE
+            return
+        }
+        val problems = GestureCorridor.problems(element, overlay.layout)
+        clearance.visibility = View.VISIBLE
+        clearance.text = if (problems.isEmpty()) {
+            activity.getString(R.string.clearance_clear)
+        } else {
+            problems.entries.joinToString("   ") { (direction, ids) ->
+                activity.getString(R.string.clearance_blocked, direction.name, ids.joinToString(", "))
+            }
+        }
+    }
+
+    private fun showMore() {
+        val element = current ?: return
+        val labels = ArrayList<String>(8)
+        val actions = ArrayList<() -> Unit>(8)
+        if (element.kind == ControlKind.BUTTON) {
+            labels.add(activity.getString(R.string.edit_bind))
+            actions.add { pickBinding(element) }
+        }
+        labels.add(activity.getString(R.string.edit_rename))
+        actions.add { rename(element) }
+        labels.add(
+            activity.getString(
+                if (element.hasDefendOverride()) R.string.edit_defend_merge else R.string.edit_defend_split,
+            ),
+        )
+        actions.add { toggleDefendCopy(element) }
+        labels.add(activity.getString(R.string.edit_add))
+        actions.add { addControl() }
+        labels.add(activity.getString(R.string.edit_remove))
+        actions.add { removeControl(element) }
+        labels.add(activity.getString(R.string.edit_undo))
+        actions.add { undo() }
+        labels.add(activity.getString(R.string.edit_redo))
+        actions.add { redo() }
+        labels.add(activity.getString(R.string.edit_profiles))
+        actions.add { showProfiles() }
+        AlertDialog.Builder(activity)
+            .setTitle(R.string.edit_more)
+            .setItems(labels.toTypedArray()) { _, which -> actions[which].invoke() }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun pickBinding(element: ControlElement) {
+        val bits = intArrayOf(
+            0, NativeBridge.A, NativeBridge.B, NativeBridge.X, NativeBridge.Y,
+            NativeBridge.LB, NativeBridge.RB, NativeBridge.START, NativeBridge.BACK,
+            NativeBridge.L3, NativeBridge.R3, NativeBridge.UP, NativeBridge.DOWN,
+            NativeBridge.LEFT, NativeBridge.RIGHT,
+        )
+        val labels = Array(bits.size) { bitName(bits[it]) }
+        AlertDialog.Builder(activity)
+            .setTitle(R.string.edit_bind)
+            .setItems(labels) { _, which ->
+                remember()
+                element.value = bits[which]
+                element.role = ControlRole.of(element.value)
+                overlay.refresh()
+                show(element)
+                save()
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun rename(element: ControlElement) {
+        val dp = activity.resources.displayMetrics.density
+        val box = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding((20 * dp).roundToInt(), (8 * dp).roundToInt(), (20 * dp).roundToInt(), 0)
+        }
+        val name = EditText(activity).apply {
+            setText(element.label)
+            hint = activity.getString(R.string.edit_label)
+        }
+        val caption = EditText(activity).apply {
+            setText(element.sub)
+            hint = activity.getString(R.string.edit_caption)
+        }
+        box.addView(name)
+        box.addView(caption)
+        AlertDialog.Builder(activity)
+            .setTitle(R.string.edit_rename)
+            .setView(box)
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                remember()
+                element.label = name.text.toString().trim().take(8).ifEmpty { element.label }
+                element.sub = caption.text.toString().trim().take(8)
+                overlay.refresh()
+                show(element)
+                save()
+            }
+            .show()
+    }
+
+    private fun toggleDefendCopy(element: ControlElement) {
+        remember()
+        if (element.hasDefendOverride()) element.mergeStance() else element.splitStance()
+        overlay.refresh()
+        show(element)
+        save()
+    }
+
+    private fun addControl() {
+        val missing = overlay.layout.missingControls()
+        if (missing.isEmpty()) {
+            Toast.makeText(activity, R.string.edit_add_none, Toast.LENGTH_SHORT).show()
+            return
+        }
+        val labels = Array(missing.size) { index ->
+            ControlLayout.labelFor(missing[index], overlay.playStation) + "  (" + missing[index].id + ")"
+        }
+        AlertDialog.Builder(activity)
+            .setTitle(R.string.edit_add)
+            .setItems(labels) { _, which ->
+                remember()
+                val added = missing[which]
+                if (overlay.layout.add(added)) {
+                    overlay.keepApart(added)
+                    overlay.select(added)
+                    show(added)
+                    overlay.refresh()
+                    save()
+                }
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun removeControl(element: ControlElement) {
+        if (element.id == "stick" || element.id == "look") {
+            Toast.makeText(activity, R.string.edit_remove_required, Toast.LENGTH_SHORT).show()
+            return
+        }
+        AlertDialog.Builder(activity)
+            .setTitle(R.string.edit_remove)
+            .setMessage(activity.getString(R.string.edit_remove_confirm,
+                ControlLayout.labelFor(element, overlay.playStation)))
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.edit_remove) { _, _ ->
+                remember()
+                overlay.layout.remove(element.id)
+                overlay.select(null)
+                show(null)
+                overlay.refresh()
+                save()
+            }
+            .show()
+    }
+
+    // ---- profiles -----------------------------------------------------------
+
+    private fun showProfiles() {
+        val saved = ControlLayout.listProfiles(activity)
+        val labels = ArrayList<String>(3 + saved.size)
+        labels.add(activity.getString(R.string.profile_modern))
+        labels.add(activity.getString(R.string.profile_classic))
+        labels.add(activity.getString(R.string.profile_save_as))
+        labels.addAll(saved)
+        AlertDialog.Builder(activity)
+            .setTitle(R.string.edit_profiles)
+            .setItems(labels.toTypedArray()) { _, which ->
+                when {
+                    which == 0 -> loadBuiltIn(PROFILE_MODERN)
+                    which == 1 -> loadBuiltIn(PROFILE_CLASSIC)
+                    which == 2 -> saveProfileDialog()
+                    else -> profileActions(saved[which - 3])
+                }
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun loadBuiltIn(profile: String) {
+        remember()
+        overlay.layout.replaceWith(
+            ControlLayout.defaults(overlay.layout.widthDp, overlay.layout.heightDp, profile),
+        )
+        overlay.select(null)
+        show(null)
+        overlay.refresh()
+        save()
+    }
+
+    private fun saveProfileDialog() {
+        val dp = activity.resources.displayMetrics.density
+        val input = EditText(activity).apply {
+            hint = activity.getString(R.string.profile_name)
+            setPadding((20 * dp).roundToInt(), (8 * dp).roundToInt(), (20 * dp).roundToInt(), 0)
+        }
+        AlertDialog.Builder(activity)
+            .setTitle(R.string.profile_save_as)
+            .setView(input)
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                val name = input.text.toString().trim()
+                val ok = name.isNotEmpty() && ControlLayout.saveProfile(activity, overlay.layout, name)
+                Toast.makeText(
+                    activity,
+                    if (ok) R.string.profile_saved else R.string.profile_failed,
+                    Toast.LENGTH_SHORT,
+                ).show()
+            }
+            .show()
+    }
+
+    private fun profileActions(name: String) {
+        AlertDialog.Builder(activity)
+            .setTitle(name)
+            .setItems(arrayOf(activity.getString(R.string.profile_load),
+                activity.getString(R.string.profile_delete))) { _, which ->
+                if (which == 0) {
+                    val loaded = ControlLayout.loadProfile(activity, name) ?: return@setItems
+                    remember()
+                    overlay.layout.replaceWith(loaded)
+                    overlay.select(null)
+                    show(null)
+                    overlay.refresh()
+                    save()
+                } else {
+                    ControlLayout.deleteProfile(activity, name)
+                }
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
     fun attach() {
         if (attached) return
         root.addView(view, params(top = false))
@@ -428,13 +739,14 @@ class ControlEditPanel(
             swipes.visibility = View.GONE
             wheel.visibility = View.GONE
         }
-        val wantTop = element != null && element.yFrac > 0.55f
+        val wantTop = element != null && element.yFracOn(overlay.stance) > 0.55f
         if (attached && wantTop != atTop) {
             view.layoutParams = params(wantTop)
             atTop = wantTop
         }
         if (element == null) {
             title.setText(R.string.edit_pick_one)
+            clearance.visibility = View.GONE
             size.isEnabled = false
             opacity.isEnabled = false
             visible.isEnabled = false
@@ -455,10 +767,12 @@ class ControlEditPanel(
         toggle.isEnabled = element.kind == ControlKind.BUTTON || element.kind == ControlKind.TRIGGER
         val smallest = if (element.kind == ControlKind.LOOK) 120f else 36f
         val largest = if (element.kind == ControlKind.LOOK) 900f else 200f
-        size.progress = (((element.sizeDp - smallest) / (largest - smallest)) * 100f)
+        val elementSize = element.sizeOn(overlay.stance)
+        size.progress = (((elementSize - smallest) / (largest - smallest)) * 100f)
             .roundToInt().coerceIn(0, 100)
-        opacity.progress = (element.alpha * 100f).roundToInt().coerceIn(0, 100)
-        visible.isChecked = element.visible
+        opacity.progress = (element.alphaOn(overlay.stance) * 100f).roundToInt().coerceIn(0, 100)
+        visible.isChecked = element.visibleIn(overlay.stance)
         toggle.isChecked = element.toggle
+        showClearance(element)
     }
 }

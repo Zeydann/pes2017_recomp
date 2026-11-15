@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.widget.Button
 import android.widget.SeekBar
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
@@ -103,6 +104,9 @@ class SettingsActivity : AppCompatActivity() {
         switch(R.id.touch, prefs.touchControls) { prefs.touchControls = it }
         switch(R.id.gamepad, prefs.gamepadEnabled) { prefs.gamepadEnabled = it }
         switch(R.id.vibration, prefs.vibration) { prefs.vibration = it }
+        switch(R.id.control_fx, prefs.controlFx != ControlTheme.FX_OFF) {
+            prefs.controlFx = if (it) ControlTheme.FX_SUBTLE else ControlTheme.FX_OFF
+        }
         switch(R.id.flick_skill_stick, prefs.flickSkillStick) { prefs.flickSkillStick = it }
         switch(R.id.sprint_from_stick, prefs.sprintFromStick) { prefs.sprintFromStick = it }
         switch(R.id.defending_pad, prefs.defendingPad) { prefs.defendingPad = it }
@@ -116,6 +120,30 @@ class SettingsActivity : AppCompatActivity() {
         buttonStyle.setOnCheckedChangeListener { _, id -> prefs.playStationButtons = id == R.id.button_style_playstation }
         findViewById<Button>(R.id.arrange_controls).setOnClickListener {
             startActivity(Intent(this, ControlsEditorActivity::class.java))
+        }
+        findViewById<Button>(R.id.restore_defaults).setOnClickListener {
+            AlertDialog.Builder(this)
+                .setTitle(R.string.restore_confirm_title)
+                .setMessage(R.string.restore_confirm_text)
+                .setNegativeButton(R.string.cancel, null)
+                .setPositiveButton(R.string.restore_defaults) { _, _ ->
+                    val layout = ControlLayout.load(this)
+                    // Saving first turns the pad being replaced into the backup,
+                    // so the reset is always reversible once.
+                    layout.save(this)
+                    layout.resetAll()
+                    layout.save(this)
+                    Toast.makeText(this, R.string.restore_defaults_done, Toast.LENGTH_SHORT).show()
+                }
+                .show()
+        }
+        findViewById<Button>(R.id.restore_backup).setOnClickListener {
+            val layout = ControlLayout.load(this)
+            if (layout.restoreBackup(this)) {
+                Toast.makeText(this, R.string.restore_backup_done, Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, R.string.backup_missing, Toast.LENGTH_SHORT).show()
+            }
         }
         switch(R.id.audio, prefs.audioEnabled) { prefs.audioEnabled = it }
 
