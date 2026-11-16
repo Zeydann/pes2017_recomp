@@ -1,0 +1,33 @@
+{
+  "name": "PES 2013 Moderno",
+  "file": "game.apk",
+  "package": "com.naruto.pes2013.moderno",
+  "versionName": "0.3.3-fg-szr",
+  "versionCode": 1,
+  "applicationLabel": "PES 2013 Moderno",
+  "compileSdkVersion": 35,
+  "targetSdkVersion": 35,
+  "bytes": 52451384,
+  "sha256": "72d04b9b6579910f2573b0868e1ce6dc1772816dfe79fc960e8f2c1e4f10087e",
+  "note": "Third-party apk. It is deliberately not stored in this repository: the history is public and the binary is not ours to redistribute. The checksum is the identity -- any copy that matches it is the exact file every number below was read from.",
+  "analyzedClasses": "com.naruto.port.TouchControlsView (dex), decompiled into the git-ignored dexout/ tree",
+  "stickBenchmark": {
+    "movementStick": {
+      "anchorDp": { "dx": 130, "dy": 110 },
+      "socketRadiusDp": 62,
+      "grabFootprint": "1.35 x socket radius (onStick); 1.0 x for hiding it",
+      "throw": "1.0 x socket radius (stickMove divides by radius(), magnitude clamped to 1)",
+      "knobDrawing": "0.62 x socket radius of travel at full deflection",
+      "deadzone": "none of its own",
+      "curve": "linear (exponent 1)",
+      "axisOutput": "clamped to [-4, 1] then x 32767 as int16; the -4 floor is vestigial"
+    },
+    "sprint": {
+      "bit": "0x0200 (R1/RB)",
+      "trigger": "0.95 x socket radius, or a double tap within 300 ms and 48 dp of the lift point",
+      "hysteresis": "none beyond the single threshold and the double-tap latch"
+    },
+    "menus": "no d-pad synthesis and no analog suppression: the analog stick is always sent, and the title navigates with it",
+    "skillStick": "a plain absolute stick (378/82 dp anchor, 36 dp radius, throw = radius), not a flick"
+  }
+}
