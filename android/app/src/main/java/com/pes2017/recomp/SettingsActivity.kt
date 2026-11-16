@@ -118,6 +118,7 @@ class SettingsActivity : AppCompatActivity() {
             prefs.stickMode = if (id == R.id.stick_mode_fixed) Prefs.STICK_FIXED else Prefs.STICK_MOVE
         }
         switch(R.id.stick_throw, prefs.travelMatchesKnob) { prefs.travelMatchesKnob = it }
+        switch(R.id.stick_linear, prefs.linearStickMode) { prefs.linearStickMode = it }
         val buttonStyle: android.widget.RadioGroup = findViewById(R.id.button_style)
         buttonStyle.check(if (prefs.playStationButtons) R.id.button_style_playstation else R.id.button_style_xbox)
         buttonStyle.setOnCheckedChangeListener { _, id -> prefs.playStationButtons = id == R.id.button_style_playstation }

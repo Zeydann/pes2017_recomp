@@ -403,6 +403,21 @@ class Prefs(context: Context) {
         set(value) = store.edit().putBoolean(KEY_STICK_TRAVEL_KNOB, value).apply()
 
     /**
+     * Send the sticks as the thumb made them: no deadzone of the app's own and
+     * no curve, so a thumb a quarter of the way out sends a quarter of the
+     * throw. This is the reference apk's arithmetic, where the only shaping a
+     * stick gets is the title's own ~14% centre.
+     *
+     * Both sticks: the mode is about the pad, and one stick still bent while the
+     * other was straight would make the name a lie. The radial clamp and the
+     * sub-pixel kill stay either way -- those are facts about a thumb on glass,
+     * not a feel being chosen.
+     */
+    var linearStickMode: Boolean
+        get() = store.getBoolean(KEY_STICK_LINEAR, false)
+        set(value) = store.edit().putBoolean(KEY_STICK_LINEAR, value).apply()
+
+    /**
      * Where the movement stick lives. [STICK_MOVE] is the eFootball-style
      * floating stick: the socket appears under the thumb anywhere in the left
      * half of the screen and follows a thumb that drags past its rim, so the
@@ -562,6 +577,7 @@ class Prefs(context: Context) {
         private const val KEY_RIGHT_STICK_CURVE = "rightStickCurve"
         private const val KEY_FLICK_SKILL_STICK = "flickSkillStick"
         private const val KEY_STICK_TRAVEL_KNOB = "stickTravelMatchesKnob"
+        private const val KEY_STICK_LINEAR = "stickLinear"
         private const val KEY_HAPTICS = "haptics"
         private const val KEY_STICK_MODE = "stickMode"
         private const val KEY_SPRINT_STICK = "sprintFromStick"

@@ -836,9 +836,16 @@ class GameActivity : AppCompatActivity(), NativeListener {
         // runtime/stick_curve.h shapes the whole vector, so the deadzone is the
         // circle the socket is drawn as and a diagonal stays a diagonal.
         if (NativeBridge.stickSettings) {
+            // Linear mode is told to the runtime as a shape with no deadzone and
+            // no curve rather than left unsaid, so the one side that shapes
+            // still shapes -- into the identity -- and neither side can double
+            // up with the other.
+            val linear = prefs.linearStickMode
             NativeBridge.nativeStickSettings(
-                prefs.stickDeadzone, prefs.stickCurve,
-                prefs.rightStickDeadzone, prefs.rightStickCurve,
+                if (linear) 0f else prefs.stickDeadzone,
+                if (linear) 1f else prefs.stickCurve,
+                if (linear) 0f else prefs.rightStickDeadzone,
+                if (linear) 1f else prefs.rightStickCurve,
             )
         }
         // The skill stick's flick reading (runtime/skill_stick.h): on glass the

@@ -665,9 +665,19 @@ class TouchOverlayView @JvmOverloads constructor(
         // once -- the check is the same one that keeps those calls from being
         // made at all.
         if (!NativeBridge.stickSettings) {
-            val left = StickShape.apply(lx, ly, prefs.stickDeadzone, prefs.stickCurve)
+            // Linear mode (Prefs.linearStickMode) is the reference pad's
+            // arithmetic: a thumb a quarter of the way out sends a quarter of the
+            // throw, with no deadzone of ours and nothing on the curve. Handing
+            // 0 and 1 to the same function rather than skipping it keeps the
+            // radial clamp and the sub-pixel kill, which are about a thumb on
+            // glass rather than about feel.
+            val leftZone = if (prefs.linearStickMode) 0f else prefs.stickDeadzone
+            val leftCurve = if (prefs.linearStickMode) 1f else prefs.stickCurve
+            val left = StickShape.apply(lx, ly, leftZone, leftCurve)
             lx = left[0]; ly = left[1]
-            val right = StickShape.apply(rx, ry, prefs.rightStickDeadzone, prefs.rightStickCurve)
+            val rightZone = if (prefs.linearStickMode) 0f else prefs.rightStickDeadzone
+            val rightCurve = if (prefs.linearStickMode) 1f else prefs.rightStickCurve
+            val right = StickShape.apply(rx, ry, rightZone, rightCurve)
             rx = right[0]; ry = right[1]
         }
         // Sprint from the rim: a thumb all the way out runs, and the latch's

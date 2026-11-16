@@ -324,6 +324,8 @@
     <string name="sprint_from_stick_hint">Push the movement stick all the way out to run, the way R1 does. Turn off to sprint only with the button.</string>
     <string name="stick_throw">Throw ends at the knob\u2019s rim</string>
     <string name="stick_throw_hint">On, the knob you can see is the whole throw: push it to its rim and the player is at full speed, so the drawing tells your hand where the end is. Off keeps the longer throw that runs out to the socket\u2019s edge, where the knob sits about two thirds of the way out at full speed.</string>
+    <string name="stick_linear">Linear stick mode</string>
+    <string name="stick_linear_hint">Bypasses app deadzone and curve for raw 1:1 input (reference APK style).</string>
     <string name="defending_pad">Defending pad</string>
     <string name="defending_pad_hint">Bring out the controls arranged for defending instead of the attacking ones. Controls can be put on one pad or the other in the editor\u2019s Arrangement button. The title does not report who has the ball, so this is your own switch; also in the pause menu.</string>
     <string name="switch_to_defending_pad">Bring out the defending pad</string>
