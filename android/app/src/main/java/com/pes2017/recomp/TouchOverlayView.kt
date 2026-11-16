@@ -271,6 +271,11 @@ class TouchOverlayView @JvmOverloads constructor(
      * What the title is doing, as the runtime reports it. Controls marked for a
      * phase come and go with it; one that is about to leave the screen is let go
      * first, so a menu cannot keep a direction held into a match.
+     *
+     * What carries the change to the engine's own d-pad stand-in is the
+     * [releaseEverything] below (through [syncDpadSynthesis]): a phase is only
+     * news once, and a stand-in that was never told a match had started goes on
+     * turning a sprinting thumb into arrow presses.
      */
     var gamePhase: GamePhase = GamePhase.UNKNOWN
         set(value) {
@@ -523,10 +528,16 @@ class TouchOverlayView @JvmOverloads constructor(
         }
         // A touch a little outside still counts in play: glass has no edges to
         // feel, and a button that needs to be hit exactly is a button that gets
-        // missed in a firefight. The editor grips harder -- a spare button hidden
-        // under a neighbour has to be selectable -- so its handles do not overlap.
-        val slack = (if (editing) 2f else 6f) * density
-        return hypot(x - centreX(element), y - centreY(element)) <= radius(element) + slack
+        // missed in a firefight. A stick forgives further, and in proportion:
+        // its footprint is a share of its own ring, so the same rim feel holds
+        // whether the socket is a 150 dp movement stick or a 48 dp spare -- a
+        // fixed 6 dp is 8% of the first and a quarter of the second. The editor
+        // grips harder in either case -- a spare button hidden under a
+        // neighbour has to be selectable -- so its handles do not overlap.
+        val r = radius(element)
+        val reach = if (element.kind == ControlKind.STICK && !editing) r * STICK_REACH
+                    else r + (if (editing) 2f else 6f) * density
+        return hypot(x - centreX(element), y - centreY(element)) <= reach
     }
 
     /** Buttons first, the look area last: it sits under everything. */
@@ -735,6 +746,15 @@ class TouchOverlayView @JvmOverloads constructor(
                 // three-quarters of the way out is a menu with a thumb through
                 // it.
                 buttons = buttons or stickArrows.bits(rawLx, rawLy)
+                // One input, one source: the stand-in *is* the d-pad here, so
+                // the guest gets the four bits and a centred stick beside them.
+                // Leaving the analog deflection on is how a menu moved by a bit
+                // is dragged on -- or back -- by the stick a moment later, which
+                // is the bounce a thumb sees on the highlighted row. The
+                // engine's own stand-in cannot do this from this side: it needs
+                // the analog value to make the bits in the first place.
+                lx = 0f
+                ly = 0f
             }
         }
 
@@ -811,7 +831,10 @@ class TouchOverlayView @JvmOverloads constructor(
         // question once, catches a missing symbol instead of letting it leave a
         // touch event, and reports false so the stand-in in pushState keeps
         // working. Nothing about the d-pad's bits or drawing changes here.
-        NativeBridge.setDpadSynthesis(!dpadOnScreen())
+        // The same rule pushState applies to the app's own stand-in, so the two
+        // cannot disagree: a match in progress is not a menu, and an arrow
+        // pressed by a sprinting thumb is a tactic nobody asked for.
+        NativeBridge.setDpadSynthesis(!dpadOnScreen() && gamePhase != GamePhase.MATCH)
     }
 
     /** Whether a d-pad of the player's own is on screen in this phase. */
@@ -1331,15 +1354,23 @@ class TouchOverlayView @JvmOverloads constructor(
     /**
      * The throw a stick is measured against.
      *
-     * The whole socket, not the knob's smaller travel: a thumb on the rim is
-     * full deflection, which is what lets the sprint latch's 0.92 press point
-     * sit where a hand can actually find it instead of beyond the control's own
-     * edge. The skill stick is deliberately shorter -- 55% of the socket -- a
-     * skill move being a short flick to a sector rather than a pace to hold.
+     * The movement stick follows [Prefs.travelMatchesKnob], which is what the
+     * setting's name says: on, the knob's own travel is the whole range, so
+     * pushing the knob to its drawn limit is full deflection and the hand can
+     * judge the throw from the drawing. Off keeps the older, longer throw --
+     * the whole socket -- where the knob's rim is only about two thirds of the
+     * way out, which is the throw players who learned on it expect. Both stay
+     * reachable: a thumb past the end is still full deflection rather than an
+     * out-of-range value, because [StickVector] clamps to the unit circle.
+     *
+     * The skill stick is deliberately shorter still -- 55% of the socket -- a
+     * skill move being a short flick to a sector rather than a pace to hold,
+     * and is not affected by the movement stick's choice.
      */
     private fun throwRadius(element: ControlElement): Float {
         val r = radius(element)
-        return if (element.value == 0) r else r * SKILL_THROW
+        if (element.value != 0) return r * SKILL_THROW
+        return if (prefs.travelMatchesKnob) r * stickTravel else r
     }
 
     /**
@@ -1848,6 +1879,15 @@ class TouchOverlayView @JvmOverloads constructor(
     companion object {
         /** How much of the screen's width, from the left, the floating stick owns. */
         private const val FLOAT_ZONE = 0.5f
+
+        /**
+         * How far past its ring a stick still takes a thumb, as a share of the
+         * socket's radius. Proportional rather than a fixed slack: a thumb
+         * lands beside a socket far more often than beside a button, and the
+         * nearest-centre rule in [elementAt] is what keeps the wider footprint
+         * from taking a neighbour's press.
+         */
+        private const val STICK_REACH = 1.25f
 
         /**
          * The skill stick's throw, as a share of its socket. Short enough that a

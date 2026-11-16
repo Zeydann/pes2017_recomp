@@ -64,11 +64,13 @@ object StickShape {
  *
  * Both stick modes are this one piece of arithmetic: Fixed measures from the
  * socket the layout drew, Move from the point the thumb landed on. The throw is
- * the socket's visible travel, so a thumb on the rim is full deflection and a
- * thumb past it is still full deflection rather than an out-of-range value the
- * shaping would have to fix. A second thumb uses the same base; nothing here
- * moves the base, which is the point -- a base that follows the thumb turns a
- * push into a drag and makes the deflection depend on how fast the thumb moved.
+ * whatever the pad measures against -- the whole socket, or the knob's own
+ * travel when [Prefs.travelMatchesKnob] is on -- so a thumb at the end of that
+ * travel is full deflection and a thumb past it is still full deflection rather
+ * than an out-of-range value the shaping would have to fix. A second thumb uses
+ * the same base; nothing here moves the base, which is the point -- a base that
+ * follows the thumb turns a push into a drag and makes the deflection depend on
+ * how fast the thumb moved.
  */
 object StickVector {
 

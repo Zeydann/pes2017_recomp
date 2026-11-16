@@ -353,13 +353,15 @@ class Prefs(context: Context) {
 
     /**
      * The curve on the rest of the throw: below 1 reaches the edge sooner, above
-     * 1 is finer around the middle, where a walking pace lives. 1.9 opens the
-     * walking band -- the part of the throw between standing and a jog -- wide
-     * enough for a thumb to hold a pace deliberately rather than sprint by
-     * accident, now that the throw is measured across the whole socket.
+     * 1 is finer around the middle, where a walking pace lives. 1.20 keeps the
+     * middle finer than linear without spending most of the travel down there:
+     * the throw is already short -- the knob's own travel, when
+     * [travelMatchesKnob] is on -- so a steeper curve on top of it made a jog
+     * arrive late and asked a diagonal pass for a thumb at the rim. The old 1.9
+     * was tuned for the longer, whole-socket throw.
      */
     var stickCurve: Float
-        get() = store.getFloat(KEY_STICK_CURVE, 1.9f)
+        get() = store.getFloat(KEY_STICK_CURVE, 1.20f)
         set(value) = store.edit().putFloat(KEY_STICK_CURVE, value.coerceIn(0.7f, 2.5f)).apply()
 
     /**

@@ -224,6 +224,12 @@ class DoubleTap(private val windowMs: Long = WINDOW_MS) {
  * between them. The raw throw decides -- not the shaped one -- so the curve
  * cannot make a jog a sprint by squeezing the top of its range.
  *
+ * Both points are shares of the throw the caller measures against, never of the
+ * socket: the movement stick's throw is the knob's own travel or the whole
+ * socket ([Prefs.travelMatchesKnob]), and a share of the throw keeps the sprint
+ * where the hand put it in either case, instead of moving it when that choice
+ * changes.
+ *
  * [reset] is what every cancellation path calls: pause, focus loss, the pad
  * being hidden or edited. A sprint cannot outlive the thumb that started it.
  */
