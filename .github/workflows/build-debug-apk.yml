@@ -22,15 +22,18 @@ name: Debug APK
 # 2. The Gradle wrapper lives in android/, not at the root: `./gradlew` here
 #    means `android/gradlew` run from `android/`.
 #
-# Triggers: `main` as asked, the freebuff/* working branches so a push to one of
-# them produces an apk to test, and workflow_dispatch for running it by hand.
-# GitHub's "Run workflow" picker only lists workflows on the repository's default
-# branch, so a hand-run needs this file there first; a push works either way.
+# Triggers: `main` as asked, the freebuff/* working branches and `typhon` so a
+# push to a working branch produces an apk to test, and workflow_dispatch for
+# running it by hand. GitHub's "Run workflow" picker only lists workflows on the
+# repository's default branch, so a hand-run needs this file there first; a push
+# works either way. The branch list is what matters: a branch that is not named
+# here pushes quietly and builds nothing.
 on:
   push:
     branches:
       - main
       - 'freebuff/**'
+      - typhon
   workflow_dispatch:
 
 permissions:
