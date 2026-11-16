@@ -1767,7 +1767,6 @@ class TouchOverlayView @JvmOverloads constructor(
                     }
                 }
             }
-            if (editing && element === selected) drawSelection(canvas, element)
             // The badge goes above the selection ring: it is a state, not a
             // decoration, and a selected off control must still read as off.
             if (ControlOffState.showsBadge(off, editing)) drawOffBadge(canvas, element)
@@ -2810,18 +2809,6 @@ class TouchOverlayView @JvmOverloads constructor(
         canvas.drawText(
             OFF_BADGE, cx, top + height / 2f - (subText.descent() + subText.ascent()) / 2f, subText,
         )
-    }
-
-    private fun drawSelection(canvas: Canvas, element: ControlElement) {
-        stroke.color = Color.argb(230, 120, 200, 120)
-        stroke.strokeWidth = 2.5f * density
-        if (element.kind == ControlKind.LOOK) {
-            rectOf(element, box)
-            box.inset(-6f * density, -6f * density)
-            canvas.drawRoundRect(box, 16f * density, 16f * density, stroke)
-        } else {
-            canvas.drawCircle(centreX(element), centreY(element), radius(element) + 7f * density, stroke)
-        }
     }
 
     /** Used by the editor's panel to keep the drawing in step with a slider. */
