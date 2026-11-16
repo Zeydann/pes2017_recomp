@@ -518,6 +518,7 @@ PPC_FUNC(__imp__XamInputGetState)
             static const bool noArrows = diag::Flag("PES17_NO_TOUCH_DPAD");
             // The app turns the stand-in off while its own d-pad is on screen,
             // so the guest is not handed two sources for the same four bits.
+            bool standInMenu = false;
             if (!noArrows && android::input::DpadSynthesis())
             {
                 static ::input::ArrowLatch arrows;
@@ -525,6 +526,17 @@ PPC_FUNC(__imp__XamInputGetState)
                 pad.buttons = uint16_t(pad.buttons | ::input::StickArrows(axes[0], axes[1], arrows));
                 if (!hadAny && arrows.Any())
                     LOGI("input: the left stick is standing in for the d-pad");
+                // And one input, one source: while the stand-in is the d-pad,
+                // the guest is handed the four bits and a centred stick beside
+                // them, or a menu moved by a bit is dragged on -- or back -- by
+                // the analog value a moment later, which is the bounce a thumb
+                // sees on the highlighted row. Only where the title is known to
+                // be in its menus: a build that cannot read the phase says
+                // Unknown for ever, and a movement stick centred through a
+                // match is not a risk worth taking for a menu that could not be
+                // read either. Applied below, after the autopilot has steered
+                // with the real deflection.
+                standInMenu = reportedPhase == ::phase::Phase::Menus;
             }
 
             // The same hand-off the desktop build makes: what the player did
@@ -540,6 +552,12 @@ PPC_FUNC(__imp__XamInputGetState)
                 case player::Press::Fire: triggers[1] = 255; break;
                 case player::Press::None: break;
                 }
+
+            if (standInMenu)
+            {
+                axes[0] = 0;
+                axes[1] = 0;
+            }
         }
 
         Latch& latch = g_latch[user & 3];
