@@ -174,6 +174,51 @@ object SwipePriority {
 }
 
 /**
+ * The team mentality buttons' gate.
+ *
+ * One tap sends one complete sequence -- two presses of a d-pad arm, a beat
+ * apart -- and the title reads that as one step of mentality. Two things must
+ * therefore never happen: a sequence starting again on the finger's own bounce
+ * (the pad sends on the lift, so a hold is already one sequence, not a repeat),
+ * and two sequences overlapping, which the title would read as four presses and
+ * two steps.
+ *
+ * The lock is a deadline rather than a queue: a tap that arrives while a
+ * sequence is still playing is dropped, because a queued second step is a
+ * mentality change the player did not see themselves ask for. [SEQUENCE_MS] is
+ * the length of `SwipeSequence`'s double tap; [LOCKOUT_MS] leaves a guest frame
+ * or two on top of it.
+ *
+ * Free of Android types, so [PadGesturesTest] can walk it without a clock.
+ */
+class MentalityTaps(private val lockoutMs: Long = LOCKOUT_MS) {
+    private var busyUntil = Long.MIN_VALUE
+
+    /** Whether a tap at [nowMs] may start a sequence, and blocks the next one. */
+    fun accept(nowMs: Long): Boolean {
+        if (nowMs < busyUntil) return false
+        busyUntil = nowMs + lockoutMs
+        return true
+    }
+
+    /** Whether a sequence is still inside its lock, for the drawing and the tests. */
+    fun busy(nowMs: Long): Boolean = nowMs < busyUntil
+
+    /** A pause, the editor, a phase change: nothing is playing any more. */
+    fun reset() {
+        busyUntil = Long.MIN_VALUE
+    }
+
+    companion object {
+        /** The double tap's own length: press, gap, press, clear. */
+        const val SEQUENCE_MS = SwipeSequence.DOUBLE_TAP_GAP_MS * 3
+
+        /** How long after a tap a second one is dropped rather than queued. */
+        const val LOCKOUT_MS = SEQUENCE_MS + 120L
+    }
+}
+
+/**
  * Two taps of the same button, close enough together to be the title's own
  * double tap.
  *

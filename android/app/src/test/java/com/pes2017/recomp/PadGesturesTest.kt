@@ -276,3 +276,69 @@ class PadGesturesTest {
             (-r * Math.sin(justAbove)).toFloat(), radius))
     }
 }
+
+/**
+ * The team mentality buttons' lock: one tap, one double press, no overlap and no
+ * repeat from a hold.
+ */
+class MentalityTapsTest {
+
+    @Test
+    fun oneTapIsOneSequence() {
+        val taps = MentalityTaps()
+        assertTrue(taps.accept(1_000L))
+        assertTrue("the lock is not permanent", taps.busy(1_000L))
+        assertTrue(taps.accept(1_000L + MentalityTaps.LOCKOUT_MS))
+    }
+
+    @Test
+    fun aSecondTapInsideTheLockIsDroppedRatherThanQueued() {
+        val taps = MentalityTaps()
+        assertTrue(taps.accept(1_000L))
+        assertFalse("a bounce a frame later", taps.accept(1_001L))
+        assertFalse("a real second tap too soon", taps.accept(1_000L + MentalityTaps.LOCKOUT_MS - 1))
+        assertFalse("nothing was queued behind the first", taps.accept(1_000L + MentalityTaps.LOCKOUT_MS - 1))
+    }
+
+    @Test
+    fun theLockOutlastsTheSequenceItGuards() {
+        // The sequence is press, gap, press, clear: four steps of the double
+        // tap. A lock shorter than that would let the second tap start before
+        // the first had finished, which the title reads as one long press.
+        assertTrue(MentalityTaps.LOCKOUT_MS > MentalityTaps.SEQUENCE_MS)
+        assertTrue(MentalityTaps.SEQUENCE_MS >= SwipeSequence.DOUBLE_TAP_GAP_MS * 3)
+    }
+
+    @Test
+    fun aResetLetsTheNextTapThrough() {
+        val taps = MentalityTaps()
+        assertTrue(taps.accept(1_000L))
+        assertFalse(taps.accept(1_010L))
+        taps.reset()
+        assertFalse(taps.busy(1_010L))
+        assertTrue(taps.accept(1_010L))
+    }
+
+    @Test
+    fun theTwoButtonsSendTheTwoArmsOfTheDpad() {
+        val layout = ControlLayout.defaults(800f, 360f)
+        val attack = layout.find("mentality_atk")!!
+        val defend = layout.find("mentality_def")!!
+        assertEquals(ControlKind.MENTALITY, attack.kind)
+        assertEquals(NativeBridge.UP, attack.value)
+        assertEquals(ControlKind.MENTALITY, defend.kind)
+        assertEquals(NativeBridge.DOWN, defend.value)
+    }
+
+    @Test
+    fun theSequenceIsTwoPressesOfThatArmWithAClearStepEitherSide() {
+        val steps = SwipeSequence.steps(SwipeAction.double(NativeBridge.UP))
+        assertEquals(4, steps.size)
+        assertEquals(NativeBridge.UP, steps[0].buttons)
+        assertEquals(0, steps[1].buttons)
+        assertEquals(NativeBridge.UP, steps[2].buttons)
+        assertEquals(0, steps[3].buttons)
+        assertTrue("the second press comes after the first has been seen",
+            steps[2].delayMs > steps[0].delayMs)
+    }
+}

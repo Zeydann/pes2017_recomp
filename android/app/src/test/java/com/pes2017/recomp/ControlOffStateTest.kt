@@ -94,7 +94,7 @@ class HapticsPolicyTest {
         // pad turned red.
         for (kind in listOf(
             ControlKind.BUTTON, ControlKind.TRIGGER, ControlKind.SKILL, ControlKind.CUSTOM,
-            ControlKind.TRICK, ControlKind.STANCE,
+            ControlKind.TRICK, ControlKind.STANCE, ControlKind.MENTALITY,
         )) {
             assertFalse("$kind", ControlOffState.showsRestGlow(kind, engaged = false, editing = false))
         }

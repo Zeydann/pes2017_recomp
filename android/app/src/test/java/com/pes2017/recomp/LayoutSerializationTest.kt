@@ -93,6 +93,26 @@ class LayoutSerializationTest {
     }
 
     @Test
+    fun aRenamedTacticalButtonKeepsThePlayersOwnWord() {
+        val layout = ControlLayout.defaults(800f, 360f)
+        val sw1 = layout.find("sw1")!!
+        // Unrenamed, the factory word stands on either button style.
+        assertEquals("SW1", ControlLayout.labelFor(sw1, playStation = true))
+
+        sw1.label = "SW2"
+        // A rename used to be kept in the file and then ignored on every control
+        // the PlayStation naming table knew, which is exactly the tactical pair.
+        assertEquals("SW2", ControlLayout.labelFor(sw1, playStation = true))
+        assertEquals("SW2", ControlLayout.labelFor(sw1, playStation = false))
+
+        val parsed = ControlLayout.parse(layout.toJson())!!
+        assertEquals("SW2", parsed.find("sw1")!!.label)
+        assertEquals("SW2", ControlLayout.labelFor(parsed.find("sw1")!!, playStation = true))
+        // A control nobody renamed still says its console name.
+        assertEquals("L1", ControlLayout.labelFor(parsed.find("lb")!!, playStation = true))
+    }
+
+    @Test
     fun textThatIsNotALayoutIsRejectedWithoutThrowing() {
         assertNull(ControlLayout.parse("not a layout"))
     }

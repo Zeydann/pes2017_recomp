@@ -59,6 +59,18 @@ focus loss, the editor, the pad being hidden -- so a modifier or trigger can
 never be left down. Only one compound swipe is in flight at a time; starting a
 new one clears the previous one first.
 
+The live modifier is kept down for **80 ms past the button's own lift**
+(`liveSwipeTail`), because PES reads a finesse shot (R2 + shoot) as the shot comes
+up and releasing both in the same push made it an ordinary shot whenever the
+title's poll came after it.
+
+Two things on the release path that used to drop fast flicks: the **lift's own
+coordinates are fed to the classifier before the direction is read** (a thumb can
+travel the whole way inside the `ACTION_UP` event, between two move batches, and a
+gesture read from the last `ACTION_MOVE` alone looked like a tap), and the sprint
+ring's RB is its own `HoldSource`, so leaving the outer ring cannot lift the bit a
+swipe needs in the same frame.
+
 The editor lists every option: none, the plain bits, all four modifiers on each
 of the four face buttons, and a double tap of each face button.
 
@@ -175,17 +187,21 @@ read only in mode 1 so one stick can never sprint two ways.
 
 ## The two-stage stick
 
-The switch above the socket (`stick_mode`, `1 / 2`) picks which throw the
-movement stick reads with. It is global (`Prefs.stickStage`), one tap flips it,
-and it is always on screen (`PhaseMask.ALWAYS`) so the mode can be changed in a
-match, in the title's menus, or before kick-off. Nothing about it is sent to the
-title: it changes the arithmetic, not the pad, and it holds no bit and no press
-pulse.
+The switch above the socket (`stick_mode`) picks which throw the movement stick
+reads with. It is global (`Prefs.stickStage`), one tap flips it, and it is always
+on screen (`PhaseMask.ALWAYS`) so the mode can be changed in a match, in the
+title's menus, or before kick-off. Nothing about it is sent to the title: it
+changes the arithmetic, not the pad, and it holds no bit and no press pulse.
+
+Its two halves are labelled with the modes rather than numbered, because "1" and
+"2" never said which was which: **MENU** is the standard throw (the menus' own
+stick -- no ring, so a run cannot scroll a list), **MATCH** is the two-stage one
+whose outer circle sprints.
 
 | Mode | What the stick does |
 |---|---|
-| `1` — normal | the whole socket is the throw; its rim is full pace |
-| `2` — two-stage | the socket is the movement circle; a sprint ring outside it |
+| `MENU` — normal (mode 1) | the whole socket is the throw; its rim is full pace |
+| `MATCH` — two-stage (mode 2) | the socket is the movement circle; a sprint ring outside it |
 
 Mode 2's geometry (`TouchMath.StickStage`), in socket radii, on the default
 150 dp stick (75 dp radius):
@@ -220,6 +236,21 @@ sample: the press is read as a thumb on the rim however wide it landed, so the
 dwell clock starts on the first *move* into the ring, never on the press. The
 stage, the dwell and the mapping are pinned by `TwoStageStickTest`; a retune of
 any number fails there.
+
+## Stick 2 (the second movement socket)
+
+`stick2` is the movement stick again -- same 150 dp socket, same 1.35 R grab, same
+shaping, same left axis (`value` 0) -- with **no sprint of its own**: no 0.92 rim
+latch, no two-stage ring, so pushing it to its edge is still full pace. It is for
+the title's menus, where a run is a scroll, and for dribbling that has to stay at
+a walking pace.
+
+Both sticks state the same axis, so `pushState` takes the **further-deflected one**
+rather than adding them: a thumb on each cannot ask for twice the deflection the
+axis can carry. Everything that belongs to the movement stick's gesture keys off
+`id == "stick"` -- `isTwoStage`, the rim latch and its held RB -- so a Stick 2
+push can never start, end or inherit the first stick's sprint. It ships hidden
+(`visible = false`) and is added from the editor's add palette, like the spares.
 
 ## The resting light
 
@@ -634,6 +665,29 @@ outlive the pad it was set on and be invisible to the player. The OFF state is
 unchanged -- an off control is still drawn at 0.30 with no glow and its badge,
 latch or no latch -- and the halo is not drawn for an off control at all, since a
 ring is a glow and an off control sends nothing to justify one.
+
+## Team mentality: ATTACKING and DEFENSE
+
+Two stacked glass pills, `mentality_atk` above `mentality_def`, both on the pitch
+only (`PhaseMask.MATCH`). Green tint and a thin green border on the upper one, blue
+on the lower, each with a white arrow and word over a mostly see-through body so
+the pitch stays readable. Both are ordinary layout controls: they move, resize,
+rename and save like everything else.
+
+One tap sends **two presses of one d-pad arm**, a beat apart -- up twice raises the
+mentality, down twice lowers it -- which is the title's own gesture, played through
+the same `MacroSequencer`/`SwipeSequence` queue the compound swipes use (press at
+0 ms, clear at 50, press at 100, clear at 150). Nothing is held, so no thumb can
+leave a direction down, and the tap is read on the **lift**: holding one of them
+sends nothing at all until it is let go, which is why a hold cannot repeat the
+sequence.
+
+`MentalityTaps` (PadGestures.kt) is the second guard. A tap that lands while a
+sequence is still playing is **dropped**, not queued: two overlapping sequences
+would be four presses and two mentality steps, which is a change the player never
+saw themselves ask for. The lock is `SEQUENCE_MS + 120 ms`, and every cancellation
+path -- a pause, the editor, a phase change -- resets it. `MentalityTapsTest` pins
+all of it without a clock.
 
 ## The two tactical five-way buttons (SW1, SW2)
 

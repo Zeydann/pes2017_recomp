@@ -1,6 +1,7 @@
 package com.pes2017.recomp
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.math.hypot
@@ -94,6 +95,38 @@ class TouchGeometryTest {
                 clearance(dpad, other) > 0f,
             )
         }
+    }
+
+    @Test
+    fun theMentalityPairStacksOneAboveTheOtherOverThePitch() {
+        val layout = layout()
+        val attack = layout.find("mentality_atk") ?: error("the pad has an attacking mentality button")
+        val defend = layout.find("mentality_def") ?: error("the pad has a defending mentality button")
+        assertEquals("one column", attack.xFrac, defend.xFrac, 0.0001f)
+        assertTrue("the attacking button is the upper one", y(attack) > y(defend))
+        // The drawn button is a pill 0.96 of its radius tall, so a stacking gap
+        // wider than that is a gap on screen, whatever the circular hit area is.
+        assertTrue(
+            "the two pills touch",
+            y(attack) - y(defend) > radius(attack) * 0.96f,
+        )
+        assertTrue(attack.shownIn(GamePhase.MATCH))
+        assertFalse("the pair is for a match, not a menu", attack.shownIn(GamePhase.MENUS))
+        assertTrue(y(attack) + radius(attack) * 0.48f <= 360f - 8f)
+        assertTrue(y(defend) - radius(defend) * 0.48f >= 8f)
+    }
+
+    @Test
+    fun stick2IsTheMovementSocketWithoutASprint() {
+        val layout = layout()
+        val second = layout.find("stick2") ?: error("the pad offers a second stick")
+        assertEquals(ControlKind.STICK, second.kind)
+        // The same axis and the same mechanics as the movement stick; what it
+        // does not have is the rim latch or the two-stage ring, which the
+        // overlay decides by id rather than by a setting.
+        assertEquals("it shares the movement axis", 0, second.value)
+        assertEquals(layout.find("stick")!!.sizeDp, second.sizeDp, 0.01f)
+        assertFalse("it ships hidden, like the spares", second.visible)
     }
 
     @Test

@@ -81,6 +81,14 @@ enum class ControlKind {
     STANCE,
 
     /**
+     * A team mentality button: one tap sends two presses of the d-pad arm in
+     * `value` -- up raises the mentality, down lowers it -- a beat apart, which
+     * is how the title reads the change. Nothing is held, so a thumb cannot
+     * leave a direction down, and a hold sends nothing until it lifts.
+     */
+    MENTALITY,
+
+    /**
      * A spare button (c1..c10) with no bit of its own until the player gives it
      * one: its centre tap and its four swipes are bound in the editor. Ten of
      * them ship hidden, so a pad can grow a command the title has but the
@@ -973,10 +981,12 @@ class ControlLayout private constructor(
                     // The two-stage switch, above the socket: a 150 dp stick is
                     // 75 dp of radius around a centre 95 dp up, so its rim is at
                     // 170 dp and the switch's own half-height clears it by a
-                    // thumb's width. Always on screen: the player's own switch,
-                    // reachable in a match, in a menu and before kick-off alike.
-                    // (The ring's RB is still match-only -- see pushState.)
-                    place("stick_mode", ControlKind.STICK_MODE, 0, "1/2", 95f, -192f, 44f, 0.55f),
+                    // thumb's width. 64 dp across because its two halves say
+                    // MENU and MATCH now, and words need more room than digits.
+                    // Always on screen: the player's own switch, reachable in a
+                    // match, in a menu and before kick-off alike. (The ring's RB
+                    // is still match-only -- see pushState.)
+                    place("stick_mode", ControlKind.STICK_MODE, 0, "MODE", 95f, -200f, 64f, 0.55f),
 
                     // Right thumb: the four actions as the pad's diamond. `sub`
                     // is what the control does on the ball; the fake shot and
@@ -1127,6 +1137,27 @@ class ControlLayout private constructor(
                     // once they are on.
                     place("sw1", ControlKind.TACTICAL, 0, "SW1", 230f, 300f, 88f, 0.40f, visible = false),
                     place("sw2", ControlKind.TACTICAL, 0, "SW2", 340f, 300f, 88f, 0.40f, visible = false),
+
+                    // Stick 2: the movement socket again, without the sprint.
+                    // Same throw, same grab, same shaping -- but no rim latch and
+                    // no two-stage ring, so its outer circle is still full pace
+                    // rather than a run. For the menus, where a run is a scroll,
+                    // and for dribbling that has to stay at a walking pace. Its
+                    // own element and its own thumb; hidden until the player
+                    // adds it, like the spares.
+                    place("stick2", ControlKind.STICK, 0, "LS2", 330f, 100f, 150f, 0.40f,
+                        visible = false, shownWhen = PhaseMask.MATCH),
+
+                    // The team mentality pair, stacked one above the other: the
+                    // upper button raises the mentality and the lower one lowers
+                    // it, each by sending the title's own double press of the
+                    // d-pad. Nothing is held, so no thumb can leave a direction
+                    // down. Parked in the band between the d-pad and the action
+                    // diamond, clear of both and of every swipe corridor.
+                    place("mentality_atk", ControlKind.MENTALITY, NativeBridge.UP, "ATTACK",
+                        410f, 222f, 132f, 0.55f, shownWhen = PhaseMask.MATCH, sub = "ATTACKING"),
+                    place("mentality_def", ControlKind.MENTALITY, NativeBridge.DOWN, "DEFENSE",
+                        410f, 150f, 132f, 0.55f, shownWhen = PhaseMask.MATCH, sub = "DEFENSE"),
                 ),
                 widthDp, heightDp, profile,
             )
@@ -1265,8 +1296,19 @@ class ControlLayout private constructor(
             for (sector in sectors.indices) element.setTrickMove(sector, sectors[sector])
         }
 
-        /** The name printed on a control: its Xbox name, or the PlayStation one. */
+        /**
+         * The name printed on a control: its Xbox name, or the PlayStation one --
+         * unless the player has renamed it, in which case the player's own word
+         * wins on both.
+         *
+         * The console names are for the controls that ship with one, which is
+         * why they are looked up by id at all. Applying them unconditionally is
+         * what made a rename invisible on exactly the controls people rename: a
+         * spare typed "SW1" or "SW2" went back to the factory word as soon as it
+         * was drawn.
+         */
         fun labelFor(element: ControlElement, playStation: Boolean): String {
+            if (element.label != factoryLabel(element.id)) return element.label
             if (!playStation) return element.label
             return when (element.id) {
                 "a" -> "CROSS"
@@ -1293,6 +1335,24 @@ class ControlLayout private constructor(
                 "back" -> "SELECT"
                 else -> element.label
             }
+        }
+
+        /**
+         * The label an id ships with, so a rename can be told from it: every
+         * control starts as its id in capitals, apart from the handful the pads
+         * have always called something else.
+         */
+        private fun factoryLabel(id: String): String = when (id) {
+            "stick" -> "LS"
+            "right_stick" -> "RS"
+            "stick2" -> "LS2"
+            "trick" -> "SKILL"
+            "jockey" -> "JCK"
+            "start" -> "START"
+            "back" -> "SELECT"
+            "sw1" -> "SW1"
+            "sw2" -> "SW2"
+            else -> id.uppercase()
         }
     }
 }

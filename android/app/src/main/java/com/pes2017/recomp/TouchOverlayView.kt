@@ -135,6 +135,12 @@ class TouchOverlayView @JvmOverloads constructor(
     private var twoStagePointer = -1
     private var twoStageSprint = false
 
+    /**
+     * The team mentality pair's lock: one tap, one double press of the d-pad, and
+     * a second tap inside it is dropped rather than queued (PadGestures.kt).
+     */
+    private val mentality = MentalityTaps()
+
     /** The unclamped throw of a two-stage stick, so the ring and the knob can be drawn. */
     private val stickRaw = HashMap<String, FloatArray>()
 
@@ -164,6 +170,18 @@ class TouchOverlayView @JvmOverloads constructor(
     private var liveSwipeLeft = false
     private var liveSwipeRight = false
     private var liveSwipeSince = 0L
+
+    /**
+     * The tail of a live swipe's modifier. A lift that relied on a modifier that
+     * was already down does not replay the timed sequence -- the title has the
+     * combination -- but it must not undo it in the same push either: this lets
+     * go one beat after the button under it (LIVE_MODIFIER_TAIL_MS).
+     */
+    private val liveSwipeTail = Runnable {
+        clearLiveSwipe()
+        if (NativeBridge.isLoaded()) pushState()
+        invalidate()
+    }
 
     // Reused by animateEffects: a fresh list per draw was one allocation a frame,
     // which is exactly what this pass is here to stop.
@@ -556,6 +574,18 @@ class TouchOverlayView @JvmOverloads constructor(
         // missed in a firefight. The editor grips harder -- a spare button hidden
         // under a neighbour has to be selectable -- so its handles do not overlap.
         val slack = (if (editing) 2f else 6f) * density
+        // The two mentality buttons are pills, and their hit area follows the
+        // shape they are drawn as: two stacked circles would overlap each other
+        // and claim a thumb-sized patch of the pitch above and below them.
+        if (element.kind == ControlKind.MENTALITY) {
+            val halfWidth = radius(element) + slack
+            val halfHeight = radius(element) * 0.48f + slack
+            box.set(
+                centreX(element) - halfWidth, centreY(element) - halfHeight,
+                centreX(element) + halfWidth, centreY(element) + halfHeight,
+            )
+            return box.contains(x, y)
+        }
         // A movement stick is grabbed wider than it is drawn: the base is fixed
         // at the socket's centre, so the press reads as a push from there. That
         // is true in both stages -- a two-stage socket that could only be
@@ -652,8 +682,14 @@ class TouchOverlayView @JvmOverloads constructor(
                     val flicked = element.value != 0 && flicking
                     if (position != null && !flicked) {
                         if (element.value == 0) {
-                            leftX += position[0]
-                            leftY += position[1]
+                            // Two left sticks state one axis between them: the
+                            // further-deflected one wins rather than the two
+                            // adding up, so a thumb on each cannot ask for more
+                            // deflection than the axis can carry.
+                            if (hypot(position[0], position[1]) > hypot(leftX, leftY)) {
+                                leftX = position[0]
+                                leftY = position[1]
+                            }
                         } else {
                             rightX += position[0]
                             rightY += position[1]
@@ -667,6 +703,9 @@ class TouchOverlayView @JvmOverloads constructor(
                 // The switch sends nothing and holds nothing: it changes which
                 // throw the left stick reads with, from the next sample on.
                 ControlKind.STICK_MODE -> Unit
+                // The mentality pair sends nothing while a finger is on it: its
+                // double press is read on the lift, and holds no bit at all.
+                ControlKind.MENTALITY -> Unit
                 ControlKind.CUSTOM -> Unit  // a spare: only its swipes send
                 // A latched toggle holds its command with no finger on it, so
                 // its bits are read from the latch rather than from a hold.
@@ -718,7 +757,13 @@ class TouchOverlayView @JvmOverloads constructor(
         if (prefs.sprintFromStick && prefs.stickStage == Prefs.STAGE_ONE &&
             gamePhase != GamePhase.MENUS
         ) {
-            if (sprintLatch.update(rawLx, rawLy)) buttons = buttons or NativeBridge.RB
+            // The movement stick's own throw, never the merged one: Stick 2
+            // mirrors the socket without the sprint, which is the whole point of
+            // it. A lifted stick is a centred one, so the latch lets go.
+            val sprintThrow = stickPositions[MOVE_STICK]
+            if (sprintLatch.update(sprintThrow?.get(0) ?: 0f, sprintThrow?.get(1) ?: 0f)) {
+                buttons = buttons or NativeBridge.RB
+            }
         } else {
             sprintLatch.reset()
         }
@@ -840,6 +885,7 @@ class TouchOverlayView @JvmOverloads constructor(
         trickOpen = false
         trickSector = -1
         burstCadence.reset()
+        mentality.reset()
         // Everything up means everything: a trigger does not outlive the pad,
         // and neither does a tap still riding out its frame or an arm the stick
         // was holding down.
@@ -1175,6 +1221,11 @@ class TouchOverlayView @JvmOverloads constructor(
             return false
         }
         val released = claims.release(pointerId) ?: return false
+        // The lift's own coordinates are the last sample of a gesture. A fast
+        // flick can travel the whole way inside the UP event -- the thumb leaves
+        // the glass between two move batches -- and a classifier read from the
+        // last MOVE alone called that a tap and dropped the shot.
+        swipeClassifier.move(pointerId, x, y)
         markReleased(released.element)
         val pressedAt = pressAt.remove(pointerId)
         dpadBits.remove(pointerId)
@@ -1212,6 +1263,22 @@ class TouchOverlayView @JvmOverloads constructor(
                     if (prefs.stickStage == Prefs.STAGE_TWO) Prefs.STAGE_ONE else Prefs.STAGE_TWO
                 resetTwoStage()
                 invalidate()
+            }
+        }
+        // The team mentality pair: one tap sends the title's own double press of
+        // the d-pad. A thumb that slid off said something else, a hold sends
+        // nothing until it lifts, and a second tap while the first sequence is
+        // still playing is dropped rather than queued twice.
+        if (released.element.kind == ControlKind.MENTALITY) {
+            val start = pressedAt
+            val tapSlop = 18f * density
+            val now = SystemClock.uptimeMillis()
+            if ((start == null || hypot(x - start[0], y - start[1]) <= tapSlop) &&
+                mentality.accept(now)
+            ) {
+                triggerHaptic()
+                macro.enqueue(SwipeAction.double(released.element.value), now)
+                scheduleMacro()
             }
         }
         if (released.element.kind == ControlKind.BUTTON) {
@@ -1440,7 +1507,16 @@ class TouchOverlayView @JvmOverloads constructor(
         // became known as the thumb lifted still needs the timed sequence.
         val alreadyHeld = liveSwipeHeldFor(action)
         if (!alreadyHeld && SwipePriority.sendsSwipe(action)) emitSwipe(action)
-        clearLiveSwipe(pointerId)
+        if (alreadyHeld) {
+            // The modifier has been down and the title has seen it, so the
+            // sequence is not replayed; it is held one beat past the button's
+            // lift instead. Releasing both in this push is what turned a finesse
+            // shot into an ordinary one whenever the title's poll came after it.
+            removeCallbacks(liveSwipeTail)
+            postDelayed(liveSwipeTail, LIVE_MODIFIER_TAIL_MS)
+        } else {
+            clearLiveSwipe(pointerId)
+        }
         noteSwipeTrail(element, direction)
     }
 
@@ -1495,6 +1571,7 @@ class TouchOverlayView @JvmOverloads constructor(
     /** Lets go of the live swipe's modifier; the release push carries both bits up. */
     private fun clearLiveSwipe(pointerId: Int = -1) {
         if (pointerId >= 0 && pointerId != liveSwipePointer) return
+        removeCallbacks(liveSwipeTail)
         liveSwipePointer = -1
         liveSwipeSince = 0L
         liveSwipeButtonBits = 0
@@ -1560,9 +1637,10 @@ class TouchOverlayView @JvmOverloads constructor(
         )
         if (!twoStaged) {
             stickPositions[element.id] = raw
-            // Only the movement stick owns the stage: a right-stick move while
-            // the left thumb is out in the ring must not end its sprint.
-            if (element.value == 0) {
+            // Only the movement stick owns the stage: a right-stick move -- or
+            // Stick 2's, which has no ring at all -- must not end the movement
+            // thumb's sprint.
+            if (element.id == MOVE_STICK) {
                 stickRaw.remove(element.id)
                 twoStageSprint = false
                 twoStagePointer = -1
@@ -1594,7 +1672,7 @@ class TouchOverlayView @JvmOverloads constructor(
 
     /** Whether this element is the movement stick with the two-stage switch on. */
     private fun isTwoStage(element: ControlElement): Boolean =
-        element.kind == ControlKind.STICK && element.value == 0 &&
+        element.kind == ControlKind.STICK && element.id == MOVE_STICK &&
             prefs.stickStage == Prefs.STAGE_TWO
 
     /**
@@ -1901,6 +1979,7 @@ class TouchOverlayView @JvmOverloads constructor(
                 ControlKind.BUTTON, ControlKind.TRIGGER, ControlKind.SKILL, ControlKind.CUSTOM,
                 ControlKind.LATCH -> drawButton(canvas, element, alpha, faded)
                 ControlKind.STANCE -> drawStance(canvas, element, alpha, faded)
+                ControlKind.MENTALITY -> drawMentality(canvas, element, alpha, faded)
                 ControlKind.STICK_MODE -> drawStickMode(canvas, element, alpha, faded)
                 ControlKind.TRICK -> {
                     drawButton(canvas, element, alpha, faded)
@@ -1996,6 +2075,12 @@ class TouchOverlayView @JvmOverloads constructor(
         private const val FLOAT_ZONE = 0.5f
 
         /**
+         * The movement stick: the one socket the rim latch and the two-stage
+         * ring belong to. Stick 2 is a stick of its own, without either.
+         */
+        private const val MOVE_STICK = "stick"
+
+        /**
          * The skill stick's throw, as a share of its socket. Short enough that a
          * flick reaches the rim, long enough that the eight sectors are not all
          * under the first millimetre of travel.
@@ -2007,6 +2092,15 @@ class TouchOverlayView @JvmOverloads constructor(
 
         /** How long a released swipe's trail takes to fly out and fade. */
         private const val SWIPE_TRAIL_MS = 200L
+
+        /**
+         * How long a live swipe's modifier is kept down after the button under
+         * it lifts. PES reads a finesse shot (R2 + shoot) as the shot comes up,
+         * so releasing R2 in the same push as the shot read as an ordinary shot
+         * whenever the title's poll landed after both. Two guest frames at 30
+         * fps is 67 ms; eighty leaves two polls with the modifier still down.
+         */
+        private const val LIVE_MODIFIER_TAIL_MS = 80L
 
         /**
          * How long a live swipe's modifier has to be down before the lift
@@ -2029,6 +2123,11 @@ class TouchOverlayView @JvmOverloads constructor(
         // defending one, so which half the thumb is in is legible at a glance.
         private const val COLOR_STANCE_ATTACK = 0xFF22C55E.toInt()
         private const val COLOR_STANCE_DEFEND = 0xFF38BDF8.toInt()
+
+        // The team mentality pair: green raises, blue lowers. Both are drawn as
+        // low-opacity glass, so the pitch under them stays readable.
+        private const val COLOR_MENTALITY_ATTACK = 0xFF22C55E.toInt()
+        private const val COLOR_MENTALITY_DEFEND = 0xFF38BDF8.toInt()
 
         // The Xbox 360 pad colours, because the game's own prompts use them
         private const val COLOR_A = 0xFF107C10.toInt()      // Emerald Green
@@ -2100,6 +2199,62 @@ class TouchOverlayView @JvmOverloads constructor(
             if (defending) "DEF" else "ATK",
             cx, cy - (text.descent() + text.ascent()) * 0.5f, text,
         )
+    }
+
+    /**
+     * One of the two team mentality buttons: a glass pill with rounded corners, a
+     * thin accent border, and a white arrow and word. Green raises the mentality,
+     * blue lowers it, and the body is mostly see-through so the pitch under it
+     * stays readable.
+     *
+     * The shape is a pill rather than a circle because the word is the control:
+     * "ATTACKING" over "DEFENSE" stacked one above the other is the whole
+     * gesture, and a thumb finds it without having to remember which circle was
+     * which.
+     */
+    private fun drawMentality(
+        canvas: Canvas, element: ControlElement, alpha: Float, faded: Boolean,
+    ) {
+        val r = radius(element)
+        val halfWidth = r
+        val halfHeight = r * 0.48f
+        val cx = centreX(element)
+        val cy = centreY(element)
+        val fade = if (faded) 0.45f else 1f
+        val attacking = element.value == NativeBridge.UP
+        val accent = if (attacking) COLOR_MENTALITY_ATTACK else COLOR_MENTALITY_DEFEND
+        val pressed = isOn(element)
+        val corner = halfHeight * 0.55f
+
+        // The tint first, then a dark wash over it: together a low-opacity colour
+        // rather than a coloured button.
+        box.set(cx - halfWidth, cy - halfHeight, cx + halfWidth, cy + halfHeight)
+        fill.color = Color.argb(
+            (alpha * fade * (if (pressed) 125f else 66f)).toInt().coerceIn(0, 255),
+            Color.red(accent), Color.green(accent), Color.blue(accent),
+        )
+        canvas.drawRoundRect(box, corner, corner, fill)
+        fill.color = Color.argb(
+            (alpha * fade * (if (pressed) 110f else 72f)).toInt().coerceIn(0, 255), 8, 12, 18,
+        )
+        canvas.drawRoundRect(box, corner, corner, fill)
+
+        // A thin, quiet border in the accent, so which of the two is which reads
+        // before the word does.
+        val border = max(1f, halfHeight * 0.075f)
+        box.inset(border * 0.5f, border * 0.5f)
+        stroke.strokeWidth = border
+        stroke.color = Color.argb(
+            (alpha * fade * (if (pressed) 235f else 165f)).toInt().coerceIn(0, 255),
+            Color.red(accent), Color.green(accent), Color.blue(accent),
+        )
+        canvas.drawRoundRect(box, corner, corner, stroke)
+
+        val word = (if (attacking) "\u2191 " else "\u2193 ") +
+            element.sub.ifEmpty { element.label }
+        text.textSize = fitText(text, word, halfWidth * 1.62f, halfHeight * 1.05f, 6f)
+        text.color = Color.argb((alpha * fade * 250f).toInt().coerceIn(0, 255), 255, 255, 255)
+        canvas.drawText(word, cx, cy - (text.descent() + text.ascent()) * 0.5f, text)
     }
 
     private fun drawButton(canvas: Canvas, element: ControlElement, alpha: Float, faded: Boolean) {
@@ -2661,8 +2816,8 @@ class TouchOverlayView @JvmOverloads constructor(
     }
 
     /**
-     * The two-stage switch: a small pill above the socket, "1" on one side and
-     * "2" on the other, with the mode in use filled. One tap flips it, and it
+     * The two-stage switch: a small pill above the socket, MENU on one side and
+     * MATCH on the other, with the mode in use filled. One tap flips it, and it
      * holds no bit -- what it changes is how the stick under it reads.
      */
     private fun drawStickMode(
@@ -2699,9 +2854,16 @@ class TouchOverlayView @JvmOverloads constructor(
 
         text.textSize = halfH * 1.20f
         text.color = Color.argb((alpha * fade * 255f).toInt().coerceIn(0, 255), 248, 250, 252)
-        val baseline = cy - (text.descent() + text.ascent()) * 0.5f
-        canvas.drawText("1", cx - halfW * 0.5f, baseline, text)
-        canvas.drawText("2", cx + halfW * 0.5f, baseline, text)
+        // The words are the modes themselves: MENU is the standard throw (the
+        // menus' own stick, no ring, so a run cannot scroll a list), MATCH is the
+        // two-stage one whose outer circle sprints. "1" and "2" said nothing
+        // about which was which.
+        val left = "MENU"
+        val right = "MATCH"
+        text.textSize = fitText(text, left, halfW * 0.88f, halfH * 1.15f, 4f)
+        canvas.drawText(left, cx - halfW * 0.5f, cy - (text.descent() + text.ascent()) * 0.5f, text)
+        text.textSize = fitText(text, right, halfW * 0.88f, halfH * 1.15f, 4f)
+        canvas.drawText(right, cx + halfW * 0.5f, cy - (text.descent() + text.ascent()) * 0.5f, text)
     }
 
     private fun drawStick(canvas: Canvas, element: ControlElement, alpha: Float, faded: Boolean) {
@@ -2726,7 +2888,7 @@ class TouchOverlayView @JvmOverloads constructor(
         // The rim lights only while the sprint latch is actually on: the stick
         // says what it is doing, rather than a separate button lighting up
         // somewhere, and a thumb inside the release point is not sprinting.
-        if (prefs.sprintFromStick && element.value == 0 && sprintLatch.active) {
+        if (prefs.sprintFromStick && element.id == MOVE_STICK && sprintLatch.active) {
             stroke.color = Color.argb((alpha * fadeFactor * 235).toInt().coerceIn(0, 255), 34, 197, 94)
             stroke.strokeWidth = max(2f, r * 0.07f)
             canvas.drawCircle(cx, cy, r - stroke.strokeWidth * 0.5f, stroke)
