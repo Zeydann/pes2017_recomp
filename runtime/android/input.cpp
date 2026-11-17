@@ -67,13 +67,15 @@ namespace
     float g_saturationPixelsPerSecond = look::kBasePixelsPerSecond;
 
     // ---- the sticks -------------------------------------------------------
-    // Movement used to be linear from the first pixel, so a 75 dp stick jumped
-    // from standing to a jog. The shape is radial: a diagonal stays one, and the
+    // Linear by default, which is the console's own mapping and the one the
+    // title was tuned against: the thumb's throw is the deflection, and the only
+    // deadzone in the path is the title's. The shape exists for a player who
+    // asks for one, and is radial when used -- a diagonal stays one, and the
     // deadzone is a circle like the socket it is drawn as.
     std::mutex g_stickLock;
     // The right stick is passed through untouched until a player asks for a
     // shape -- tricks are muscle memory, and this must not quietly retune them.
-    stick::Shape g_leftStick{ 0.08f, 1.45f, 1.0f };
+    stick::Shape g_leftStick{ 0.0f, 1.0f, 1.0f, stick::kGuestFloor };
     stick::Shape g_rightStick{ 0.0f, 1.0f, 1.0f };
 
     // ---- the skill stick --------------------------------------------------
@@ -261,7 +263,10 @@ void android::input::SetStickSettings(float leftDeadzone, float leftCurve,
                                       float rightDeadzone, float rightCurve)
 {
     // Sanitised once, so the log below and the stick above are the same shape.
-    const stick::Shape left = stick::Sanitize({ leftDeadzone, leftCurve, 1.0f });
+    // The left stick is lifted to the title's own deadzone: a shaped throw has
+    // to clear it, or the player gets two deadzones in a row. The right stick is
+    // left at zero -- its flick classifier reads the value it is given.
+    const stick::Shape left = stick::Sanitize({ leftDeadzone, leftCurve, 1.0f, stick::kGuestFloor });
     const stick::Shape right = stick::Sanitize({ rightDeadzone, rightCurve, 1.0f });
     {
         std::lock_guard lock(g_stickLock);

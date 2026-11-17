@@ -32,6 +32,14 @@ import kotlin.math.pow
 object StickShape {
 
     /**
+     * The title's own thumbstick deadzone, as a share of full deflection
+     * (runtime/android/input.cpp, ToAxis). Nothing below it moves the player, so
+     * a shaped throw starts here rather than at zero: a host deadzone on top of
+     * it is dead travel the thumb can feel.
+     */
+    const val GUEST_FLOOR = 0.14f
+
+    /**
      * [x] and [y] shaped together, as a vector: shaping each axis separately
      * bends diagonals and turns the deadzone into a square.
      *
@@ -39,18 +47,31 @@ object StickShape {
      * comes out as sub-pixel wobble -- a residual of 0.01 is still a nudge the
      * title acts on.
      */
-    fun apply(x: Float, y: Float, deadzone: Float, exponent: Float): FloatArray {
+    fun apply(
+        x: Float, y: Float, deadzone: Float, exponent: Float, floor: Float = 0f,
+    ): FloatArray {
         val dz = deadzone.coerceIn(0f, 0.9f)
         val curve = exponent.coerceIn(0.25f, 4f)
+        val lift = floor.coerceIn(0f, 0.5f)
         val magnitude = hypot(x, y)
         if (!(magnitude > dz)) return floatArrayOf(0f, 0f)
 
         // Out to the rim at one, then what the curve does with the rest of the
         // throw: the deadzone is not left behind at the top, so full speed is
-        // still reachable by a thumb that reaches the rim.
+        // still reachable by a thumb that reaches the rim. [lift] starts what is
+        // left at the first value the title acts on, so the two deadzones are
+        // never added together.
         val reach = min(magnitude, 1f)
-        val t = ((reach - dz) / (1f - dz)).coerceAtLeast(0f)
-        val scale = t.pow(curve) / magnitude
+        val shaped = if (dz > 0f || curve != 1f) {
+            val t = ((reach - dz) / (1f - dz)).coerceAtLeast(0f)
+            lift + t.pow(curve) * (1f - lift)
+        } else {
+            // No deadzone and no curve is the console's own mapping: the thumb's
+            // throw is the deflection, and the title's floor is the only
+            // deadzone in the path.
+            reach
+        }
+        val scale = shaped / magnitude
         val sx = x * scale
         val sy = y * scale
 

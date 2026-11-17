@@ -343,23 +343,25 @@ class Prefs(context: Context) {
     // ---- the touch sticks ---------------------------------------------------
 
     /**
-     * The share of the movement stick's throw that sends nothing, so a resting
-     * thumb cannot nudge the player off the spot. The title has a deadzone of
-     * its own on top, which is why this stays small.
+     * The share of the movement stick's throw that sends nothing. Zero by
+     * default: the title has a deadzone of its own (~14%), and a host deadzone
+     * stacked on top of it is dead travel the thumb can feel -- it reads as a
+     * stick that does nothing until it is pushed halfway. Raise it only for a
+     * thumb that rests on glass and drifts.
      */
     var stickDeadzone: Float
-        get() = store.getFloat(KEY_STICK_DEADZONE, 0.08f)
+        get() = store.getFloat(KEY_STICK_DEADZONE, 0f)
         set(value) = store.edit().putFloat(KEY_STICK_DEADZONE, value.coerceIn(0f, 0.20f)).apply()
 
     /**
      * The curve on the rest of the throw: below 1 reaches the edge sooner, above
-     * 1 is finer around the middle, where a walking pace lives. 1.9 opens the
-     * walking band -- the part of the throw between standing and a jog -- wide
-     * enough for a thumb to hold a pace deliberately rather than sprint by
-     * accident, now that the throw is measured across the whole socket.
+     * 1 is finer around the middle, where a walking pace lives. 1.0 by default,
+     * which is the console's own mapping: the thumb's throw is the deflection.
+     * Above 1 opens the walking band but buys it with the first part of the
+     * throw, so the stick stops answering a small push.
      */
     var stickCurve: Float
-        get() = store.getFloat(KEY_STICK_CURVE, 1.9f)
+        get() = store.getFloat(KEY_STICK_CURVE, 1f)
         set(value) = store.edit().putFloat(KEY_STICK_CURVE, value.coerceIn(0.7f, 2.5f)).apply()
 
     /**

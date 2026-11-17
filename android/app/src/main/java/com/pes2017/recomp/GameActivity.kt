@@ -834,7 +834,10 @@ class GameActivity : AppCompatActivity(), NativeListener {
             prefs.lookSmoothing, prefs.invertLook, prefs.lookSaturation,
         )
         // runtime/stick_curve.h shapes the whole vector, so the deadzone is the
-        // circle the socket is drawn as and a diagonal stays a diagonal.
+        // circle the socket is drawn as and a diagonal stays a diagonal. The
+        // defaults are the console's own mapping -- no deadzone, no curve -- and
+        // the left stick is lifted to the title's own 14% floor, so a shaped
+        // throw never stacks a second deadzone under it.
         if (NativeBridge.stickSettings) {
             NativeBridge.nativeStickSettings(
                 prefs.stickDeadzone, prefs.stickCurve,

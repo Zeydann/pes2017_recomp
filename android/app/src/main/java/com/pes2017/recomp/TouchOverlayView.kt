@@ -506,6 +506,17 @@ class TouchOverlayView @JvmOverloads constructor(
     /** How far the knob travels inside its socket, as a fraction of the radius. */
     private val stickTravel = 0.62f
 
+    /**
+     * How far outside its socket a movement stick can still be grabbed, as a
+     * fraction of the radius.
+     *
+     * The base is the socket's centre and never moves, so a thumb landing wide
+     * of the circle is read as a push from the centre -- the deflection the hand
+     * meant, rather than a refusal. Wider than a button's slack on purpose: a
+     * stick is the control a thumb finds without looking.
+     */
+    private val stickGrab = 1.35f
+
     /** The look area is a rectangle; everything else is a circle. */
     private fun rectOf(element: ControlElement, into: RectF) {
         val halfWidth = element.sizeOn(stance) * density * 0.5f
@@ -526,7 +537,14 @@ class TouchOverlayView @JvmOverloads constructor(
         // missed in a firefight. The editor grips harder -- a spare button hidden
         // under a neighbour has to be selectable -- so its handles do not overlap.
         val slack = (if (editing) 2f else 6f) * density
-        return hypot(x - centreX(element), y - centreY(element)) <= radius(element) + slack
+        // A movement stick is grabbed wider than it is drawn: the base is fixed
+        // at the socket's centre, so the press reads as a push from there.
+        val reach = if (element.kind == ControlKind.STICK && !editing) {
+            radius(element) * stickGrab
+        } else {
+            radius(element)
+        }
+        return hypot(x - centreX(element), y - centreY(element)) <= reach + slack
     }
 
     /** Buttons first, the look area last: it sits under everything. */
@@ -654,7 +672,9 @@ class TouchOverlayView @JvmOverloads constructor(
         // once -- the check is the same one that keeps those calls from being
         // made at all.
         if (!NativeBridge.stickSettings) {
-            val left = StickShape.apply(lx, ly, prefs.stickDeadzone, prefs.stickCurve)
+            val left = StickShape.apply(
+                lx, ly, prefs.stickDeadzone, prefs.stickCurve, StickShape.GUEST_FLOOR,
+            )
             lx = left[0]; ly = left[1]
             val right = StickShape.apply(rx, ry, prefs.rightStickDeadzone, prefs.rightStickCurve)
             rx = right[0]; ry = right[1]

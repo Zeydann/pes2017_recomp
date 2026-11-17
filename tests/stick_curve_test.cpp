@@ -104,6 +104,39 @@ int main()
         Check(Near(x, 0.85f), "range scales what the stick sends at the rim");
     }
 
+    // ---- the defaults, and the title's own deadzone -------------------------
+
+    {
+        // The default shape is the console's mapping: the thumb's throw is the
+        // deflection, and nothing is subtracted from it on the way.
+        stick::Shape shape{};
+        float x = 0.3f, y = 0.0f;
+        stick::Apply(x, y, shape);
+        Check(Near(x, 0.3f), "the default shape passes the thumb through");
+    }
+
+    {
+        // A shaped throw starts at the first value the title acts on. Stacking a
+        // host deadzone under the title's floor is dead travel the thumb feels.
+        stick::Shape shape{ 0.0f, 1.3f, 1.0f, stick::kGuestFloor };
+        float x = 0.01f, y = 0.0f;
+        Check(stick::Apply(x, y, shape), "the first pixel of a shaped throw moves");
+        Check(Near(x, stick::kGuestFloor, 5e-3f), "at the title's floor, not below it");
+        x = 1.0f;
+        y = 0.0f;
+        stick::Apply(x, y, shape);
+        Check(Near(x, 1.0f), "and the rim still reaches full deflection");
+    }
+
+    {
+        // Without a floor, a shaped throw keeps starting at nothing: the right
+        // stick is left alone.
+        stick::Shape shape{ 0.0f, 1.3f, 1.0f };
+        float x = 0.01f, y = 0.0f;
+        stick::Apply(x, y, shape);
+        Check(x < stick::kGuestFloor, "no floor, no lift");
+    }
+
     {
         // A thumb that drags past the socket is still one full deflection, and
         // the direction it went in is kept.
