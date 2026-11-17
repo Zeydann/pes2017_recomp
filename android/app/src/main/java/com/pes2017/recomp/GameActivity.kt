@@ -321,6 +321,9 @@ class GameActivity : AppCompatActivity(), NativeListener {
                         append("MEMORY & VIEWPORT\n")
                         append("  App / System Total RAM: $ramStr\n")
                         append("  Internal Render: ${resW}×${resH}  •  Refresh: ${refreshHz().roundToInt()} Hz\n")
+                        append("\nINPUT AS SENT\n")
+                        append(String.format(Locale.US, "  Pad 0x%04X  ·  Arrows 0x%04X  ·  LS %.2f, %.2f\n",
+                            overlay.lastButtons, overlay.lastArrows, overlay.lastLeftX, overlay.lastLeftY))
                     }
                 }
             }

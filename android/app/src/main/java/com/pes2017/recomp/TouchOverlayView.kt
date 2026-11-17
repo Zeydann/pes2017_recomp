@@ -267,6 +267,16 @@ class TouchOverlayView @JvmOverloads constructor(
     }
     private var pendingSwipes = 0
 
+    /** The last state this pad sent, for the stats HUD's readout. */
+    var lastButtons: Int = 0
+        private set
+    var lastArrows: Int = 0
+        private set
+    var lastLeftX: Float = 0f
+        private set
+    var lastLeftY: Float = 0f
+        private set
+
     /**
      * What the title is doing, as the runtime reports it. Controls marked for a
      * phase come and go with it; one that is about to leave the screen is let go
@@ -752,12 +762,14 @@ class TouchOverlayView @JvmOverloads constructor(
                 // an arrow pressed by a sprinting thumb is a tactic nobody
                 // asked for.
                 stickArrows.clear()
+                lastArrows = 0
             } else {
                 // The raw throw, not the shaped one: the press point is 0.60 of
                 // the socket as the engine measures it, and a menu reached at
                 // three-quarters of the way out is a menu with a thumb through
                 // it.
-                buttons = buttons or stickArrows.bits(rawLx, rawLy)
+                lastArrows = stickArrows.bits(rawLx, rawLy)
+                buttons = buttons or lastArrows
                 // One input, one source: the stand-in *is* the d-pad here, so
                 // the guest gets the four bits and a centred stick beside them.
                 // Leaving the analog deflection on is how a menu moved by a bit
@@ -784,6 +796,9 @@ class TouchOverlayView @JvmOverloads constructor(
         }
         if (now < pulseUntil) buttons = buttons or pulseBits
 
+        lastButtons = buttons
+        lastLeftX = lx
+        lastLeftY = ly
         Macro.record(Macro.TOUCH, buttons, leftTrigger, rightTrigger, lx, ly, rx, ry)
         NativeBridge.nativeTouchState(buttons, leftTrigger, rightTrigger, lx, ly, rx, ry)
     }
