@@ -696,9 +696,10 @@ class TouchOverlayView @JvmOverloads constructor(
         // release point keeps a thumb resting on the threshold from chattering
         // between running and jogging. The raw throw decides, so the shaped
         // curve cannot make a jog a sprint by squeezing the top of its range.
-        // The menus keep the stick for the d-pad, where R1 is a menu button, so
-        // this is a match gesture.
-        if (prefs.sprintFromStick && gamePhase != GamePhase.MENUS && leftThumb) {
+        // The menus keep the stick for the d-pad, where a push to the rim is a
+        // selection moving and R1 is a menu button, so this is a match gesture
+        // and only a match one (StickSprint).
+        if (StickSprint.allowed(prefs.sprintFromStick, gamePhase, leftThumb)) {
             if (sprintLatch.update(rawLx, rawLy)) buttons = buttons or NativeBridge.RB
         } else {
             sprintLatch.reset()

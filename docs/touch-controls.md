@@ -179,8 +179,14 @@ between two frames.
 and no release hysteresis -- a thumb taken back inside 0.95 stops running on
 the next sample. It is measured on the raw throw, so a curve cannot make a jog
 a sprint. While on, the pad's RB bit (`0x0200`, R1) is OR'd into every state
-push and the socket rim lights. Menus never sprint; every cancellation resets
-the latch, and so does the thumb leaving the stick.
+push and the socket rim lights. **A match sprints and nothing else does**
+(`StickSprint`, gated on `GamePhase.MATCH`): the menus drive the d-pad from the
+same stick, and a thumb rolling a selection to the edge of the socket reaches
+the rim on the way, where R1 is a menu button besides. A phase the runtime
+cannot answer (`GamePhase.UNKNOWN`, which an engine from before the title's
+named procedures reports) is not a match either, so the rim does not sprint
+there; the pad's own RB still does. Every cancellation resets the latch, and so
+does the thumb leaving the stick.
 
 The latch arms on a **crossing**, not on a landing: the thumb has to be seen
 inside 0.95 and then pushed out past it. That is what keeps R1 out of the menus

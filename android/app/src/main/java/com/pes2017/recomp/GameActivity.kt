@@ -324,6 +324,10 @@ class GameActivity : AppCompatActivity(), NativeListener {
                         append("\nINPUT AS SENT\n")
                         append(String.format(Locale.US, "  Pad 0x%04X  ·  Arrows 0x%04X  ·  LS %.2f, %.2f\n",
                             overlay.lastButtons, overlay.lastArrows, overlay.lastLeftX, overlay.lastLeftY))
+                        // What the runtime says the title is doing. UNKNOWN is an
+                        // engine that has not named a screen yet: the pad shows
+                        // its menus controls, and the rim does not sprint.
+                        append("  Phase ${overlay.gamePhase}\n")
                     }
                 }
             }

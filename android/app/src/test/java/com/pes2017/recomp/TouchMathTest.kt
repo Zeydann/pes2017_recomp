@@ -142,4 +142,31 @@ class TouchMathTest {
         one.bits(0f, 0.65f)
         assertEquals(0, two.bits(0f, 0f))
     }
+
+    // ---- sprint from the rim ------------------------------------------------
+
+    @Test
+    fun theRimSprintsInAMatch() {
+        assertTrue(StickSprint.allowed(sprintFromStick = true, GamePhase.MATCH, leftThumb = true))
+    }
+
+    @Test
+    fun theRimDoesNotSprintInAMenu() {
+        // The same stick drives the d-pad there: rolling a selection to the edge
+        // of the socket must not build a run, and R1 is a menu button.
+        assertFalse(StickSprint.allowed(sprintFromStick = true, GamePhase.MENUS, leftThumb = true))
+    }
+
+    @Test
+    fun aRuntimeThatCannotSayDoesNotSprint() {
+        // An engine from before the title's named procedures answers UNKNOWN:
+        // the pad's own RB is the way to hold a run there.
+        assertFalse(StickSprint.allowed(sprintFromStick = true, GamePhase.UNKNOWN, leftThumb = true))
+    }
+
+    @Test
+    fun theRimSprintKeepsItsOwnSwitches() {
+        assertFalse(StickSprint.allowed(sprintFromStick = false, GamePhase.MATCH, leftThumb = true))
+        assertFalse(StickSprint.allowed(sprintFromStick = true, GamePhase.MATCH, leftThumb = false))
+    }
 }

@@ -162,3 +162,19 @@ class StickArrows {
         const val RELEASE = 0.42f
     }
 }
+
+/**
+ * Whether the rim of the left stick presses RB, which is a run.
+ *
+ * **Match gameplay only.** The menus drive the d-pad from the same stick, and a
+ * thumb rolling a selection to the edge of the socket reaches the rim on the
+ * way -- the run has no business being built out of a menu push, where R1 is a
+ * menu button besides. A phase the runtime cannot answer ([GamePhase.UNKNOWN],
+ * which is what an engine from before the title's named procedures answers)
+ * counts as not in a match: the pad's own RB button is still there to sprint
+ * with, and guessing the other way is how the run kept firing in the menus.
+ */
+object StickSprint {
+    fun allowed(sprintFromStick: Boolean, phase: GamePhase, leftThumb: Boolean): Boolean =
+        sprintFromStick && phase == GamePhase.MATCH && leftThumb
+}
