@@ -557,12 +557,14 @@ class TouchOverlayView @JvmOverloads constructor(
         // under a neighbour has to be selectable -- so its handles do not overlap.
         val slack = (if (editing) 2f else 6f) * density
         // A movement stick is grabbed wider than it is drawn: the base is fixed
-        // at the socket's centre, so the press reads as a push from there.
-        // A two-stage stick is grabbed at its own rim and no further: the ring
-        // past 1.0 is sprint, so a press that started out there would begin the
-        // match already running.
+        // at the socket's centre, so the press reads as a push from there. That
+        // is true in both stages -- a two-stage socket that could only be
+        // grabbed inside its rim lost every thumb that landed a little wide,
+        // and the press fell through to the pitch as a camera drag. The ring is
+        // kept out of a press by the sample itself (moveStick's `fromPress`),
+        // not by refusing the touch.
         val reach = if (element.kind == ControlKind.STICK && !editing) {
-            radius(element) * if (isTwoStage(element)) 1f else stickGrab
+            radius(element) * stickGrab
         } else {
             radius(element)
         }
@@ -1102,7 +1104,7 @@ class TouchOverlayView @JvmOverloads constructor(
                     skillOriginY = y
                     if (NativeBridge.skillStick) NativeBridge.nativeSkillTouch(0f, 0f)
                 }
-                else -> moveStick(element, x, y, pointerId)
+                else -> moveStick(element, x, y, pointerId, fromPress = true)
             }
             ControlKind.DPAD -> dpadBits[pointerId] = dpadArm(element, x, y)
             ControlKind.SWIPE -> swipeClassifier.begin(
@@ -1539,7 +1541,9 @@ class TouchOverlayView @JvmOverloads constructor(
     private fun stickBaseY(element: ControlElement): Float =
         if (isFloating(element)) floatOriginY else centreY(element)
 
-    private fun moveStick(element: ControlElement, x: Float, y: Float, pointerId: Int) {
+    private fun moveStick(
+        element: ControlElement, x: Float, y: Float, pointerId: Int, fromPress: Boolean = false,
+    ) {
         // The knob's own travel is the throw: pushing it to its rim is full
         // speed, which is the travel the hand can see. The longer throw is kept
         // for players who learned on it (Prefs.travelMatchesKnob). The socket
@@ -1565,9 +1569,23 @@ class TouchOverlayView @JvmOverloads constructor(
             }
             return
         }
+        // A press is read as a thumb on the rim however wide it landed: the
+        // ring is a gesture (swipe outward and hold), so starting the dwell
+        // clock on the press would let a wide grab sprint without one. The move
+        // that follows is a sample like any other and can enter the ring.
+        var dx = raw[0]
+        var dy = raw[1]
+        if (fromPress) {
+            val distance = hypot(dx, dy)
+            if (distance > StickStage.INNER_RADIUS) {
+                val k = StickStage.INNER_RADIUS / distance
+                dx *= k
+                dy *= k
+            }
+        }
         // One sample per event: the stage, the dwell and the mapped deflection
         // all come from the same arithmetic the tests pin down.
-        val sample = twoStage.sample(pointerId, raw[0], raw[1], SystemClock.uptimeMillis())
+        val sample = twoStage.sample(pointerId, dx, dy, SystemClock.uptimeMillis())
         stickPositions[element.id] = floatArrayOf(sample.x, sample.y)
         stickRaw[element.id] = raw
         twoStageSprint = sample.sprint

@@ -49,24 +49,22 @@ object ControlOffState {
     fun showsBadge(off: Boolean, editing: Boolean): Boolean = off && editing
 
     /**
-     * The controls that rest: everything the pad presses, flips or switches.
-     * The sticks steer, the d-pad and the swipe patch read gestures, and the
-     * look area is not a control at all, so none of them carries the resting
-     * light.
+     * The controls that have a state of their own to rest in: the toggles, the
+     * tactical button and the two-stage switch. A momentary button is not in
+     * here on purpose -- its resting appearance is the pad's own look, and a
+     * light on every action button turned the pitch red.
      */
     private val RESTING_KINDS = setOf(
-        ControlKind.BUTTON, ControlKind.TRIGGER, ControlKind.SKILL, ControlKind.CUSTOM,
-        ControlKind.LATCH, ControlKind.TACTICAL, ControlKind.TRICK, ControlKind.STANCE,
-        ControlKind.STICK_MODE,
+        ControlKind.LATCH, ControlKind.TACTICAL, ControlKind.STICK_MODE,
     )
 
     /**
-     * Whether this control should carry the resting glow: a button, toggle or
-     * switch that is doing nothing at all right now.
+     * Whether this control should carry the resting glow: a toggle, tactical
+     * button or switch that is switched off right now.
      *
-     * A thumb on it turns it off, so does a latch that is engaged and the
-     * mode-2 switch, and so does the editor -- the glow says "this is here, and
-     * it is idle", which is play's question, not the editor's.
+     * A latch that is engaged turns it off, so does mode 2 on the switch, and so
+     * does the editor -- the glow says "this is off", which is play's question,
+     * not the editor's.
      */
     fun showsRestGlow(kind: ControlKind, engaged: Boolean, editing: Boolean): Boolean =
         kind in RESTING_KINDS && !engaged && !editing

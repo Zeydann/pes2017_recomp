@@ -80,24 +80,38 @@ class HapticsPolicyTest {
     // ---- the resting light ---------------------------------------------------
 
     @Test
-    fun anIdleButtonCarriesTheRestingGlow() {
-        assertTrue(ControlOffState.showsRestGlow(ControlKind.BUTTON, engaged = false, editing = false))
-        assertTrue(ControlOffState.showsRestGlow(ControlKind.TRIGGER, engaged = false, editing = false))
-        assertTrue(ControlOffState.showsRestGlow(ControlKind.LATCH, engaged = false, editing = false))
-        assertTrue(ControlOffState.showsRestGlow(ControlKind.STICK_MODE, engaged = false, editing = false))
+    fun onlyTheControlsWithASwitchOfTheirOwnCarryTheRestingGlow() {
+        for (kind in listOf(ControlKind.LATCH, ControlKind.TACTICAL, ControlKind.STICK_MODE)) {
+            assertTrue("$kind", ControlOffState.showsRestGlow(kind, engaged = false, editing = false))
+        }
     }
 
     @Test
-    fun aPressedOrEngagedControlLosesIt() {
-        assertFalse(ControlOffState.showsRestGlow(ControlKind.BUTTON, engaged = true, editing = false))
+    fun aMomentaryActionButtonNeverGlows() {
+        // The whole point of the change: cross, through, pass, shoot, start,
+        // select, the skill palette, the spares, the trick wheel and the stance
+        // chip keep their own resting look. A light on every one of them was the
+        // pad turned red.
+        for (kind in listOf(
+            ControlKind.BUTTON, ControlKind.TRIGGER, ControlKind.SKILL, ControlKind.CUSTOM,
+            ControlKind.TRICK, ControlKind.STANCE,
+        )) {
+            assertFalse("$kind", ControlOffState.showsRestGlow(kind, engaged = false, editing = false))
+        }
+    }
+
+    @Test
+    fun aToggleThatIsOnLosesItsGlow() {
         assertFalse(ControlOffState.showsRestGlow(ControlKind.LATCH, engaged = true, editing = false))
+        assertFalse(ControlOffState.showsRestGlow(ControlKind.TACTICAL, engaged = true, editing = false))
         // Mode 2 is the switch being on, so the switch is not resting.
         assertFalse(ControlOffState.showsRestGlow(ControlKind.STICK_MODE, engaged = true, editing = false))
     }
 
     @Test
-    fun theEditorAndTheThingsThatAreNotPressedAreLeftOut() {
-        assertFalse(ControlOffState.showsRestGlow(ControlKind.BUTTON, engaged = false, editing = true))
+    fun theEditorAndTheThingsThatAreNotSwitchesAreLeftOut() {
+        assertFalse(ControlOffState.showsRestGlow(ControlKind.LATCH, engaged = false, editing = true))
+        assertFalse(ControlOffState.showsRestGlow(ControlKind.STICK_MODE, engaged = false, editing = true))
         for (kind in listOf(ControlKind.STICK, ControlKind.DPAD, ControlKind.SWIPE, ControlKind.LOOK)) {
             assertFalse("$kind", ControlOffState.showsRestGlow(kind, engaged = false, editing = false))
         }

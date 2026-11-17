@@ -350,7 +350,7 @@ class Prefs(context: Context) {
      * thumb that rests on glass and drifts.
      */
     var stickDeadzone: Float
-        get() = store.getFloat(KEY_STICK_DEADZONE, 0f)
+        get() = store.getFloat(KEY_STICK_DEADZONE, DEFAULT_STICK_DEADZONE)
         set(value) = store.edit().putFloat(KEY_STICK_DEADZONE, value.coerceIn(0f, 0.20f)).apply()
 
     /**
@@ -361,7 +361,7 @@ class Prefs(context: Context) {
      * throw, so the stick stops answering a small push.
      */
     var stickCurve: Float
-        get() = store.getFloat(KEY_STICK_CURVE, 1f)
+        get() = store.getFloat(KEY_STICK_CURVE, DEFAULT_STICK_CURVE)
         set(value) = store.edit().putFloat(KEY_STICK_CURVE, value.coerceIn(0.7f, 2.5f)).apply()
 
     /**
@@ -370,7 +370,7 @@ class Prefs(context: Context) {
      * read as the tail of the last one.
      */
     var rightStickDeadzone: Float
-        get() = store.getFloat(KEY_RIGHT_STICK_DEADZONE, 0.05f)
+        get() = store.getFloat(KEY_RIGHT_STICK_DEADZONE, DEFAULT_RIGHT_STICK_DEADZONE)
         set(value) = store.edit().putFloat(KEY_RIGHT_STICK_DEADZONE, value.coerceIn(0f, 0.20f)).apply()
 
     /**
@@ -379,7 +379,7 @@ class Prefs(context: Context) {
      * the runtime has to see the direction before the thumb leaves.
      */
     var rightStickCurve: Float
-        get() = store.getFloat(KEY_RIGHT_STICK_CURVE, 0.85f)
+        get() = store.getFloat(KEY_RIGHT_STICK_CURVE, DEFAULT_RIGHT_STICK_CURVE)
         set(value) = store.edit().putFloat(KEY_RIGHT_STICK_CURVE, value.coerceIn(0.7f, 2.5f)).apply()
 
     /**
@@ -586,6 +586,18 @@ class Prefs(context: Context) {
 
         /** The movement stick where the layout put it. */
         const val STICK_FIXED = "fixed"
+
+        /**
+         * The stick defaults, named because the stick's arithmetic is tested
+         * without a Context: [StickAxesTest] reads these so a change to the
+         * shipped default cannot pass a test that was written against the old
+         * one. None for the movement stick -- the title's own 14% floor is the
+         * deadzone, and a second one under it is dead travel.
+         */
+        const val DEFAULT_STICK_DEADZONE = 0f
+        const val DEFAULT_STICK_CURVE = 1f
+        const val DEFAULT_RIGHT_STICK_DEADZONE = 0.05f
+        const val DEFAULT_RIGHT_STICK_CURVE = 0.85f
 
         /** The normal movement stick: one circle, its rim is full pace. */
         const val STAGE_ONE = 1

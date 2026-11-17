@@ -213,21 +213,27 @@ build that cannot read the title's phase is still playing, and a sprint that die
 because the tracker went quiet is the worse mistake. A lift, a phase change,
 `ACTION_CANCEL`, pause, the editor, or a macro clears the stage.
 
-In mode 2 the grab is the socket itself (the 1.35 R press tolerance belongs to
-mode 1), so a press can never begin inside the ring. The stage, the dwell and
-the mapping are pinned by `TwoStageStickTest`; a retune of any number fails
-there.
+Both stages grab the socket at 1.35 R. A grab that could only start inside the
+drawn rim lost every thumb that landed a little wide, and the press fell through
+to the pitch as a camera drag; what keeps a grab out of the ring instead is the
+sample: the press is read as a thumb on the rim however wide it landed, so the
+dwell clock starts on the first *move* into the ring, never on the press. The
+stage, the dwell and the mapping are pinned by `TwoStageStickTest`; a retune of
+any number fails there.
 
 ## The resting light
 
-Every button, toggle and switch on the pad carries a faint red ring while it is
-doing nothing: not pressed, not latched, and — for the two-stage switch — still
-on mode 1. It lifts on the press, on the latch, and on mode 2, and it is not
-drawn in the editor, where the OFF badge and the selection ring already say what
-state a control is in. Its rule lives in `ControlOffState.showsRestGlow`, so
-`ControlOffStateTest` checks it without a canvas. The sticks, the d-pad, the
-swipe patch and the look area steer rather than press, so none of them carries
-it.
+The controls that have a switch of their own — the six latches, the tactical
+button and the two-stage switch — carry a faint red ring while they are off. It
+lifts the moment one of them is switched on, and it is not drawn in the editor,
+where the OFF badge and the selection ring already say what state a control is
+in. Its rule lives in `ControlOffState.showsRestGlow`, so `ControlOffStateTest`
+checks it without a canvas.
+
+Momentary controls are deliberately left out. Cross, through, pass and shoot have
+no on or off to be in, and a light on every action button at once turned the pad
+red and made the pitch harder to read. The sticks, the d-pad, the swipe patch and
+the look area steer rather than switch, so none of them carries it either.
 
 ## Dribbling on the ball
 
