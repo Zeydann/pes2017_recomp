@@ -77,6 +77,32 @@ class HapticsPolicyTest {
         }
     }
 
+    // ---- the resting light ---------------------------------------------------
+
+    @Test
+    fun anIdleButtonCarriesTheRestingGlow() {
+        assertTrue(ControlOffState.showsRestGlow(ControlKind.BUTTON, engaged = false, editing = false))
+        assertTrue(ControlOffState.showsRestGlow(ControlKind.TRIGGER, engaged = false, editing = false))
+        assertTrue(ControlOffState.showsRestGlow(ControlKind.LATCH, engaged = false, editing = false))
+        assertTrue(ControlOffState.showsRestGlow(ControlKind.STICK_MODE, engaged = false, editing = false))
+    }
+
+    @Test
+    fun aPressedOrEngagedControlLosesIt() {
+        assertFalse(ControlOffState.showsRestGlow(ControlKind.BUTTON, engaged = true, editing = false))
+        assertFalse(ControlOffState.showsRestGlow(ControlKind.LATCH, engaged = true, editing = false))
+        // Mode 2 is the switch being on, so the switch is not resting.
+        assertFalse(ControlOffState.showsRestGlow(ControlKind.STICK_MODE, engaged = true, editing = false))
+    }
+
+    @Test
+    fun theEditorAndTheThingsThatAreNotPressedAreLeftOut() {
+        assertFalse(ControlOffState.showsRestGlow(ControlKind.BUTTON, engaged = false, editing = true))
+        for (kind in listOf(ControlKind.STICK, ControlKind.DPAD, ControlKind.SWIPE, ControlKind.LOOK)) {
+            assertFalse("$kind", ControlOffState.showsRestGlow(kind, engaged = false, editing = false))
+        }
+    }
+
     @Test
     fun aPhoneWithoutAMotorStillTicksControlsButCannotRumble() {
         assertTrue(HapticsPolicy.allows(true, hasVibrator = false, event = HapticEvent.TAP))

@@ -31,7 +31,7 @@ class ControlLayoutPhaseTest {
     }
 
     @Test
-    fun theTwoStageSwitchSitsAboveTheSocketAndOnlyOverThePitch() {
+    fun theTwoStageSwitchSitsAboveTheSocketAndIsAlwaysOnScreen() {
         // It ships on the pad, on the socket's own centre line, and its lower
         // edge clears the rim by more than a thumb's width: it is a switch, not
         // something the stick's own reach can catch.
@@ -48,10 +48,12 @@ class ControlLayoutPhaseTest {
             "switch bottom $switchBottomDp is above the rim $socketRimDp",
             switchBottomDp <= socketRimDp - 6f,
         )
-        // A match gesture: RB is the title's "next" key, so nothing about the
-        // ring belongs over a menu.
+        // The player's own switch, so it is reachable wherever they are: in a
+        // match, in the title's menus, and before either is known. Only the
+        // ring's RB is match-gated, in pushState, not the switch that picks it.
         assertTrue(switch.shownIn(GamePhase.MATCH))
-        assertFalse(switch.shownIn(GamePhase.MENUS))
+        assertTrue(switch.shownIn(GamePhase.MENUS))
+        assertTrue(switch.shownIn(GamePhase.UNKNOWN))
     }
 
     @Test

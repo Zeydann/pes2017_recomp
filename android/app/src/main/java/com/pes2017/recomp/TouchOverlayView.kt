@@ -1891,6 +1891,8 @@ class TouchOverlayView @JvmOverloads constructor(
                     }
                 }
             }
+            // The resting light, under everything else the control draws on top.
+            drawRestGlow(canvas, element, alpha, faded)
             // The badge goes above the selection ring: it is a state, not a
             // decoration, and a selected off control must still read as off.
             if (ControlOffState.showsBadge(off, editing)) drawOffBadge(canvas, element)
@@ -1999,6 +2001,9 @@ class TouchOverlayView @JvmOverloads constructor(
         /** The word on an off control's badge, and the red the editor gives it. */
         private const val OFF_BADGE = "OFF"
         private const val COLOR_OFF = 0xFFD32F2F.toInt()
+
+        /** The resting light: a soft red, quiet enough to sit under every idle control. */
+        private const val COLOR_REST_GLOW = 0xFFEF4444.toInt()
 
         // The stance chip: green on the attacking pad, steel blue on the
         // defending one, so which half the thumb is in is legible at a glance.
@@ -2577,6 +2582,62 @@ class TouchOverlayView @JvmOverloads constructor(
                 canvas.drawPath(path, highlightPaint)
             }
         }
+    }
+
+    /**
+     * The resting light: a faint red ring around a button, toggle or switch that
+     * is doing nothing at all. It is the pad saying "here, and idle", and it
+     * lifts the moment a thumb lands on it, a latch engages, or the two-stage
+     * switch is on mode 2.
+     *
+     * Deliberately quiet -- two thin strokes at low alpha -- because it is on
+     * every idle control at once; the press and latch lights are the ones that
+     * are meant to be seen across the pitch.
+     */
+    private fun drawRestGlow(
+        canvas: Canvas, element: ControlElement, alpha: Float, faded: Boolean,
+    ) {
+        if (!ControlOffState.showsRestGlow(element.kind, isEngaged(element), editing)) return
+        val fade = if (faded) 0.45f else 1f
+        val r = radius(element)
+        val soft = (alpha * fade * 90f).toInt().coerceIn(0, 255)
+        val edge = (alpha * fade * 170f).toInt().coerceIn(0, 255)
+        val red = Color.red(COLOR_REST_GLOW)
+        val green = Color.green(COLOR_REST_GLOW)
+        val blue = Color.blue(COLOR_REST_GLOW)
+
+        // The switch is a pill: its light follows its own outline.
+        if (element.kind == ControlKind.STICK_MODE) {
+            val halfW = r
+            val halfH = halfW * 0.5f
+            val pad = max(2f, r * 0.10f)
+            val cx = centreX(element)
+            val cy = centreY(element)
+            box.set(cx - halfW - pad, cy - halfH - pad, cx + halfW + pad, cy + halfH + pad)
+            val radius = halfH + pad
+            stroke.strokeWidth = max(2f, r * 0.14f)
+            stroke.color = Color.argb(soft, red, green, blue)
+            canvas.drawRoundRect(box, radius, radius, stroke)
+            stroke.strokeWidth = max(1f, r * 0.05f)
+            stroke.color = Color.argb(edge, red, green, blue)
+            canvas.drawRoundRect(box, radius, radius, stroke)
+            return
+        }
+
+        val cx = centreX(element)
+        val cy = centreY(element)
+        stroke.strokeWidth = max(2f, r * 0.14f)
+        stroke.color = Color.argb(soft, red, green, blue)
+        canvas.drawCircle(cx, cy, r * 1.07f, stroke)
+        stroke.strokeWidth = max(1f, r * 0.05f)
+        stroke.color = Color.argb(edge, red, green, blue)
+        canvas.drawCircle(cx, cy, r * 1.04f, stroke)
+    }
+
+    /** Whether a control is doing its thing right now: pressed, latched on, or mode 2. */
+    private fun isEngaged(element: ControlElement): Boolean = when (element.kind) {
+        ControlKind.STICK_MODE -> prefs.stickStage == Prefs.STAGE_TWO
+        else -> isOn(element)
     }
 
     /**

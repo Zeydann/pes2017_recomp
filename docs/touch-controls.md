@@ -177,8 +177,10 @@ read only in mode 1 so one stick can never sprint two ways.
 
 The switch above the socket (`stick_mode`, `1 / 2`) picks which throw the
 movement stick reads with. It is global (`Prefs.stickStage`), one tap flips it,
-and it is only drawn over the pitch. Nothing about it is sent to the title: it
-changes the arithmetic, not the pad, and it holds no bit and no press pulse.
+and it is always on screen (`PhaseMask.ALWAYS`) so the mode can be changed in a
+match, in the title's menus, or before kick-off. Nothing about it is sent to the
+title: it changes the arithmetic, not the pad, and it holds no bit and no press
+pulse.
 
 | Mode | What the stick does |
 |---|---|
@@ -213,6 +215,17 @@ In mode 2 the grab is the socket itself (the 1.35 R press tolerance belongs to
 mode 1), so a press can never begin inside the ring. The stage, the dwell and
 the mapping are pinned by `TwoStageStickTest`; a retune of any number fails
 there.
+
+## The resting light
+
+Every button, toggle and switch on the pad carries a faint red ring while it is
+doing nothing: not pressed, not latched, and — for the two-stage switch — still
+on mode 1. It lifts on the press, on the latch, and on mode 2, and it is not
+drawn in the editor, where the OFF badge and the selection ring already say what
+state a control is in. Its rule lives in `ControlOffState.showsRestGlow`, so
+`ControlOffStateTest` checks it without a canvas. The sticks, the d-pad, the
+swipe patch and the look area steer rather than press, so none of them carries
+it.
 
 ## Dribbling on the ball
 

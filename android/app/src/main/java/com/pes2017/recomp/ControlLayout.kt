@@ -66,7 +66,8 @@ enum class ControlKind {
      * The two-stage switch: one tap flips the movement stick between its normal
      * throw and the two-stage one (TouchMath.StickStage). It holds no bit and
      * sends nothing -- it changes how the left stick reads from the next sample
-     * on -- and it is only drawn over the pitch, where the sprint ring is.
+     * on -- and it is always on screen, because it is the player's switch and a
+     * control that vanishes with a phase cannot be reached when it is wanted.
      */
     STICK_MODE,
 
@@ -972,9 +973,10 @@ class ControlLayout private constructor(
                     // The two-stage switch, above the socket: a 150 dp stick is
                     // 75 dp of radius around a centre 95 dp up, so its rim is at
                     // 170 dp and the switch's own half-height clears it by a
-                    // thumb's width. Match-only: the ring is a match gesture.
-                    place("stick_mode", ControlKind.STICK_MODE, 0, "1/2", 95f, -192f, 44f, 0.55f,
-                        shownWhen = PhaseMask.MATCH),
+                    // thumb's width. Always on screen: the player's own switch,
+                    // reachable in a match, in a menu and before kick-off alike.
+                    // (The ring's RB is still match-only -- see pushState.)
+                    place("stick_mode", ControlKind.STICK_MODE, 0, "1/2", 95f, -192f, 44f, 0.55f),
 
                     // Right thumb: the four actions as the pad's diamond. `sub`
                     // is what the control does on the ball; the fake shot and
