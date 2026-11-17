@@ -760,7 +760,7 @@ class TouchOverlayView @JvmOverloads constructor(
         }
         // The two-stage stick's ring. A source of its own so it can never be
         // masked by a thumb, and so it is let go in one statement; RB is the
-        // title's menu key, so it is only ever held over the pitch.
+        // title's menu key, so it is held everywhere but the menus.
         mixer.set(HoldSource.STICK_SPRINT, if (twoStageSprinting()) NativeBridge.RB else 0)
         mixer.set(HoldSource.PHYSICAL_TOUCH, heldButtons, heldLeft, heldRight)
         mixer.set(
@@ -1581,12 +1581,14 @@ class TouchOverlayView @JvmOverloads constructor(
 
     /**
      * Whether the ring is holding RB right now, in a phase that has an RB to
-     * give. The match gate is what keeps the sprint out of the title's menus,
-     * where R1 is the *next* key.
+     * give. The menus are the one place it is taken away: there R1 is the
+     * *next* key. Everything else keeps it, including [GamePhase.UNKNOWN] -- a
+     * build that cannot read the title's phase is still playing, and a ring
+     * that dies because the tracker went quiet is the worse mistake.
      */
     private fun twoStageSprinting(): Boolean =
         twoStageSprint && prefs.stickStage == Prefs.STAGE_TWO &&
-            gamePhase == GamePhase.MATCH && !editing && !Macro.playing
+            gamePhase != GamePhase.MENUS && !editing && !Macro.playing
 
     /** Every stage let go: a lift, a cancel, a phase change, the editor, a pause. */
     private fun resetTwoStage() {

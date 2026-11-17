@@ -206,10 +206,12 @@ Entering the ring needs `d ≥ 1.06` held for 70 ms; it is left at `d ≤ 0.94`,
 once, because a sprint that outlives the thumb is worse than one that starts
 late. The 0.94–1.06 band is hysteresis, so a thumb balanced on the rim never
 chatters RB. The ring's RB is its own `HoldSource.STICK_SPRINT` — a thumb on the
-sprint button and the ring cannot release each other — and it is held **only
-while `gamePhase == GamePhase.MATCH`**: in the title's menus R1 is *next*, so a
-ring could otherwise scroll a menu or leave R1 down under it. A lift, a phase
-change, `ACTION_CANCEL`, pause, the editor, or a macro clears the stage.
+sprint button and the ring cannot release each other — and it is held **everywhere except `gamePhase ==
+GamePhase.MENUS`**: in the title's menus R1 is *next*, so a ring could otherwise
+scroll a menu or leave R1 down under it. `GamePhase.UNKNOWN` keeps the ring: a
+build that cannot read the title's phase is still playing, and a sprint that dies
+because the tracker went quiet is the worse mistake. A lift, a phase change,
+`ACTION_CANCEL`, pause, the editor, or a macro clears the stage.
 
 In mode 2 the grab is the socket itself (the 1.35 R press tolerance belongs to
 mode 1), so a press can never begin inside the ring. The stage, the dwell and

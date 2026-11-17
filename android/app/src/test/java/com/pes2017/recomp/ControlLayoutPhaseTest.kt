@@ -50,7 +50,7 @@ class ControlLayoutPhaseTest {
         )
         // The player's own switch, so it is reachable wherever they are: in a
         // match, in the title's menus, and before either is known. Only the
-        // ring's RB is match-gated, in pushState, not the switch that picks it.
+        // ring's RB is taken away in the menus, in pushState, not the switch that picks it.
         assertTrue(switch.shownIn(GamePhase.MATCH))
         assertTrue(switch.shownIn(GamePhase.MENUS))
         assertTrue(switch.shownIn(GamePhase.UNKNOWN))
