@@ -20,30 +20,36 @@ class PadGesturesTest {
     @Test
     fun aThumbAllTheWayOutSprints() {
         val latch = SprintLatch()
-        assertTrue(latch.update(0.93f, 0f))
+        assertTrue(latch.update(0.95f, 0f))
         assertTrue(latch.active)
         assertTrue(latch.update(0f, 0.95f))
     }
 
     @Test
-    fun justInsideThePressPointDoesNotSprint() {
+    fun justInsideTheReferencePointDoesNotSprint() {
         val latch = SprintLatch()
-        assertFalse(latch.update(0.90f, 0f))
+        assertFalse(latch.update(0.94f, 0f))
         assertFalse(latch.active)
     }
 
     @Test
-    fun theReleasePointKeepsARestingThumbFromChattering() {
+    fun theReferenceHasOneThresholdAndNoReleaseRing() {
+        // As measured from the reference apk: sprint at 0.95 of the socket
+        // radius, with no hysteresis, so pulling the thumb back inside 0.95
+        // stops it on the very next sample.
         val latch = SprintLatch()
+        assertTrue(latch.update(0.95f, 0f))
+        assertFalse(latch.update(0.94f, 0f))
+        assertFalse(latch.active)
+        assertTrue(latch.update(0.96f, 0f))
+    }
+
+    @Test
+    fun aCallerCanStillAskForAReleaseRing() {
+        val latch = SprintLatch(pressAt = 0.92f, releaseAt = 0.82f)
         assertTrue(latch.update(0.92f, 0f))
-        // Between press and release: still running, because it is latched.
-        assertTrue(latch.update(0.85f, 0f))
-        assertTrue(latch.active)
-        // Below release: stopped.
+        assertTrue("between the two points it is latched", latch.update(0.85f, 0f))
         assertFalse(latch.update(0.80f, 0f))
-        // And back between the two points it stays stopped until the press point.
-        assertFalse(latch.update(0.85f, 0f))
-        assertTrue(latch.update(0.92f, 0f))
     }
 
     @Test

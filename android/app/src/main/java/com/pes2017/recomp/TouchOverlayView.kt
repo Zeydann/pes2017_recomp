@@ -1364,14 +1364,14 @@ class TouchOverlayView @JvmOverloads constructor(
     /**
      * The throw a stick is measured against.
      *
-     * The movement stick follows [Prefs.travelMatchesKnob], which is what the
-     * setting's name says: on, the knob's own travel is the whole range, so
-     * pushing the knob to its drawn limit is full deflection and the hand can
-     * judge the throw from the drawing. Off keeps the older, longer throw --
-     * the whole socket -- where the knob's rim is only about two thirds of the
-     * way out, which is the throw players who learned on it expect. Both stay
-     * reachable: a thumb past the end is still full deflection rather than an
-     * out-of-range value, because [StickVector] clamps to the unit circle.
+     * The movement stick is the reference apk's: the throw is the **whole
+     * socket**, so a thumb on the rim is full deflection and the knob's rim is
+     * about two thirds of the way out at full speed, exactly as the reference
+     * draws it. [Prefs.travelMatchesKnob] is the opt-in departure: on, the
+     * knob's own travel becomes the whole range so the drawn knob marks the end
+     * of the throw. Both stay reachable: a thumb past the end is still full
+     * deflection rather than an out-of-range value, because [StickVector] clamps
+     * to the unit circle.
      *
      * The skill stick is deliberately shorter still -- 55% of the socket -- a
      * skill move being a short flick to a sector rather than a pace to hold,
@@ -1504,12 +1504,12 @@ class TouchOverlayView @JvmOverloads constructor(
         if (isFloating(element)) floatOriginY else centreY(element)
 
     private fun moveStick(element: ControlElement, x: Float, y: Float) {
-        // The knob's own travel is the throw: pushing it to its rim is full
-        // speed, which is the travel the hand can see. The longer throw is kept
-        // for players who learned on it (Prefs.travelMatchesKnob). The socket
-        // does not move under the thumb: a floating stick is placed where the
-        // thumb landed and stays there, so the deflection is always relative to
-        // the same base.
+        // The whole socket is the throw, as the reference apk has it, so a
+        // thumb on the rim is full speed. The knob's shorter travel is the
+        // opt-in choice (Prefs.travelMatchesKnob). The socket does not move
+        // under the thumb: a floating stick is placed where the thumb landed
+        // and stays there, so the deflection is always relative to the same
+        // base.
         stickPositions[element.id] = StickVector.of(
             stickBaseX(element), stickBaseY(element), x, y, throwRadius(element),
         )
@@ -1895,9 +1895,12 @@ class TouchOverlayView @JvmOverloads constructor(
          * socket's radius. Proportional rather than a fixed slack: a thumb
          * lands beside a socket far more often than beside a button, and the
          * nearest-centre rule in [elementAt] is what keeps the wider footprint
-         * from taking a neighbour's press.
+         * from taking a neighbour's press. 1.35 is the reference apk's grab
+         * footprint, measured on its stick; a wider ring than this pad used to
+         * take, which is the point -- a thumb that lands beside the socket is
+         * reaching for it.
          */
-        private const val STICK_REACH = 1.25f
+        private const val STICK_REACH = 1.35f
 
         /**
          * The skill stick's throw, as a share of its socket. Short enough that a

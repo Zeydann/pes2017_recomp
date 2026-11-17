@@ -343,25 +343,25 @@ class Prefs(context: Context) {
     // ---- the touch sticks ---------------------------------------------------
 
     /**
-     * The share of the movement stick's throw that sends nothing, so a resting
-     * thumb cannot nudge the player off the spot. The title has a deadzone of
-     * its own on top, which is why this stays small.
+     * The share of the movement stick's throw that sends nothing. Zero, as the
+     * reference apk has it: the title's own ~14 % centre is the only deadzone,
+     * so a thumb a quarter of the way out sends a quarter of the throw. A
+     * player who wants a wider centre can still ask for one; the movement stick
+     * defaults to none.
      */
     var stickDeadzone: Float
-        get() = store.getFloat(KEY_STICK_DEADZONE, 0.08f)
+        get() = store.getFloat(KEY_STICK_DEADZONE, 0f)
         set(value) = store.edit().putFloat(KEY_STICK_DEADZONE, value.coerceIn(0f, 0.20f)).apply()
 
     /**
      * The curve on the rest of the throw: below 1 reaches the edge sooner, above
-     * 1 is finer around the middle, where a walking pace lives. 1.20 keeps the
-     * middle finer than linear without spending most of the travel down there:
-     * the throw is already short -- the knob's own travel, when
-     * [travelMatchesKnob] is on -- so a steeper curve on top of it made a jog
-     * arrive late and asked a diagonal pass for a thumb at the rim. The old 1.9
-     * was tuned for the longer, whole-socket throw.
+     * 1 is finer around the middle, where a walking pace lives. Linear (1) is
+     * the reference apk's response: displacement and deflection are the same
+     * number, so the title's own shaping is the only shaping. A player who
+     * wants a finer middle can still ask for one.
      */
     var stickCurve: Float
-        get() = store.getFloat(KEY_STICK_CURVE, 1.20f)
+        get() = store.getFloat(KEY_STICK_CURVE, 1f)
         set(value) = store.edit().putFloat(KEY_STICK_CURVE, value.coerceIn(0.7f, 2.5f)).apply()
 
     /**
@@ -395,11 +395,13 @@ class Prefs(context: Context) {
 
     /**
      * Pushing the knob to the rim of its socket is full deflection, which is the
-     * throw the hand can judge from the drawing. Off keeps the older, longer
-     * throw, where the rim was only about two thirds of the stick's range.
+     * throw the hand can judge from the drawing. Off keeps the longer throw that
+     * runs out to the socket's edge, where the knob is only about two thirds of
+     * the way out at full speed -- which is the reference apk's throw, and the
+     * default: the whole socket is the throw until the player chooses otherwise.
      */
     var travelMatchesKnob: Boolean
-        get() = store.getBoolean(KEY_STICK_TRAVEL_KNOB, true)
+        get() = store.getBoolean(KEY_STICK_TRAVEL_KNOB, false)
         set(value) = store.edit().putBoolean(KEY_STICK_TRAVEL_KNOB, value).apply()
 
     /**

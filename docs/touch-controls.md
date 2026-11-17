@@ -156,20 +156,31 @@ divided by the visible throw, clamped to the rim, screen-Y flipped for the guest
   fixed** while that thumb is down; lifting returns it to its layout position. A
   second thumb shares the base.
 
-The throw is measured across the **whole socket**, not the knob's smaller
-travel: a thumb on the rim is full deflection, which is what puts the 0.92
-sprint latch where a hand can find it. The skill stick is the exception -- its
-throw is 55 % of its socket, with a 0.05 deadzone and a 0.85 curve -- because a
-skill move is a short flick to a sector rather than a pace to hold. The absolute
-skill stick's last sample is held for 90 ms after the lift so the title's poll
-can see a flick that began and ended between two frames.
+The movement stick is the reference apk's, taken from its `TouchControlsView`:
+a **62 dp** socket radius, anchored **130 dp** from the left edge and **110 dp**
+above the bottom, a grab footprint of **1.35 x** the radius, and a throw that
+runs out to the **whole socket** -- so a thumb on the rim is full deflection,
+which is where the reference's 0.95 sprint point sits. Its response is linear
+with no deadzone of ours (`linearStickMode` off still leaves deadzone 0 and
+exponent 1 for this stick), so a quarter of the way out sends a quarter of the
+throw and the title's own ~14 % centre is the only shaping. The knob still draws
+at 0.62 x the radius. `Prefs.travelMatchesKnob` is the opt-in departure: on, the
+knob's own drawn rim becomes the whole throw.
+
+The skill stick is the exception -- its throw is 55 % of its socket, with a 0.05
+deadzone and a 0.85 curve -- because a skill move is a short flick to a sector
+rather than a pace to hold. The absolute skill stick's last sample is held for
+90 ms after the lift so the title's poll can see a flick that began and ended
+between two frames.
 
 ## Sprint from the rim
 
-`SprintLatch`: press at **0.92** of the raw throw, release at **0.82**, latched
-between them. While latched the pad's RB bit (`0x0200`, R1) is OR'd into every
-state push and the socket rim lights. Menus never sprint; every cancellation
-resets the latch.
+`SprintLatch`: the reference apk's **0.95** of the socket radius, one threshold
+and no release hysteresis -- a thumb taken back inside 0.95 stops running on
+the next sample. It is measured on the raw throw, so a curve cannot make a jog
+a sprint. While on, the pad's RB bit (`0x0200`, R1) is OR'd into every state
+push and the socket rim lights. Menus never sprint; every cancellation resets
+the latch.
 
 ## Dribbling on the ball
 
@@ -177,8 +188,9 @@ The ball-carrying controls are the pad's own, so most of them need no new
 button and are listed here so nobody adds one:
 
 - **Standard dribble.** The movement stick.
-- **Sprint dribble.** Hold RB, or push the stick past the latch (0.92 press,
-  0.82 release) while RB is held or alone on the rim.
+- **Sprint dribble.** Hold RB, or push the stick past the latch (0.95 of the
+  socket radius, the reference apk's single threshold) while RB is held or alone
+  on the rim.
 - **Knock ball ahead / speed burst (2x RB).** Not a new control: it is two taps
   of the Sprint button, and the pad already sends each tap as its own press
   edge, so the title sees two presses. `TouchClaims` gives every new press a
@@ -298,7 +310,7 @@ the attacking name while the defending pad is out:
 | X | SHOOT | **SLIDE** | Slide tackle |
 | Y | THROUGH | **GK** | Goalkeeper rush |
 | LB | LB | **SWITCH** | Player switch |
-| stick rim / RB | sprint | sprint | Defensive sprint (same 0.92/0.82 latch) |
+| stick rim / RB | sprint | sprint | Defensive sprint (same 0.95 threshold) |
 
 The far top-left LB is an **attacking** control now (`PhaseMask.ATTACK`): without
 the ball the switch has to be under the right thumb, so the defending pad has its
@@ -430,8 +442,8 @@ tokens as the pad and has no image assets to drift out of date.
 ## The d-pad and its idle fade
 
 The d-pad is now on screen in a match as well as in the menus, at `200, 120`
-(110 dp): clear of the movement stick (37 dp), the near LB (5.2 dp) and the
-rest of the pad. Over the pitch it is a tactical control first, so it gets out
+(110 dp): clear of the movement stick (18.6 dp at the reference's footprint),
+the near LB (5.2 dp) and the rest of the pad. Over the pitch it is a tactical control first, so it gets out
 of the way by itself:
 
 - After **four seconds** (`DpadAutoHide.IDLE_MS`, inside the requested 3–5 s)

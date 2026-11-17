@@ -23,7 +23,8 @@ ISO importing and the Bluetooth/USB gamepad path were not modified.
 |---|---|
 | Move-mode floating joystick (socket under the thumb, fixed base, knob relative to it) | Implemented; arithmetic unit-tested; not device-tested |
 | Fixed-mode joystick (layout socket, knob inside it, centres on release) | Implemented; same shared arithmetic; not device-tested |
-| Sprint from the rim, press 0.92 / release 0.82, R1/RB, rim glow, reset on cancel | Implemented; latch unit-tested; mapping RB = sprint matches the PES 2017 manual; not device-tested |
+| Movement stick footprint and arithmetic: 62 dp radius at 130/110 dp, 1.35 x grab, throw = socket radius, linear, no deadzone (the reference apk's) | Implemented; unit-tested; not device-tested |
+| Sprint from the rim, press 0.95 of the socket radius on one threshold (the reference apk's), R1/RB, rim glow, reset on cancel | Implemented; latch unit-tested; mapping RB = sprint matches the PES 2017 manual; not device-tested |
 | Four-direction swipes on all four action buttons (16 independent slots) | Slots and classification unit-tested; every slot now ships with a PES 2017 default (modifier + button or double tap); editor binds all forms; not device-tested |
 | Compound swipes: modifier + button, double tap, plain bit | Implemented (`SwipeAction`, `SwipeSequence`, `ComboHold`); timing unit-tested; every cancellation clears them; not device-tested |
 | Fake shot, Shoot → drag → Pass, cancelling the shot | Corrected to PES 2017's actual cancel rule (pass pressed while shoot is held); arming unit-tested; **not device-verified** |
@@ -56,8 +57,9 @@ ISO importing and the Bluetooth/USB gamepad path were not modified.
    relative to it; the base no longer follows. Shared vector in `TouchMath.kt`
    (`StickVector`).
 3. **Sprint.** Was a single 0.92 threshold with the glow from a shaped value.
-   Now a latch (`SprintLatch`): press 0.92, release 0.82, on the raw throw, glow
-   only while latched, reset from every cancellation path.
+   It is now a latch (`SprintLatch`) at the reference apk's single 0.95 of the
+   socket radius, on the raw throw, glow only while latched, reset from every
+   cancellation path.
 4. **Compound swipes and defaults.** A slot can now be a modifier + button
    (LB/LT/RB/RT held before the bit) or a double tap, and all sixteen slots
    ship with the requested PES 2017 default. The modifier leads by 30 ms, the
@@ -167,8 +169,9 @@ Static checks done: every modified Kotlin file balances its delimiters; every
    player, ordinary shoot and pass taps unchanged.
 3. Both stick modes on 16:9 and 20:9 screens; base does not move during a push;
    simultaneous stick and buttons; lift/cancel resets.
-4. Sprint at 0.92 on, 0.85 held on, 0.82 off; no stuck R1 after pause or focus
-   loss; physical pad sprint unaffected.
+4. Sprint at 0.95 of the socket radius on and off on the next sample (the
+   reference has no release ring); no stuck R1 after pause or focus loss;
+   physical pad sprint unaffected.
 5. Swipes: confirm each of the sixteen default combinations (modifier lead,
    trigger axis, low cross double tap), each arrow, and that a plain tap is
    unchanged.

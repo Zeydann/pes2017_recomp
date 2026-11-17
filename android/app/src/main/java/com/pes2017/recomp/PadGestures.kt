@@ -216,33 +216,37 @@ class DoubleTap(private val windowMs: Long = WINDOW_MS) {
 }
 
 /**
- * Sprint from the movement stick's rim.
+ * Sprint from the movement stick's rim, as the reference apk has it.
  *
- * One threshold would chatter: a thumb held exactly on it would flicker between
- * running and jogging every sample. The press point (0.92 of the raw throw) and
- * the release point (0.82) are therefore separate, and the state is latched
- * between them. The raw throw decides -- not the shaped one -- so the curve
- * cannot make a jog a sprint by squeezing the top of its range.
+ * The reference's own `TouchControlsView` sprints at **0.95** of the socket
+ * radius on a single threshold -- no release hysteresis, so a thumb taken back
+ * inside 0.95 stops running on the next sample. The default points here are
+ * therefore both 0.95, and the latch is a latch so that every cancellation path
+ * has one thing to reset rather than four booleans to clear.
  *
- * Both points are shares of the throw the caller measures against, never of the
- * socket: the movement stick's throw is the knob's own travel or the whole
- * socket ([Prefs.travelMatchesKnob]), and a share of the throw keeps the sprint
- * where the hand put it in either case, instead of moving it when that choice
- * changes.
+ * The points are shares of the throw the caller measures against, never of the
+ * socket: the movement stick's throw is the whole socket by default (the
+ * reference's throw) but can be the knob's own travel
+ * ([Prefs.travelMatchesKnob]), and a share of the throw keeps the sprint where
+ * the hand put it in either case instead of moving it when that choice changes.
+ * The raw throw decides -- not the shaped one -- so a curve cannot make a jog a
+ * sprint by squeezing the top of its range.
  *
  * [reset] is what every cancellation path calls: pause, focus loss, the pad
  * being hidden or edited. A sprint cannot outlive the thumb that started it.
  */
 class SprintLatch(
-    private val pressAt: Float = 0.92f,
-    private val releaseAt: Float = 0.82f,
+    private val pressAt: Float = 0.95f,
+    private val releaseAt: Float = 0.95f,
 ) {
     /** Whether the movement stick is running right now. */
     var active = false
         private set
 
     private val press = pressAt.coerceIn(0.1f, 1f)
-    private val release = releaseAt.coerceIn(0f, press - 0.01f)
+    // Equal points are allowed: that is the reference's single threshold. A
+    // caller that wants a release ring passes a smaller [releaseAt].
+    private val release = releaseAt.coerceIn(0f, press)
 
     /** One sample of the stick, from -1..1 on each axis. Returns [active]. */
     fun update(x: Float, y: Float): Boolean {

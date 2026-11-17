@@ -46,8 +46,9 @@ Read from `com.naruto.port.TouchControlsView` (decompile with your tool of
 choice; that output is scratch, not source, and stays git-ignored):
 
 - **Movement stick:** anchored at 130/110 dp with a **62 dp** socket radius.
-- **Grab footprint:** **1.35 ×** the radius — further outside the ring than ours,
-  which is 1.25 ×.
+- **Grab footprint:** **1.35 ×** the radius — the same footprint our movement
+  stick now takes (`STICK_REACH`), so a thumb that lands beside the socket is
+  reaching for it here too.
 - **Throw:** **1.0 ×** the socket radius, magnitude clamped radially to 1.
 - **Knob drawing:** maxes at **0.62 ×** the radius, so at full speed the knob is
   about two thirds of the way out — the same 0.62 our knob uses, which is why

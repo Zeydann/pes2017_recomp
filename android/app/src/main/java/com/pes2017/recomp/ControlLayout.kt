@@ -958,8 +958,12 @@ class ControlLayout private constructor(
             val centre = w / 2f
             val pad = ControlLayout(
                 mutableListOf(
-                    // Left thumb: movement.
-                    place("stick", ControlKind.STICK, 0, "LS", 95f, -95f, 150f, 0.40f),
+                    // Left thumb: movement. The reference apk's footprint: a
+                    // 124 dp socket (62 dp radius) 130 dp from the left edge and
+                    // 110 dp above the bottom, so the thumb finds the stick
+                    // where the reference put it, not where this pad used to
+                    // draw it.
+                    place("stick", ControlKind.STICK, 0, "LS", 130f, -110f, 124f, 0.40f),
 
                     // Right thumb: the four actions as the pad's diamond. `sub`
                     // is what the control does on the ball; the fake shot and

@@ -67,13 +67,17 @@ namespace
     float g_saturationPixelsPerSecond = look::kBasePixelsPerSecond;
 
     // ---- the sticks -------------------------------------------------------
-    // Movement used to be linear from the first pixel, so a 75 dp stick jumped
-    // from standing to a jog. The shape is radial: a diagonal stays one, and the
-    // deadzone is a circle like the socket it is drawn as.
+    // The shape is radial: a diagonal stays one, the deadzone is a circle like
+    // the socket it is drawn as, and a curve applies to what is left of the
+    // throw. It is the identity by default -- the reference apk is linear with
+    // no deadzone of its own -- and only the app's settings turn it on.
     std::mutex g_stickLock;
+    // Both sticks default to the reference apk's response: linear, with no
+    // deadzone of ours. The app sends its own settings over these; the values
+    // here only matter for the polls before it has said anything.
+    stick::Shape g_leftStick{ 0.0f, 1.0f, 1.0f };
     // The right stick is passed through untouched until a player asks for a
     // shape -- tricks are muscle memory, and this must not quietly retune them.
-    stick::Shape g_leftStick{ 0.08f, 1.45f, 1.0f };
     stick::Shape g_rightStick{ 0.0f, 1.0f, 1.0f };
 
     // ---- the skill stick --------------------------------------------------
