@@ -114,9 +114,15 @@ class TouchMathTest {
     }
 
     @Test
-    fun aDiagonalHoldsBothArmsItIsPast() {
-        val bits = StickArrows().bits(0.65f, 0.65f)
-        assertEquals(NativeBridge.RIGHT or NativeBridge.UP, bits)
+    fun aCornerOfTheSocketIsOneDirectionNotTwo() {
+        // A thumb in the bottom right of the socket is aiming down: sending
+        // right beside it moved a menu's tab bar while it scrolled the list.
+        assertEquals(NativeBridge.DOWN, StickArrows().bits(0.65f, -0.65f))
+        assertEquals(NativeBridge.UP, StickArrows().bits(0.65f, 0.65f))
+        // The stronger axis wins a real corner...
+        assertEquals(NativeBridge.RIGHT, StickArrows().bits(0.90f, -0.70f))
+        // ...and an axis that is not past the press point is not an arrow.
+        assertEquals(NativeBridge.RIGHT, StickArrows().bits(0.85f, 0.30f))
     }
 
     @Test

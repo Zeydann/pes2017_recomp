@@ -477,6 +477,12 @@ of the way by itself:
 The four bits it holds, the stick stand-in and the menu behaviour are
 unchanged; this only changes when the control is drawn and hit-testable.
 
+The stand-in itself holds **one direction per push**: when both axes are
+past the 0.60 press point the stronger axis wins and the other is dropped,
+as a pad has no diagonal. Before that, a thumb in the bottom corner of the
+socket sent down and right together, and a menu's tab bar moved with the
+list.
+
 ## Verification
 
 - `PadGesturesTest`: the sprint latch, the pass double tap's window and its

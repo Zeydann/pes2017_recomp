@@ -123,6 +123,19 @@ class StickArrows {
         up = edge(y, +1, up)
         down = edge(y, -1, down)
 
+        // A pad has no diagonal. A thumb in the corner of a socket is aiming at
+        // one direction, not two, and two bits is how pressing down in a menu
+        // also sent right and moved the tab bar beside the list.
+        if ((up || down) && (left || right)) {
+            if (abs(x) <= abs(y)) {
+                left = false
+                right = false
+            } else {
+                up = false
+                down = false
+            }
+        }
+
         var bits = 0
         if (up) bits = bits or NativeBridge.UP
         if (down) bits = bits or NativeBridge.DOWN
