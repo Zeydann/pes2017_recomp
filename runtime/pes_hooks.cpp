@@ -1,6 +1,7 @@
 // Hooks that make PES 2017 behave on a phone (as opposed to pes_debug.cpp's probes).
 #include <ppc_recomp_shared.h>
 #include "title.h"
+#include "game_phase.h"
 #include "guest.h"
 #include "log.h"
 #include "crash.h"
@@ -68,6 +69,12 @@ GUEST_HOOK(82F00CE8)
 {
     static std::atomic<int> once{ 0 }, logged{ 0 };
     const std::string name = GuestString16(ctx.r5.u32);
+    // And the app's phase follows the names: the main menu is `TopMenu/TopMenu`,
+    // a match is `Match/*` (game_phase.h), so the input poll can say which
+    // screen is up without a guest address for the title's client states.
+    if (::phase::NoteProcedure(name.c_str()) != ::phase::Phase::Unknown)
+        LOGI("phase: '%s' says the title is %s", name.c_str(),
+             ::phase::ToldPhase() == ::phase::Phase::Match ? "in a match" : "in its menus");
     if (logged++ < 400)
         LOGW("procedure: %s (from %08X on '%s')", name.c_str(), uint32_t(ctx.lr), crash::CurrentThreadName());
     if (name == "Intro/ProcInstall" && once++ == 0)

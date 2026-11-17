@@ -55,6 +55,44 @@ int main()
         Check(tracker.Observe(false, true, 1.0) == Phase::Unknown, "still unknown whatever a read would say");
     }
 
+    {
+        // The title's own procedure names are the signal the app follows:
+        // `TopMenu/TopMenu` is the main menu, `Match/*` is a match, and the
+        // screens reached from the menus are menus.
+        Check(phase::Classify("TopMenu/TopMenu") == Phase::Menus, "TopMenu is the main menu");
+        Check(phase::Classify("Exhibition/ExhibiFlowInit") == Phase::Menus, "team select is a menu");
+        Check(phase::Classify("CmnCoopSettingsCheck") == Phase::Menus, "a settings check is a menu");
+        Check(phase::Classify("Match/MatchSetup") == Phase::Match, "kick-off is a match");
+        Check(phase::Classify("Match/MatchIdle") == Phase::Match, "and every later step of it");
+        Check(phase::Classify("Match/MatchPostPause") == Phase::Match, "including the ones after a pause");
+    }
+
+    {
+        // A load step or a report says nothing about the phase, so it must not
+        // move it: a match that loads something is still a match.
+        Check(phase::Classify("CmnLoadIdle") == Phase::Unknown, "a load step names no phase");
+        Check(phase::Classify("") == Phase::Unknown, "and neither does an empty name");
+        Check(phase::Classify(nullptr) == Phase::Unknown, "nor a missing one");
+
+        Check(phase::NoteProcedure("TopMenu/TopMenu") == Phase::Menus, "the main menu is noted");
+        Check(phase::ToldPhase() == Phase::Menus, "and is what the poll reads");
+        Check(phase::NoteProcedure("CmnLoadIdle") == Phase::Unknown, "a load step in the menus says nothing");
+        Check(phase::ToldPhase() == Phase::Menus, "which leaves the menus standing");
+        phase::NoteProcedure("Match/MatchSetup");
+        Check(phase::ToldPhase() == Phase::Match, "kick-off moves it to the match");
+        phase::NoteProcedure("CmnLoadIdle");
+        Check(phase::ToldPhase() == Phase::Match, "and a load inside the match keeps it there");
+    }
+
+    {
+        // What the procedures said is sampled like the guest read: twice in one
+        // window is one report to the app.
+        phase::Tracker tracker;
+        Check(tracker.Observe(Phase::Match, 20.0) == Phase::Match, "a told phase is reported at once");
+        Check(tracker.Observe(Phase::Menus, 20.1) == Phase::Match, "a sample inside the window is not taken");
+        Check(tracker.Observe(Phase::Menus, 20.5) == Phase::Menus, "and the next one after it is");
+    }
+
     std::printf("%d checks, %d failed\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

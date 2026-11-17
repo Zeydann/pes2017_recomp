@@ -490,22 +490,29 @@ PPC_FUNC(__imp__XamInputGetState)
                               ::input::kDpadLeft == android::input::kDpadLeft &&
                               ::input::kDpadRight == android::input::kDpadRight,
                           "input_stick_arrows.h must use XInput's d-pad bits");
-            // What the title is doing, for the app's phase listener. Whether
-            // the player entity exists is the one signal this build has, and it
-            // is a guest read, so it is sampled (game_phase.h) rather than asked
-            // every frame. A set piece reads as a match: telling those apart
-            // needs a hook into the title's state machine, which this build does
-            // not have.
+            // What the title is doing, for the app's phase listener. The title's
+            // procedure switch names every screen it runs (pes_hooks.cpp), so
+            // that is the signal: the main menu is `TopMenu/TopMenu` and a match
+            // is `Match/*`. Whether the player entity exists (player::NowRunning)
+            // is the fallback for a build that has no names, and it is a guest
+            // read, so the answer is sampled (game_phase.h) rather than asked
+            // every frame.
             static ::phase::Tracker phaseTracker;
             static ::phase::Phase reportedPhase = ::phase::Phase::Unknown;
             const double nowSeconds = std::chrono::duration<double>(
                 std::chrono::steady_clock::now().time_since_epoch()).count();
             if (phaseTracker.Due(nowSeconds))
             {
-                const ::player::Presence presence = ::player::NowRunning();
-                const ::phase::Phase observed = phaseTracker.Observe(
-                    presence != ::player::Presence::Unknown,
-                    presence == ::player::Presence::Match, nowSeconds);
+                ::phase::Phase observed = ::phase::ToldPhase();
+                if (observed != ::phase::Phase::Unknown)
+                    observed = phaseTracker.Observe(observed, nowSeconds);
+                else
+                {
+                    const ::player::Presence presence = ::player::NowRunning();
+                    observed = phaseTracker.Observe(
+                        presence != ::player::Presence::Unknown,
+                        presence == ::player::Presence::Match, nowSeconds);
+                }
                 if (observed != reportedPhase)
                 {
                     reportedPhase = observed;

@@ -282,8 +282,8 @@ hideable, and under everything else. Not device-verified.
 
 ## Attacking and defending pads
 
-The title reports only menus or a match (`runtime/game_phase.h`, and in this
-build not even that -- see the note below), and **not possession**. There is
+The title reports only menus or a match (`runtime/game_phase.h`, from the
+procedures it names -- see the note below), and **not possession**. There is
 therefore **no automatic** attack/defence switching. Each control is arranged
 for both pads, the menus, or one stance.
 
@@ -332,11 +332,22 @@ it on B. That must be checked in the title before the labels are treated as
 fact; "match-up" is not part of PES 2017's documented defensive set and is
 deliberately absent here.
 
-**Phase signal caveat.** `runtime/title.h` still holds placeholders for the
-title's client states (`T_DATA_ClientStates = 0`), so `player::NowRunning()`
-answers `Unknown` and the app never learns that a match has started. The stance
-chip is therefore the only on-pitch way to change pads; automatic switching needs
-that address chain derived first.
+**Where the phase comes from.** The title's procedure switch (`sub_82F00CE8`,
+hooked in `runtime/pes_hooks.cpp`) is handed the name of every screen it runs,
+and the app's phase follows those names: `TopMenu/TopMenu` is the main menu, the
+menus below it are `Exhibition/*`, `LiveData/*` and the `Cmn*` checks, and a
+match is `Match/*`. A name that is not one of them (a load step, a report) says
+nothing and leaves the last answer standing. `runtime/title.h` still holds
+placeholders for the title's client states (`T_DATA_ClientStates = 0`), so
+`player::NowRunning()` -- the older signal, kept as the fallback -- answers
+`Unknown`; it is not needed while the names arrive.
+
+**In-match menus read as the match.** The pause menu opened over a match runs
+inside `Match/*`, so it does not change the phase and the pad stays as it is on
+the pitch. Telling it apart needs a name of its own: `game.log`'s `procedure:`
+lines show which (and none observed so far is separate). The stance chip is still
+the only way to change pads by hand; automatic switching needs possession, which
+no signal here carries.
 
 ## The pad's look
 

@@ -22,7 +22,8 @@ namespace player
     // Whether the title has a match running: Unknown when this build has no
     // addresses for the title's client states (title.h still holds its
     // placeholders), because then there is nothing to read and a guess would be
-    // worse than saying so. The app's phase listener follows this.
+    // worse than saying so. The app's phase listener falls back to this when the
+    // title's named procedures (game_phase.h) have said nothing yet.
     enum class Presence { Unknown, Menus, Match };
     Presence NowRunning();
 
