@@ -169,7 +169,50 @@ can see a flick that began and ended between two frames.
 `SprintLatch`: press at **0.92** of the raw throw, release at **0.82**, latched
 between them. While latched the pad's RB bit (`0x0200`, R1) is OR'd into every
 state push and the socket rim lights. Menus never sprint; every cancellation
-resets the latch.
+resets the latch. This is the **first stick's** gesture and applies to mode 1
+only -- mode 2 has the sprint ring below, and the `sprintFromStick` setting is
+read only in mode 1 so one stick can never sprint two ways.
+
+## The two-stage stick
+
+The switch above the socket (`stick_mode`, `1 / 2`) picks which throw the
+movement stick reads with. It is global (`Prefs.stickStage`), one tap flips it,
+and it is only drawn over the pitch. Nothing about it is sent to the title: it
+changes the arithmetic, not the pad, and it holds no bit and no press pulse.
+
+| Mode | What the stick does |
+|---|---|
+| `1` — normal | the whole socket is the throw; its rim is full pace |
+| `2` — two-stage | the socket is the movement circle; a sprint ring outside it |
+
+Mode 2's geometry (`TouchMath.StickStage`), in socket radii, on the default
+150 dp stick (75 dp radius):
+
+| Zone | Radii | Size | RB |
+|---|---|---|---|
+| Movement circle (inner) | 0 – 1.00 (0–75 dp) | the larger zone | never |
+| Sprint ring (outer) | 1.00 – 1.35 (75–101 dp) | 26 dp wide, the smaller zone | after a 70 ms dwell |
+| Past the ring | > 1.35 | clamped | held |
+
+The deflection is one scalar on the vector, so a direction never changes as the
+thumb crosses the boundary: inside the rim `magnitude = 0.90 × d`, in the ring
+`0.90 + 0.10 × (d − 1.00) / 0.35`. Continuous at the rim, monotonic, and full
+pace only at the ring's far edge — the tenth the inside holds back is what the
+ring adds.
+
+Entering the ring needs `d ≥ 1.06` held for 70 ms; it is left at `d ≤ 0.94`, at
+once, because a sprint that outlives the thumb is worse than one that starts
+late. The 0.94–1.06 band is hysteresis, so a thumb balanced on the rim never
+chatters RB. The ring's RB is its own `HoldSource.STICK_SPRINT` — a thumb on the
+sprint button and the ring cannot release each other — and it is held **only
+while `gamePhase == GamePhase.MATCH`**: in the title's menus R1 is *next*, so a
+ring could otherwise scroll a menu or leave R1 down under it. A lift, a phase
+change, `ACTION_CANCEL`, pause, the editor, or a macro clears the stage.
+
+In mode 2 the grab is the socket itself (the 1.35 R press tolerance belongs to
+mode 1), so a press can never begin inside the ring. The stage, the dwell and
+the mapping are pinned by `TwoStageStickTest`; a retune of any number fails
+there.
 
 ## Dribbling on the ball
 

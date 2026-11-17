@@ -1,5 +1,6 @@
 package com.pes2017.recomp
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -27,6 +28,30 @@ class ControlLayoutPhaseTest {
 
         assertTrue(dpad.shownIn(GamePhase.MENUS))
         assertFalse(dpad.shownIn(GamePhase.MATCH))
+    }
+
+    @Test
+    fun theTwoStageSwitchSitsAboveTheSocketAndOnlyOverThePitch() {
+        // It ships on the pad, on the socket's own centre line, and its lower
+        // edge clears the rim by more than a thumb's width: it is a switch, not
+        // something the stick's own reach can catch.
+        val layout = ControlLayout.defaults(800f, 360f)
+        val stick = layout.find("stick") ?: error("the movement stick ships on the pad")
+        val switch = layout.find("stick_mode") ?: error("the two-stage switch ships on the pad")
+
+        assertEquals(stick.xFrac, switch.xFrac, 1e-4f)
+        // 360 dp tall: the socket's rim is 190 dp down, the switch's lowest edge
+        // is 179 dp down.
+        val socketRimDp = 360f - 95f - 150f / 2f
+        val switchBottomDp = 360f - 192f + 44f / 4f
+        assertTrue(
+            "switch bottom $switchBottomDp is above the rim $socketRimDp",
+            switchBottomDp <= socketRimDp - 6f,
+        )
+        // A match gesture: RB is the title's "next" key, so nothing about the
+        // ring belongs over a menu.
+        assertTrue(switch.shownIn(GamePhase.MATCH))
+        assertFalse(switch.shownIn(GamePhase.MENUS))
     }
 
     @Test

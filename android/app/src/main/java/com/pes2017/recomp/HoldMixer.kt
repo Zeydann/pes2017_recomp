@@ -14,6 +14,14 @@ enum class HoldSource {
     /** A thumb on the glass: a held button, a stick's arm, the d-pad. */
     PHYSICAL_TOUCH,
 
+    /**
+     * The two-stage stick's sprint ring (TouchMath.TwoStageStick). Its own source
+     * because RB is the title's menu key as well as sprint: a ring that ended
+     * must let go of RB without disturbing a thumb that is holding it, and one
+     * that is held must not be masked by anything else in the merge.
+     */
+    STICK_SPRINT,
+
     /** The jockey button's latch. */
     JOCKEY_TOGGLE,
 

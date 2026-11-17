@@ -206,6 +206,20 @@ class TouchClaimsTest {
     }
 
     @Test
+    fun theTwoStageSwitchIsNeitherAHoldNorAPress() {
+        // It changes how the stick reads and sends nothing at all: no bit to
+        // hold, nothing to pulse, and nothing to latch.
+        val claims = TouchClaims()
+        val switch = control("stick_mode", ControlKind.STICK_MODE, value = 0)
+
+        assertFalse(claims.press(1, switch))
+        assertEquals("no bit is held", 0, claims.holdCount("stick_mode"))
+        assertEquals("and nothing is pulsed", 0, claims.takeNewPresses())
+        assertFalse(claims.isToggled("stick_mode"))
+        assertEquals(0, claims.stickHoldCount("stick_mode"))
+    }
+
+    @Test
     fun clearMomentaryDropsAPressThatWasOnItsWay() {
         val claims = TouchClaims()
         claims.press(1, control("b", value = B))

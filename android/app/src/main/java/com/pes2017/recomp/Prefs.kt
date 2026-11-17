@@ -442,6 +442,19 @@ class Prefs(context: Context) {
         set(value) = store.edit().putBoolean(KEY_SPRINT_STICK, value).apply()
 
     /**
+     * Which throw the movement stick reads with, picked by the switch above its
+     * socket: [STAGE_ONE] is the normal stick, [STAGE_TWO] is the two-stage one
+     * (TouchMath.StickStage). Global rather than per layout -- it changes how the
+     * stick reads, not where the pad puts things -- and it outlives a restart so
+     * a player does not re-pick it every launch.
+     */
+    var stickStage: Int
+        get() = store.getInt(KEY_STICK_STAGE, STAGE_ONE)
+        set(value) = store.edit()
+            .putInt(KEY_STICK_STAGE, if (value == STAGE_TWO) STAGE_TWO else STAGE_ONE)
+            .apply()
+
+    /**
      * Which of the two match pads is out: the attacking layout or the defending
      * one. The title does not report possession, so this is the player's own
      * switch (Settings > Controls, and the pause menu).
@@ -565,6 +578,7 @@ class Prefs(context: Context) {
         private const val KEY_HAPTICS = "haptics"
         private const val KEY_STICK_MODE = "stickMode"
         private const val KEY_SPRINT_STICK = "sprintFromStick"
+        private const val KEY_STICK_STAGE = "stickStage"
         private const val KEY_DEFENDING_PAD = "defendingPad"
 
         /** The movement stick under the thumb, anywhere in its half of the screen. */
@@ -572,6 +586,12 @@ class Prefs(context: Context) {
 
         /** The movement stick where the layout put it. */
         const val STICK_FIXED = "fixed"
+
+        /** The normal movement stick: one circle, its rim is full pace. */
+        const val STAGE_ONE = 1
+
+        /** The two-stage stick: a movement circle, and the sprint ring outside it. */
+        const val STAGE_TWO = 2
         private const val KEY_DRIVER_DIR = "driverDirectory"
         private const val KEY_DRIVER_LIB = "driverLibrary"
         private const val KEY_GAME_DIR = "gameDirectory"

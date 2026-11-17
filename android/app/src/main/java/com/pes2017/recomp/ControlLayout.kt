@@ -63,6 +63,14 @@ enum class ControlKind {
     TRICK,
 
     /**
+     * The two-stage switch: one tap flips the movement stick between its normal
+     * throw and the two-stage one (TouchMath.StickStage). It holds no bit and
+     * sends nothing -- it changes how the left stick reads from the next sample
+     * on -- and it is only drawn over the pitch, where the sprint ring is.
+     */
+    STICK_MODE,
+
+    /**
      * The stance chip: one tap swaps the attacking pad for the defending one and
      * back, with the labels following. It holds no bit of its own, so a flip
      * can never leave a button or a trigger down; the title decides what the
@@ -960,6 +968,13 @@ class ControlLayout private constructor(
                 mutableListOf(
                     // Left thumb: movement.
                     place("stick", ControlKind.STICK, 0, "LS", 95f, -95f, 150f, 0.40f),
+
+                    // The two-stage switch, above the socket: a 150 dp stick is
+                    // 75 dp of radius around a centre 95 dp up, so its rim is at
+                    // 170 dp and the switch's own half-height clears it by a
+                    // thumb's width. Match-only: the ring is a match gesture.
+                    place("stick_mode", ControlKind.STICK_MODE, 0, "1/2", 95f, -192f, 44f, 0.55f,
+                        shownWhen = PhaseMask.MATCH),
 
                     // Right thumb: the four actions as the pad's diamond. `sub`
                     // is what the control does on the ball; the fake shot and

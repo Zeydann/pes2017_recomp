@@ -93,20 +93,147 @@ object StickShape {
  */
 object StickVector {
 
-    /** The guest's Y points up; the screen's points down. */
-    fun of(baseX: Float, baseY: Float, x: Float, y: Float, radius: Float): FloatArray {
+    /**
+     * The guest's Y points up; the screen's points down.
+     *
+     * [limit] is how many radii the throw is measured to. It is 1 for every
+     * stick drawn as one circle; the two-stage stick passes its ring's edge,
+     * because the sprint zone lives past the socket and clamping at the rim
+     * there would throw the ring away before anything could read it.
+     */
+    fun of(
+        baseX: Float, baseY: Float, x: Float, y: Float, radius: Float, limit: Float = 1f,
+    ): FloatArray {
         if (radius <= 0f) return floatArrayOf(0f, 0f)
         var dx = (x - baseX) / radius
         var dy = -(y - baseY) / radius
         val length = hypot(dx, dy)
-        if (length > 1f) {
-            dx /= length
-            dy /= length
+        val cap = limit.coerceAtLeast(1f)
+        if (length > cap) {
+            dx = dx / length * cap
+            dy = dy / length * cap
         }
         // Below this the thumb is resting, not pushing: a residual of 0.002 is
         // not a direction the title should act on.
         if (hypot(dx, dy) < 0.002f) return floatArrayOf(0f, 0f)
         return floatArrayOf(dx, dy)
+    }
+}
+
+/**
+ * The two-stage stick's numbers.
+ *
+ * One socket holds two zones. Everything inside the drawn rim is the movement
+ * zone: 360 degrees of normal pace, no sprint. The ring outside it, out to
+ * [OUTER_RADIUS], is the sprint zone, reached by swiping outward past the rim;
+ * it is narrower than the circle it surrounds, and it is where RB comes from.
+ *
+ * The mapping is one scalar on a vector, so a direction never changes as the
+ * thumb crosses the boundary. The inside tops out at [INNER_GAIN], a tenth under
+ * full pace, and the ring buys that tenth back on its way to 1.0 -- which is the
+ * only thing "higher sensitivity" can mean on an axis that already saturates.
+ */
+object StickStage {
+
+    /** The drawn socket: the rim of the movement zone, in socket radii. */
+    const val INNER_RADIUS = 1.0f
+
+    /** The far edge of the sprint ring, in socket radii. */
+    const val OUTER_RADIUS = 1.35f
+
+    /**
+     * Where the ring is entered and left, in socket radii. The band between them
+     * is hysteresis: a thumb circling the rim crosses 1.0 constantly, and RB
+     * flickering on every crossing would be a sprint the player did not ask for.
+     */
+    const val SPRINT_IN = 1.06f
+    const val SPRINT_OUT = 0.94f
+
+    /** How long the ring has to be held before RB goes down. */
+    const val DWELL_MS = 70L
+
+    /** What a thumb on the rim sends: a tenth under full pace, so the ring adds something. */
+    const val INNER_GAIN = 0.90f
+
+    /** The deflection for a thumb [distance] socket radii from the centre. */
+    fun magnitude(distance: Float): Float {
+        if (!(distance > 0f)) return 0f
+        if (distance <= INNER_RADIUS) return distance * INNER_GAIN
+        val t = ((distance - INNER_RADIUS) / (OUTER_RADIUS - INNER_RADIUS)).coerceAtMost(1f)
+        return INNER_GAIN + (1f - INNER_GAIN) * t
+    }
+}
+
+/**
+ * Which zone one finger's movement stick is in, and what that sends.
+ *
+ * The stage belongs to the pointer, not to the element: a second thumb sharing
+ * the socket cannot flip the first one's sprint, and a lift only clears its own
+ * finger. Entering the ring needs [StickStage.DWELL_MS] of it; leaving it does
+ * not wait for anything, because a sprint that outlives the thumb is worse than
+ * one that starts late. Every cancellation path calls [reset].
+ */
+class TwoStageStick(private val dwellMs: Long = StickStage.DWELL_MS) {
+
+    /** One sample of a finger's offset: the vector to send, and whether the ring is sprinting. */
+    class Sample(val x: Float, val y: Float, val sprint: Boolean)
+
+    private val sprinting = HashMap<Int, Boolean>()
+    private val inRingSince = HashMap<Int, Long>()
+
+    fun isSprinting(pointerId: Int): Boolean = sprinting[pointerId] == true
+
+    /**
+     * [dx] and [dy] are the thumb's offset from the socket centre in socket
+     * radii, unclamped: the ring lives past 1.0, so a clamp before this point
+     * would throw the sprint away.
+     */
+    fun sample(pointerId: Int, dx: Float, dy: Float, nowMs: Long): Sample {
+        val distance = hypot(dx, dy)
+        val sprint = stage(pointerId, distance, nowMs)
+        // Below this the thumb is resting, not pushing -- the same residual
+        // rule the rest of the stick path uses.
+        if (distance < 0.002f) return Sample(0f, 0f, sprint)
+        val scale = StickStage.magnitude(distance) / distance
+        return Sample(dx * scale, dy * scale, sprint)
+    }
+
+    private fun stage(pointerId: Int, distance: Float, nowMs: Long): Boolean {
+        if (sprinting[pointerId] == true) {
+            if (distance <= StickStage.SPRINT_OUT) {
+                sprinting.remove(pointerId)
+                inRingSince.remove(pointerId)
+            }
+            return sprinting[pointerId] == true
+        }
+        // Short of the entry point the dwell is thrown away: a thumb that dips
+        // back out of the band has not held the ring, and its clock starts again.
+        if (distance < StickStage.SPRINT_IN) {
+            inRingSince.remove(pointerId)
+            return false
+        }
+        val since = inRingSince[pointerId]
+        if (since == null) {
+            inRingSince[pointerId] = nowMs
+            return false
+        }
+        if (nowMs - since >= dwellMs) {
+            sprinting[pointerId] = true
+            return true
+        }
+        return false
+    }
+
+    /** One finger lifted: its stage goes with it, and nobody else's does. */
+    fun release(pointerId: Int) {
+        sprinting.remove(pointerId)
+        inRingSince.remove(pointerId)
+    }
+
+    /** Every finger up: pause, focus loss, the editor, a cancel. */
+    fun reset() {
+        sprinting.clear()
+        inRingSince.clear()
     }
 }
 

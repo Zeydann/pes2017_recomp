@@ -123,6 +123,21 @@ class TouchOverlayView @JvmOverloads constructor(
     // Sprint from the rim, with separate press and release points.
     private val sprintLatch = SprintLatch()
 
+    /**
+     * The two-stage stick's stage per finger, when the switch above the socket
+     * has picked it (TouchMath.TwoStageStick). Kept beside the latch it stands in
+     * for rather than inside it: the two modes are different gestures, not two
+     * settings of one.
+     */
+    private val twoStage = TwoStageStick()
+
+    /** The finger whose throw is in the sprint ring, and whether it is in it. */
+    private var twoStagePointer = -1
+    private var twoStageSprint = false
+
+    /** The unclamped throw of a two-stage stick, so the ring and the knob can be drawn. */
+    private val stickRaw = HashMap<String, FloatArray>()
+
     // A compound swipe's held modifier and button, and the steps still to run.
     // The compound sequence being held right now, and the queue of the ones the
     // player has already asked for. Queued rather than raced: two flicks in a row
@@ -276,6 +291,10 @@ class TouchOverlayView @JvmOverloads constructor(
         set(value) {
             if (field == value) return
             field = value
+            // Everything the pad was holding is let go across a phase change, the
+            // two-stage stick's ring included: RB means "next" in the title's
+            // menus, so a sprint still held while the match ended would scroll a
+            // menu once, or leave R1 down under it.
             releaseEverything()
             invalidate()
             // Entering or leaving a match starts the d-pad's idle clock fresh.
@@ -539,8 +558,11 @@ class TouchOverlayView @JvmOverloads constructor(
         val slack = (if (editing) 2f else 6f) * density
         // A movement stick is grabbed wider than it is drawn: the base is fixed
         // at the socket's centre, so the press reads as a push from there.
+        // A two-stage stick is grabbed at its own rim and no further: the ring
+        // past 1.0 is sprint, so a press that started out there would begin the
+        // match already running.
         val reach = if (element.kind == ControlKind.STICK && !editing) {
-            radius(element) * stickGrab
+            radius(element) * if (isTwoStage(element)) 1f else stickGrab
         } else {
             radius(element)
         }
@@ -640,6 +662,9 @@ class TouchOverlayView @JvmOverloads constructor(
                 ControlKind.SKILL -> Unit   // fires once on the press, not as state
                 ControlKind.TRICK -> Unit   // fires once on the lift, not as state
                 ControlKind.STANCE -> Unit  // just swaps labels, never a bit
+                // The switch sends nothing and holds nothing: it changes which
+                // throw the left stick reads with, from the next sample on.
+                ControlKind.STICK_MODE -> Unit
                 ControlKind.CUSTOM -> Unit  // a spare: only its swipes send
                 // A latched toggle holds its command with no finger on it, so
                 // its bits are read from the latch rather than from a hold.
@@ -685,7 +710,12 @@ class TouchOverlayView @JvmOverloads constructor(
         // curve cannot make a jog a sprint by squeezing the top of its range.
         // The menus keep the stick for the d-pad, where R1 is a menu button, so
         // this is a match gesture.
-        if (prefs.sprintFromStick && gamePhase != GamePhase.MENUS) {
+        // The rim latch is the first stick's gesture. The two-stage stick has the
+        // ring for it and runs it through its own source below, so the pref can
+        // never make one stick sprint two ways.
+        if (prefs.sprintFromStick && prefs.stickStage == Prefs.STAGE_ONE &&
+            gamePhase != GamePhase.MENUS
+        ) {
             if (sprintLatch.update(rawLx, rawLy)) buttons = buttons or NativeBridge.RB
         } else {
             sprintLatch.reset()
@@ -728,6 +758,10 @@ class TouchOverlayView @JvmOverloads constructor(
                 }
             }
         }
+        // The two-stage stick's ring. A source of its own so it can never be
+        // masked by a thumb, and so it is let go in one statement; RB is the
+        // title's menu key, so it is only ever held over the pitch.
+        mixer.set(HoldSource.STICK_SPRINT, if (twoStageSprinting()) NativeBridge.RB else 0)
         mixer.set(HoldSource.PHYSICAL_TOUCH, heldButtons, heldLeft, heldRight)
         mixer.set(
             HoldSource.MACRO_SEQUENCE, combo.buttons, combo.leftTrigger, combo.rightTrigger,
@@ -787,6 +821,7 @@ class TouchOverlayView @JvmOverloads constructor(
         swipeTrails.clear()
         skillReleaseUntil.clear()
         sprintLatch.reset()
+        resetTwoStage()
         cancelCombo()
         // Everything up is everything up, latches included. A pause, a reset or
         // the editor is exactly when a held bit would be invisible to the player
@@ -937,7 +972,7 @@ class TouchOverlayView @JvmOverloads constructor(
                                 }
                                 sendSkill(x, y)
                             } else {
-                                moveStick(element, x, y)
+                                moveStick(element, x, y, id)
                                 changed = true
                             }
                         }
@@ -1067,7 +1102,7 @@ class TouchOverlayView @JvmOverloads constructor(
                     skillOriginY = y
                     if (NativeBridge.skillStick) NativeBridge.nativeSkillTouch(0f, 0f)
                 }
-                else -> moveStick(element, x, y)
+                else -> moveStick(element, x, y, pointerId)
             }
             ControlKind.DPAD -> dpadBits[pointerId] = dpadArm(element, x, y)
             ControlKind.SWIPE -> swipeClassifier.begin(
@@ -1141,6 +1176,14 @@ class TouchOverlayView @JvmOverloads constructor(
         markReleased(released.element)
         val pressedAt = pressAt.remove(pointerId)
         dpadBits.remove(pointerId)
+        // The stage belongs to this finger and goes with it; another thumb's
+        // share of the same socket is not disturbed.
+        twoStage.release(pointerId)
+        if (pointerId == twoStagePointer) {
+            twoStagePointer = -1
+            twoStageSprint = false
+            stickRaw.remove(released.element.id)
+        }
         // The lift counts as activity too: a long hold should not make the
         // d-pad vanish the instant it is let go.
         if (released.element.kind == ControlKind.DPAD) wakeDpad()
@@ -1153,6 +1196,20 @@ class TouchOverlayView @JvmOverloads constructor(
             if (start == null || hypot(x - start[0], y - start[1]) <= tapSlop) {
                 triggerHaptic()
                 switchStance(if (stance == PadStance.DEFEND) PadStance.ATTACK else PadStance.DEFEND)
+            }
+        }
+        // The two-stage switch: one tap, one flip, and a thumb that slid off it
+        // said something else. Nothing is sent -- the mode changes what the left
+        // stick reads on its next sample.
+        if (released.element.kind == ControlKind.STICK_MODE) {
+            val start = pressedAt
+            val tapSlop = 18f * density
+            if (start == null || hypot(x - start[0], y - start[1]) <= tapSlop) {
+                triggerHaptic()
+                prefs.stickStage =
+                    if (prefs.stickStage == Prefs.STAGE_TWO) Prefs.STAGE_ONE else Prefs.STAGE_TWO
+                resetTwoStage()
+                invalidate()
             }
         }
         if (released.element.kind == ControlKind.BUTTON) {
@@ -1482,16 +1539,62 @@ class TouchOverlayView @JvmOverloads constructor(
     private fun stickBaseY(element: ControlElement): Float =
         if (isFloating(element)) floatOriginY else centreY(element)
 
-    private fun moveStick(element: ControlElement, x: Float, y: Float) {
+    private fun moveStick(element: ControlElement, x: Float, y: Float, pointerId: Int) {
         // The knob's own travel is the throw: pushing it to its rim is full
         // speed, which is the travel the hand can see. The longer throw is kept
         // for players who learned on it (Prefs.travelMatchesKnob). The socket
         // does not move under the thumb: a floating stick is placed where the
         // thumb landed and stays there, so the deflection is always relative to
         // the same base.
-        stickPositions[element.id] = StickVector.of(
-            stickBaseX(element), stickBaseY(element), x, y, throwRadius(element),
+        val twoStaged = isTwoStage(element)
+        // The two-stage stick keeps the throw past the rim -- the ring lives out
+        // there, and a clamp before TwoStageStick sees it would throw the sprint
+        // away. Every other stick stops at the socket.
+        val limit = if (twoStaged) StickStage.OUTER_RADIUS else 1f
+        val raw = StickVector.of(
+            stickBaseX(element), stickBaseY(element), x, y, throwRadius(element), limit,
         )
+        if (!twoStaged) {
+            stickPositions[element.id] = raw
+            // Only the movement stick owns the stage: a right-stick move while
+            // the left thumb is out in the ring must not end its sprint.
+            if (element.value == 0) {
+                stickRaw.remove(element.id)
+                twoStageSprint = false
+                twoStagePointer = -1
+            }
+            return
+        }
+        // One sample per event: the stage, the dwell and the mapped deflection
+        // all come from the same arithmetic the tests pin down.
+        val sample = twoStage.sample(pointerId, raw[0], raw[1], SystemClock.uptimeMillis())
+        stickPositions[element.id] = floatArrayOf(sample.x, sample.y)
+        stickRaw[element.id] = raw
+        twoStageSprint = sample.sprint
+        twoStagePointer = pointerId
+    }
+
+    /** Whether this element is the movement stick with the two-stage switch on. */
+    private fun isTwoStage(element: ControlElement): Boolean =
+        element.kind == ControlKind.STICK && element.value == 0 &&
+            prefs.stickStage == Prefs.STAGE_TWO
+
+    /**
+     * Whether the ring is holding RB right now, in a phase that has an RB to
+     * give. The match gate is what keeps the sprint out of the title's menus,
+     * where R1 is the *next* key.
+     */
+    private fun twoStageSprinting(): Boolean =
+        twoStageSprint && prefs.stickStage == Prefs.STAGE_TWO &&
+            gamePhase == GamePhase.MATCH && !editing && !Macro.playing
+
+    /** Every stage let go: a lift, a cancel, a phase change, the editor, a pause. */
+    private fun resetTwoStage() {
+        twoStage.reset()
+        twoStagePointer = -1
+        twoStageSprint = false
+        stickRaw.clear()
+        mixer.release(HoldSource.STICK_SPRINT)
     }
 
     /**
@@ -1778,6 +1881,7 @@ class TouchOverlayView @JvmOverloads constructor(
                 ControlKind.BUTTON, ControlKind.TRIGGER, ControlKind.SKILL, ControlKind.CUSTOM,
                 ControlKind.LATCH -> drawButton(canvas, element, alpha, faded)
                 ControlKind.STANCE -> drawStance(canvas, element, alpha, faded)
+                ControlKind.STICK_MODE -> drawStickMode(canvas, element, alpha, faded)
                 ControlKind.TRICK -> {
                     drawButton(canvas, element, alpha, faded)
                     if (trickOpen && trickPointer >= 0 &&
@@ -2475,6 +2579,50 @@ class TouchOverlayView @JvmOverloads constructor(
         }
     }
 
+    /**
+     * The two-stage switch: a small pill above the socket, "1" on one side and
+     * "2" on the other, with the mode in use filled. One tap flips it, and it
+     * holds no bit -- what it changes is how the stick under it reads.
+     */
+    private fun drawStickMode(
+        canvas: Canvas, element: ControlElement, alpha: Float, faded: Boolean,
+    ) {
+        val halfW = radius(element)
+        val halfH = halfW * 0.50f
+        val cx = centreX(element)
+        val cy = centreY(element)
+        val fade = if (faded) 0.45f else 1f
+        val second = prefs.stickStage == Prefs.STAGE_TWO
+
+        // The housing, then the half that is in use drawn inside it.
+        box.set(cx - halfW, cy - halfH, cx + halfW, cy + halfH)
+        fill.color = Color.argb((alpha * fade * 190f).toInt().coerceIn(0, 255), 12, 16, 24)
+        canvas.drawRoundRect(box, halfH, halfH, fill)
+        stroke.strokeWidth = max(1.2f, halfH * 0.12f)
+        stroke.color = Color.argb((alpha * fade * 160f).toInt().coerceIn(0, 255), 70, 85, 105)
+        canvas.drawRoundRect(box, halfH, halfH, stroke)
+
+        // Blue for the normal throw, the rim's green for the ring.
+        val active = if (second) 0xFF22C55E.toInt() else 0xFF3B82F6.toInt()
+        val inset = halfH * 0.08f
+        if (second) {
+            box.set(cx + inset, cy - halfH + inset, cx + halfW - inset, cy + halfH - inset)
+        } else {
+            box.set(cx - halfW + inset, cy - halfH + inset, cx - inset, cy + halfH - inset)
+        }
+        fill.color = Color.argb(
+            (alpha * fade * 235f).toInt().coerceIn(0, 255),
+            Color.red(active), Color.green(active), Color.blue(active),
+        )
+        canvas.drawRoundRect(box, halfH * 0.92f, halfH * 0.92f, fill)
+
+        text.textSize = halfH * 1.20f
+        text.color = Color.argb((alpha * fade * 255f).toInt().coerceIn(0, 255), 248, 250, 252)
+        val baseline = cy - (text.descent() + text.ascent()) * 0.5f
+        canvas.drawText("1", cx - halfW * 0.5f, baseline, text)
+        canvas.drawText("2", cx + halfW * 0.5f, baseline, text)
+    }
+
     private fun drawStick(canvas: Canvas, element: ControlElement, alpha: Float, faded: Boolean) {
         val r = radius(element)
         // A floating stick is drawn where the thumb is holding it.
@@ -2483,6 +2631,7 @@ class TouchOverlayView @JvmOverloads constructor(
         val fadeFactor = if (faded) 0.45f else 1f
         val position = stickPositions[element.id]
         val isDeflected = position != null
+        val twoStaged = isTwoStage(element)
 
         // 1. Outer socket base (metallic dish)
         fill.color = Color.argb((alpha * fadeFactor * 75).toInt().coerceIn(0, 255), 16, 20, 26)
@@ -2501,6 +2650,29 @@ class TouchOverlayView @JvmOverloads constructor(
             stroke.strokeWidth = max(2f, r * 0.07f)
             canvas.drawCircle(cx, cy, r - stroke.strokeWidth * 0.5f, stroke)
         }
+        if (twoStaged) {
+            // The ring is real travel, so it is drawn: the socket's own rim is
+            // the boundary, and the dashed edge is as far out as the stick reads.
+            val dash = max(3f, r * 0.09f)
+            notchPaint.pathEffect = DashPathEffect(floatArrayOf(dash, dash * 0.8f), 0f)
+            notchPaint.color = Color.argb(
+                (alpha * fadeFactor * 140).toInt().coerceIn(0, 255), 34, 197, 94,
+            )
+            notchPaint.strokeWidth = max(1.5f, r * 0.03f)
+            canvas.drawCircle(
+                cx, cy, r * StickStage.OUTER_RADIUS - notchPaint.strokeWidth * 0.5f, notchPaint,
+            )
+            notchPaint.pathEffect = null
+            // The rim lights while the ring is actually holding RB: the stick
+            // says what it is doing rather than a button lighting up elsewhere.
+            if (twoStageSprint && !faded) {
+                stroke.color = Color.argb(
+                    (alpha * fadeFactor * 235).toInt().coerceIn(0, 255), 34, 197, 94,
+                )
+                stroke.strokeWidth = max(2f, r * 0.07f)
+                canvas.drawCircle(cx, cy, r - stroke.strokeWidth * 0.5f, stroke)
+            }
+        }
 
         // 4 Cardinal Guide Notches on the outer socket perimeter (Xbox stick housing style)
         val notchLen = r * 0.10f
@@ -2515,9 +2687,14 @@ class TouchOverlayView @JvmOverloads constructor(
         // Right
         canvas.drawLine(cx + r - notchLen, cy, cx + r, cy, notchPaint)
 
-        // 2. Knob position
-        val knobX = cx + (position?.get(0) ?: 0f) * r * stickTravel
-        val knobY = cy - (position?.get(1) ?: 0f) * r * stickTravel
+        // 2. Knob position. A two-stage stick follows the raw throw and pins at
+        // its own rim through the ring, so the hand can see it is past the
+        // socket even though the deflection has stopped growing.
+        val knob = if (twoStaged) stickRaw[element.id] ?: position else position
+        val knobLength = knob?.let { hypot(it[0], it[1]) } ?: 0f
+        val knobPin = if (knobLength > 1f) 1f / knobLength else 1f
+        val knobX = cx + (knob?.get(0) ?: 0f) * knobPin * r * stickTravel
+        val knobY = cy - (knob?.get(1) ?: 0f) * knobPin * r * stickTravel
 
         // Directional deflection vector glow
         if (isDeflected) {

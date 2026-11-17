@@ -76,7 +76,7 @@ internal class TouchClaims {
         // button mask, so none may reach newPresses.
         if (element.kind == ControlKind.STICK || element.kind == ControlKind.SKILL ||
             element.kind == ControlKind.TRICK || element.kind == ControlKind.STANCE ||
-            element.kind == ControlKind.TACTICAL
+            element.kind == ControlKind.STICK_MODE || element.kind == ControlKind.TACTICAL
         ) {
             byPointer[pointerId] = Claim(element, holds = false)
             if (element.kind == ControlKind.STICK) {
