@@ -320,8 +320,6 @@
     <string name="stick_mode_move">Move</string>
     <string name="stick_mode_fixed">Fixed</string>
     <string name="stick_mode_hint">Move puts the stick wherever your thumb lands on the left of the screen and follows it, as eFootball does; Fixed keeps it where the layout put it. Either way the knob you see is the throw.</string>
-    <string name="sprint_from_stick">Sprint at the stick\u2019s rim</string>
-    <string name="sprint_from_stick_hint">Push the movement stick all the way out to run, the way R1 does. Turn off to sprint only with the button.</string>
     <string name="defending_pad">Defending pad</string>
     <string name="defending_pad_hint">Bring out the controls arranged for defending instead of the attacking ones. Controls can be put on one pad or the other in the editor\u2019s Arrangement button. The title does not report who has the ball, so this is your own switch; also in the pause menu.</string>
     <string name="switch_to_defending_pad">Bring out the defending pad</string>
@@ -416,7 +414,7 @@
     <string name="edit_add">Add a control…</string>
     <string name="edit_add_none">Every control is already on the pad</string>
     <string name="edit_remove">Remove this control</string>
-    <string name="edit_remove_required">The movement stick and the camera region are required</string>
+    <string name="edit_remove_required">The movement stick is required</string>
     <string name="edit_remove_confirm">Take %1$s off the pad? Restore defaults brings it back.</string>
     <string name="edit_undo">Undo</string>
     <string name="edit_redo">Redo</string>

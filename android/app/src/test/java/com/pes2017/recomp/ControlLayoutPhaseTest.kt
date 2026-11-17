@@ -61,7 +61,15 @@ class ControlLayoutPhaseTest {
         // No addresses for the title's client states: hiding the d-pad would be
         // hiding it on a pitch the app cannot recognise.
         assertTrue(control().shownIn(GamePhase.UNKNOWN))
-        assertFalse(control(shownWhen = PhaseMask.MATCH).shownIn(GamePhase.UNKNOWN))
+    }
+
+    @Test
+    fun anUnknownPhaseKeepsTheMatchControlsToo() {
+        // A match control is one the menus do not want. A phase the tracker has
+        // not read yet is not the menus: the mentality pair disappearing over
+        // the pitch because the tracker went quiet is the worse mistake, and a
+        // control hidden on a guess cannot be pressed at all.
+        assertTrue(control(shownWhen = PhaseMask.MATCH).shownIn(GamePhase.UNKNOWN))
     }
 
     @Test

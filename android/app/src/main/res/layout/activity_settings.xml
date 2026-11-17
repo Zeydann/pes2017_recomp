@@ -577,19 +577,6 @@
                         android:text="@string/stick_mode_hint" />
 
                     <androidx.appcompat.widget.SwitchCompat
-                        android:id="@+id/sprint_from_stick"
-                        style="@style/SettingSwitch"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/sprint_from_stick" />
-
-                    <TextView
-                        style="@style/SettingHint"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/sprint_from_stick_hint" />
-
-                    <androidx.appcompat.widget.SwitchCompat
                         android:id="@+id/defending_pad"
                         style="@style/SettingSwitch"
                         android:layout_width="match_parent"

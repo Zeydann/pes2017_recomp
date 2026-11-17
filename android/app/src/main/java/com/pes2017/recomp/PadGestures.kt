@@ -1,6 +1,5 @@
 package com.pes2017.recomp
 
-import kotlin.math.hypot
 
 /**
  * The gestures the pad has to remember between touch samples: the sprint
@@ -257,41 +256,6 @@ class DoubleTap(private val windowMs: Long = WINDOW_MS) {
     companion object {
         /** A fifth of a second: the gap a thumb makes when it means to tap twice. */
         const val WINDOW_MS = 220L
-    }
-}
-
-/**
- * Sprint from the movement stick's rim.
- *
- * One threshold would chatter: a thumb held exactly on it would flicker between
- * running and jogging every sample. The press point (0.92 of the raw throw) and
- * the release point (0.82) are therefore separate, and the state is latched
- * between them. The raw throw decides -- not the shaped one -- so the curve
- * cannot make a jog a sprint by squeezing the top of its range.
- *
- * [reset] is what every cancellation path calls: pause, focus loss, the pad
- * being hidden or edited. A sprint cannot outlive the thumb that started it.
- */
-class SprintLatch(
-    private val pressAt: Float = 0.92f,
-    private val releaseAt: Float = 0.82f,
-) {
-    /** Whether the movement stick is running right now. */
-    var active = false
-        private set
-
-    private val press = pressAt.coerceIn(0.1f, 1f)
-    private val release = releaseAt.coerceIn(0f, press - 0.01f)
-
-    /** One sample of the stick, from -1..1 on each axis. Returns [active]. */
-    fun update(x: Float, y: Float): Boolean {
-        val magnitude = hypot(x, y)
-        active = if (active) magnitude >= release else magnitude >= press
-        return active
-    }
-
-    fun reset() {
-        active = false
     }
 }
 

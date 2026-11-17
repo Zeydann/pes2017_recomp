@@ -2,11 +2,13 @@ package com.pes2017.recomp
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The sprint latch and the fake shot's arming rule (PadGestures.kt).
+ * The double taps, the fake shot's arming rule and the skill wheel
+ * (PadGestures.kt).
  *
  * Both are pure arithmetic on the values the overlay already holds, so the
  * edges -- the press point, the release point, a drag that is too short, a
@@ -14,52 +16,6 @@ import org.junit.Test
  * are checked here rather than by playing with two thumbs.
  */
 class PadGesturesTest {
-
-    // ---- sprint --------------------------------------------------------------
-
-    @Test
-    fun aThumbAllTheWayOutSprints() {
-        val latch = SprintLatch()
-        assertTrue(latch.update(0.93f, 0f))
-        assertTrue(latch.active)
-        assertTrue(latch.update(0f, 0.95f))
-    }
-
-    @Test
-    fun justInsideThePressPointDoesNotSprint() {
-        val latch = SprintLatch()
-        assertFalse(latch.update(0.90f, 0f))
-        assertFalse(latch.active)
-    }
-
-    @Test
-    fun theReleasePointKeepsARestingThumbFromChattering() {
-        val latch = SprintLatch()
-        assertTrue(latch.update(0.92f, 0f))
-        // Between press and release: still running, because it is latched.
-        assertTrue(latch.update(0.85f, 0f))
-        assertTrue(latch.active)
-        // Below release: stopped.
-        assertFalse(latch.update(0.80f, 0f))
-        // And back between the two points it stays stopped until the press point.
-        assertFalse(latch.update(0.85f, 0f))
-        assertTrue(latch.update(0.92f, 0f))
-    }
-
-    @Test
-    fun releasingTheStickStopsTheSprint() {
-        val latch = SprintLatch()
-        latch.update(1f, 0f)
-        assertFalse(latch.update(0f, 0f))
-    }
-
-    @Test
-    fun resetStopsAStuckSprint() {
-        val latch = SprintLatch()
-        latch.update(1f, 0f)
-        latch.reset()
-        assertFalse(latch.active)
-    }
 
     // ---- the pass double tap (one-two) ---------------------------------------
 
@@ -340,5 +296,58 @@ class MentalityTapsTest {
         assertEquals(0, steps[3].buttons)
         assertTrue("the second press comes after the first has been seen",
             steps[2].delayMs > steps[0].delayMs)
+    }
+}
+
+/**
+ * The pad's logcat trace (TouchTrace.kt): what prints, and how often.
+ *
+ * The line is the one place a dead stick or a dropped shot can be seen on a
+ * phone, so the thinning is the part worth pinning down: a moving thumb cannot
+ * flood the log, and a bit that changes cannot be thinned away.
+ */
+class TouchTraceGateTest {
+
+    @Test
+    fun aStillPadDoesNotRepeatItself() {
+        val trace = TouchTraceGate()
+        assertTrue(trace.state(1_000L, 0, 0, 0, 0f, 0f, 0f, 0f) != null)
+        assertNull(trace.state(1_500L, 0, 0, 0, 0f, 0f, 0f, 0f))
+    }
+
+    @Test
+    fun aMovingThumbIsThinnedToTheGap() {
+        val trace = TouchTraceGate()
+        trace.state(1_000L, 0, 0, 0, 0f, 0f, 0f, 0f)
+        assertNull(trace.state(1_100L, 0, 0, 0, 0.4f, 0f, 0f, 0f))
+        val later = trace.state(1_600L, 0, 0, 0, 0.6f, 0f, 0f, 0f)
+        assertTrue(later != null && later.contains("+0.60"))
+    }
+
+    @Test
+    fun aBitThatChangesIsNeverThinnedAway() {
+        val trace = TouchTraceGate()
+        trace.state(1_000L, 0, 0, 0, 0f, 0f, 0f, 0f)
+        val shot = trace.state(1_010L, NativeBridge.UP, 0, 0, 0f, 0f, 0f, 0f)
+        assertTrue(shot != null && shot.contains("buttons=0x"))
+    }
+
+    @Test
+    fun aResetLetsTheAllClearPrint() {
+        val trace = TouchTraceGate()
+        trace.state(1_000L, 0, 0, 0, 0f, 0f, 0f, 0f)
+        trace.reset()
+        assertTrue(trace.state(1_050L, 0, 0, 0, 0f, 0f, 0f, 0f) != null)
+    }
+
+    @Test
+    fun aSwipeLineNamesTheBitsItSends() {
+        val held = TouchTraceGate.swipe(
+            "shoot", Swipe.DOWN, SwipeAction.held(SwipeModifier.LT, NativeBridge.UP),
+        )
+        assertTrue(held.contains("shoot down"))
+        assertTrue(held.contains("LT+0x"))
+        val unbound = TouchTraceGate.swipe("shoot", Swipe.RIGHT, SwipeAction.NONE)
+        assertTrue(unbound.contains("nothing"))
     }
 }

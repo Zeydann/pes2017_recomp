@@ -11,6 +11,7 @@ import android.graphics.RectF
 import android.os.Build
 import android.os.SystemClock
 import android.util.AttributeSet
+import android.util.Log
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowInsets
@@ -120,8 +121,6 @@ class TouchOverlayView @JvmOverloads constructor(
     // two polls is otherwise never seen.
     private val skillReleaseUntil = HashMap<String, Long>()
 
-    // Sprint from the rim, with separate press and release points.
-    private val sprintLatch = SprintLatch()
 
     /**
      * The two-stage stick's stage per finger, when the switch above the socket
@@ -170,6 +169,9 @@ class TouchOverlayView @JvmOverloads constructor(
     private var liveSwipeLeft = false
     private var liveSwipeRight = false
     private var liveSwipeSince = 0L
+
+    /** What the pad last told the title, so logcat shows a dead stick or a lost flick. */
+    private val trace = TouchTraceGate()
 
     /**
      * The tail of a live swipe's modifier. A lift that relied on a modifier that
@@ -745,28 +747,11 @@ class TouchOverlayView @JvmOverloads constructor(
             val right = StickShape.apply(rx, ry, prefs.rightStickDeadzone, prefs.rightStickCurve)
             rx = right[0]; ry = right[1]
         }
-        // Sprint from the rim: a thumb all the way out runs, and the latch's
-        // release point keeps a thumb resting on the threshold from chattering
-        // between running and jogging. The raw throw decides, so the shaped
-        // curve cannot make a jog a sprint by squeezing the top of its range.
-        // The menus keep the stick for the d-pad, where R1 is a menu button, so
-        // this is a match gesture.
-        // The rim latch is the first stick's gesture. The two-stage stick has the
-        // ring for it and runs it through its own source below, so the pref can
-        // never make one stick sprint two ways.
-        if (prefs.sprintFromStick && prefs.stickStage == Prefs.STAGE_ONE &&
-            gamePhase != GamePhase.MENUS
-        ) {
-            // The movement stick's own throw, never the merged one: Stick 2
-            // mirrors the socket without the sprint, which is the whole point of
-            // it. A lifted stick is a centred one, so the latch lets go.
-            val sprintThrow = stickPositions[MOVE_STICK]
-            if (sprintLatch.update(sprintThrow?.get(0) ?: 0f, sprintThrow?.get(1) ?: 0f)) {
-                buttons = buttons or NativeBridge.RB
-            }
-        } else {
-            sprintLatch.reset()
-        }
+        // The movement stick never sends RB: the rim and the two-stage ring are
+        // travel, and sprinting is the RB button's job (or a trigger's, through
+        // the editor's swipes). A stick that sprinted by itself turned every
+        // full-deflection run into an unintended R1 -- a menu key in the title's
+        // screens and a modifier everywhere else.
 
         // Every source that wants a button down, merged rather than overwritten.
         // A source states the whole truth each frame, so nothing has to be
@@ -805,10 +790,6 @@ class TouchOverlayView @JvmOverloads constructor(
                 }
             }
         }
-        // The two-stage stick's ring. A source of its own so it can never be
-        // masked by a thumb, and so it is let go in one statement; RB is the
-        // title's menu key, so it is held everywhere but the menus.
-        mixer.set(HoldSource.STICK_SPRINT, if (twoStageSprinting()) NativeBridge.RB else 0)
         mixer.set(HoldSource.PHYSICAL_TOUCH, heldButtons, heldLeft, heldRight)
         mixer.set(
             HoldSource.MACRO_SEQUENCE, combo.buttons, combo.leftTrigger, combo.rightTrigger,
@@ -853,6 +834,9 @@ class TouchOverlayView @JvmOverloads constructor(
         }
         if (now < pulseUntil) buttons = buttons or pulseBits
 
+        trace.state(now, buttons, leftTrigger, rightTrigger, lx, ly, rx, ry)?.let {
+            Log.i(TouchTraceGate.TAG, it)
+        }
         Macro.record(Macro.TOUCH, buttons, leftTrigger, rightTrigger, lx, ly, rx, ry)
         NativeBridge.nativeTouchState(buttons, leftTrigger, rightTrigger, lx, ly, rx, ry)
     }
@@ -867,7 +851,6 @@ class TouchOverlayView @JvmOverloads constructor(
         passDoubleTap.reset()
         swipeTrails.clear()
         skillReleaseUntil.clear()
-        sprintLatch.reset()
         resetTwoStage()
         cancelCombo()
         // Everything up is everything up, latches included. A pause, a reset or
@@ -886,6 +869,7 @@ class TouchOverlayView @JvmOverloads constructor(
         trickSector = -1
         burstCadence.reset()
         mentality.reset()
+        trace.reset()
         // Everything up means everything: a trigger does not outlive the pad,
         // and neither does a tap still riding out its frame or an arm the stick
         // was holding down.
@@ -1307,6 +1291,7 @@ class TouchOverlayView @JvmOverloads constructor(
                 Swipe.NONE
             }
             val action = released.element.swipeAction(direction)
+            Log.i(TouchTraceGate.TAG, TouchTraceGate.swipe(released.element.id, direction, action))
             if (SwipePriority.sendsSwipe(action)) emitSwipe(action)
             noteSwipeTrail(released.element, direction)
         }
@@ -1506,6 +1491,12 @@ class TouchOverlayView @JvmOverloads constructor(
         // sequence would send the same command twice. A modifier that only
         // became known as the thumb lifted still needs the timed sequence.
         val alreadyHeld = liveSwipeHeldFor(action)
+        // An ordinary tap on a button is silent here -- it already has its held
+        // bit -- but a flick that charged a modifier and then read as no
+        // direction is exactly the dropped shot this log exists for.
+        if (direction != Swipe.NONE || hasLiveModifier()) {
+            Log.i(TouchTraceGate.TAG, TouchTraceGate.swipe(element.id, direction, action))
+        }
         if (!alreadyHeld && SwipePriority.sendsSwipe(action)) emitSwipe(action)
         if (alreadyHeld) {
             // The modifier has been down and the title has seen it, so the
@@ -1675,24 +1666,12 @@ class TouchOverlayView @JvmOverloads constructor(
         element.kind == ControlKind.STICK && element.id == MOVE_STICK &&
             prefs.stickStage == Prefs.STAGE_TWO
 
-    /**
-     * Whether the ring is holding RB right now, in a phase that has an RB to
-     * give. The menus are the one place it is taken away: there R1 is the
-     * *next* key. Everything else keeps it, including [GamePhase.UNKNOWN] -- a
-     * build that cannot read the title's phase is still playing, and a ring
-     * that dies because the tracker went quiet is the worse mistake.
-     */
-    private fun twoStageSprinting(): Boolean =
-        twoStageSprint && prefs.stickStage == Prefs.STAGE_TWO &&
-            gamePhase != GamePhase.MENUS && !editing && !Macro.playing
-
     /** Every stage let go: a lift, a cancel, a phase change, the editor, a pause. */
     private fun resetTwoStage() {
         twoStage.reset()
         twoStagePointer = -1
         twoStageSprint = false
         stickRaw.clear()
-        mixer.release(HoldSource.STICK_SPRINT)
     }
 
     /**
@@ -2228,14 +2207,18 @@ class TouchOverlayView @JvmOverloads constructor(
 
         // The tint first, then a dark wash over it: together a low-opacity colour
         // rather than a coloured button.
+        // Readable over a bright pitch, not just over the stands: the pair used
+        // to be drawn so faint that a player who had just turned them on could
+        // not find them, which is a visibility bug however the state reads. The
+        // glass is still see-through, but the word is no longer lost in it.
         box.set(cx - halfWidth, cy - halfHeight, cx + halfWidth, cy + halfHeight)
         fill.color = Color.argb(
-            (alpha * fade * (if (pressed) 125f else 66f)).toInt().coerceIn(0, 255),
+            (alpha * fade * (if (pressed) 170f else 120f)).toInt().coerceIn(0, 255),
             Color.red(accent), Color.green(accent), Color.blue(accent),
         )
         canvas.drawRoundRect(box, corner, corner, fill)
         fill.color = Color.argb(
-            (alpha * fade * (if (pressed) 110f else 72f)).toInt().coerceIn(0, 255), 8, 12, 18,
+            (alpha * fade * (if (pressed) 150f else 110f)).toInt().coerceIn(0, 255), 8, 12, 18,
         )
         canvas.drawRoundRect(box, corner, corner, fill)
 
@@ -2245,7 +2228,7 @@ class TouchOverlayView @JvmOverloads constructor(
         box.inset(border * 0.5f, border * 0.5f)
         stroke.strokeWidth = border
         stroke.color = Color.argb(
-            (alpha * fade * (if (pressed) 235f else 165f)).toInt().coerceIn(0, 255),
+            (alpha * fade * (if (pressed) 255f else 220f)).toInt().coerceIn(0, 255),
             Color.red(accent), Color.green(accent), Color.blue(accent),
         )
         canvas.drawRoundRect(box, corner, corner, stroke)
@@ -2253,7 +2236,7 @@ class TouchOverlayView @JvmOverloads constructor(
         val word = (if (attacking) "\u2191 " else "\u2193 ") +
             element.sub.ifEmpty { element.label }
         text.textSize = fitText(text, word, halfWidth * 1.62f, halfHeight * 1.05f, 6f)
-        text.color = Color.argb((alpha * fade * 250f).toInt().coerceIn(0, 255), 255, 255, 255)
+        text.color = Color.argb((alpha * fade * 255f).toInt().coerceIn(0, 255), 255, 255, 255)
         canvas.drawText(word, cx, cy - (text.descent() + text.ascent()) * 0.5f, text)
     }
 
@@ -2816,8 +2799,8 @@ class TouchOverlayView @JvmOverloads constructor(
     }
 
     /**
-     * The two-stage switch: a small pill above the socket, MENU on one side and
-     * MATCH on the other, with the mode in use filled. One tap flips it, and it
+     * The two-stage switch: a small pill above the socket, MATCH on one side and
+     * MENU on the other, with the mode in use filled. One tap flips it, and it
      * holds no bit -- what it changes is how the stick under it reads.
      */
     private fun drawStickMode(
@@ -2854,12 +2837,11 @@ class TouchOverlayView @JvmOverloads constructor(
 
         text.textSize = halfH * 1.20f
         text.color = Color.argb((alpha * fade * 255f).toInt().coerceIn(0, 255), 248, 250, 252)
-        // The words are the modes themselves: MENU is the standard throw (the
-        // menus' own stick, no ring, so a run cannot scroll a list), MATCH is the
-        // two-stage one whose outer circle sprints. "1" and "2" said nothing
-        // about which was which.
-        val left = "MENU"
-        val right = "MATCH"
+        // The words are the modes themselves: MATCH is the standard throw, MENU
+        // the two-stage one whose outer circle is the ring. "1" and "2" said
+        // nothing about which was which.
+        val left = "MATCH"
+        val right = "MENU"
         text.textSize = fitText(text, left, halfW * 0.88f, halfH * 1.15f, 4f)
         canvas.drawText(left, cx - halfW * 0.5f, cy - (text.descent() + text.ascent()) * 0.5f, text)
         text.textSize = fitText(text, right, halfW * 0.88f, halfH * 1.15f, 4f)
@@ -2885,14 +2867,6 @@ class TouchOverlayView @JvmOverloads constructor(
         stroke.strokeWidth = max(1.5f, r * 0.035f)
         canvas.drawCircle(cx, cy, r - stroke.strokeWidth * 0.5f, stroke)
 
-        // The rim lights only while the sprint latch is actually on: the stick
-        // says what it is doing, rather than a separate button lighting up
-        // somewhere, and a thumb inside the release point is not sprinting.
-        if (prefs.sprintFromStick && element.id == MOVE_STICK && sprintLatch.active) {
-            stroke.color = Color.argb((alpha * fadeFactor * 235).toInt().coerceIn(0, 255), 34, 197, 94)
-            stroke.strokeWidth = max(2f, r * 0.07f)
-            canvas.drawCircle(cx, cy, r - stroke.strokeWidth * 0.5f, stroke)
-        }
         if (twoStaged) {
             // The ring is real travel, so it is drawn: the socket's own rim is
             // the boundary, and the dashed edge is as far out as the stick reads.
@@ -2906,8 +2880,9 @@ class TouchOverlayView @JvmOverloads constructor(
                 cx, cy, r * StickStage.OUTER_RADIUS - notchPaint.strokeWidth * 0.5f, notchPaint,
             )
             notchPaint.pathEffect = null
-            // The rim lights while the ring is actually holding RB: the stick
-            // says what it is doing rather than a button lighting up elsewhere.
+            // The rim lights while the thumb is out in the ring. The ring is
+            // travel and nothing else now -- it sends no bit -- so the light is
+            // feedback, not a held key.
             if (twoStageSprint && !faded) {
                 stroke.color = Color.argb(
                     (alpha * fadeFactor * 235).toInt().coerceIn(0, 255), 34, 197, 94,

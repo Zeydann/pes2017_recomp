@@ -110,7 +110,6 @@ class SettingsActivity : AppCompatActivity() {
             prefs.controlFx = if (it) ControlTheme.FX_SUBTLE else ControlTheme.FX_OFF
         }
         switch(R.id.flick_skill_stick, prefs.flickSkillStick) { prefs.flickSkillStick = it }
-        switch(R.id.sprint_from_stick, prefs.sprintFromStick) { prefs.sprintFromStick = it }
         switch(R.id.defending_pad, prefs.defendingPad) { prefs.defendingPad = it }
         val stickMode: android.widget.RadioGroup = findViewById(R.id.stick_mode)
         stickMode.check(if (prefs.stickMode == Prefs.STICK_FIXED) R.id.stick_mode_fixed else R.id.stick_mode_move)

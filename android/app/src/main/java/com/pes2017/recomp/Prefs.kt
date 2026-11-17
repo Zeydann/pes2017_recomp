@@ -433,15 +433,6 @@ class Prefs(context: Context) {
         get() = store.contains(KEY_STICK_MODE)
 
     /**
-     * Sprint from the stick's rim: push the movement stick all the way out and
-     * the player runs, the way a pad's R1 does. Off leaves sprinting to the
-     * button alone.
-     */
-    var sprintFromStick: Boolean
-        get() = store.getBoolean(KEY_SPRINT_STICK, true)
-        set(value) = store.edit().putBoolean(KEY_SPRINT_STICK, value).apply()
-
-    /**
      * Which throw the movement stick reads with, picked by the switch above its
      * socket: [STAGE_ONE] is the normal stick, [STAGE_TWO] is the two-stage one
      * (TouchMath.StickStage). Global rather than per layout -- it changes how the
@@ -577,7 +568,6 @@ class Prefs(context: Context) {
         private const val KEY_STICK_TRAVEL_KNOB = "stickTravelMatchesKnob"
         private const val KEY_HAPTICS = "haptics"
         private const val KEY_STICK_MODE = "stickMode"
-        private const val KEY_SPRINT_STICK = "sprintFromStick"
         private const val KEY_STICK_STAGE = "stickStage"
         private const val KEY_DEFENDING_PAD = "defendingPad"
 

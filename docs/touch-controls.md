@@ -24,7 +24,7 @@ and controlled variants) and the project's own layout notes in `ControlLayout.kt
 | `0x4000` | X | Square (□) | Shoot (power gauge while held, shot on release) | Chip = LB + shoot; finesse = RT during the gauge |
 | `0x8000` | Y | Triangle (△) | Through pass | LB + Y is the lofted through ball |
 | `0x0100` | LB | L1 | Change player | Also held as a modifier (one-two, chip, lofted through) |
-| `0x0200` | RB | R1 | Sprint dribble while held; double tap is the knock-on | Sprint from the stick's rim sends this bit |
+| `0x0200` | RB | R1 | Sprint dribble while held; double tap is the knock-on | RB button only: the stick sends nothing |
 | trigger 0 | LT | L2 | Manual modifiers | Held by a compound swipe as an axis value |
 | trigger 1 | RT | R2 | Close control; finesse shot during the gauge | Same |
 | `0x0010` | START | Start | Pause | |
@@ -67,9 +67,9 @@ title's poll came after it.
 Two things on the release path that used to drop fast flicks: the **lift's own
 coordinates are fed to the classifier before the direction is read** (a thumb can
 travel the whole way inside the `ACTION_UP` event, between two move batches, and a
-gesture read from the last `ACTION_MOVE` alone looked like a tap), and the sprint
-ring's RB is its own `HoldSource`, so leaving the outer ring cannot lift the bit a
-swipe needs in the same frame.
+gesture read from the last `ACTION_MOVE` alone looked like a tap), and the
+ring sends no bit of its own, so leaving it cannot lift the bit a swipe needs in
+the same frame.
 
 The editor lists every option: none, the plain bits, all four modifiers on each
 of the four face buttons, and a double tap of each face button.
@@ -169,21 +169,20 @@ divided by the visible throw, clamped to the rim, screen-Y flipped for the guest
   second thumb shares the base.
 
 The throw is measured across the **whole socket**, not the knob's smaller
-travel: a thumb on the rim is full deflection, which is what puts the 0.92
-sprint latch where a hand can find it. The skill stick is the exception -- its
+travel: a thumb on the rim is full deflection. The skill stick is the exception -- its
 throw is 55 % of its socket, with a 0.05 deadzone and a 0.85 curve -- because a
 skill move is a short flick to a sector rather than a pace to hold. The absolute
 skill stick's last sample is held for 90 ms after the lift so the title's poll
 can see a flick that began and ended between two frames.
 
-## Sprint from the rim
+## No sprint from the stick
 
-`SprintLatch`: press at **0.92** of the raw throw, release at **0.82**, latched
-between them. While latched the pad's RB bit (`0x0200`, R1) is OR'd into every
-state push and the socket rim lights. Menus never sprint; every cancellation
-resets the latch. This is the **first stick's** gesture and applies to mode 1
-only -- mode 2 has the sprint ring below, and the `sprintFromStick` setting is
-read only in mode 1 so one stick can never sprint two ways.
+The movement stick sends no RB in either mode. Pushing it past its rim is travel
+and nothing else: the title's R1 is a menu key in its own screens and a sprint
+modifier everywhere else, so a stick that pressed it at full deflection pressed
+R1 by accident every time a thumb went all the way out. Sprinting is the RB
+button's job, or a swipe bound to RB in the editor; the old "Sprint at the
+stick's rim" setting is gone with the gesture.
 
 ## The two-stage stick
 
@@ -194,23 +193,22 @@ title's menus, or before kick-off. Nothing about it is sent to the title: it
 changes the arithmetic, not the pad, and it holds no bit and no press pulse.
 
 Its two halves are labelled with the modes rather than numbered, because "1" and
-"2" never said which was which: **MENU** is the standard throw (the menus' own
-stick -- no ring, so a run cannot scroll a list), **MATCH** is the two-stage one
-whose outer circle sprints.
+"2" never said which was which: **MATCH** is the standard throw, **MENU** the
+two-stage one with the ring outside the socket.
 
 | Mode | What the stick does |
 |---|---|
-| `MENU` — normal (mode 1) | the whole socket is the throw; its rim is full pace |
-| `MATCH` — two-stage (mode 2) | the socket is the movement circle; a sprint ring outside it |
+| `MATCH` — normal (mode 1) | the whole socket is the throw; its rim is full pace |
+| `MENU` — two-stage (mode 2) | the socket is the movement circle; a wider ring outside it, held as travel |
 
 Mode 2's geometry (`TouchMath.StickStage`), in socket radii, on the default
 150 dp stick (75 dp radius):
 
-| Zone | Radii | Size | RB |
+| Zone | Radii | Size | Bit |
 |---|---|---|---|
-| Movement circle (inner) | 0 – 1.00 (0–75 dp) | the larger zone | never |
-| Sprint ring (outer) | 1.00 – 1.35 (75–101 dp) | 26 dp wide, the smaller zone | after a 70 ms dwell |
-| Past the ring | > 1.35 | clamped | held |
+| Movement circle (inner) | 0 – 1.00 (0–75 dp) | the larger zone | none |
+| Ring (outer) | 1.00 – 1.35 (75–101 dp) | 26 dp wide, the smaller zone | none |
+| Past the ring | > 1.35 | clamped | none |
 
 The deflection is one scalar on the vector, so a direction never changes as the
 thumb crosses the boundary: inside the rim `magnitude = 0.90 × d`, in the ring
@@ -219,14 +217,10 @@ pace only at the ring's far edge — the tenth the inside holds back is what the
 ring adds.
 
 Entering the ring needs `d ≥ 1.06` held for 70 ms; it is left at `d ≤ 0.94`, at
-once, because a sprint that outlives the thumb is worse than one that starts
-late. The 0.94–1.06 band is hysteresis, so a thumb balanced on the rim never
-chatters RB. The ring's RB is its own `HoldSource.STICK_SPRINT` — a thumb on the
-sprint button and the ring cannot release each other — and it is held **everywhere except `gamePhase ==
-GamePhase.MENUS`**: in the title's menus R1 is *next*, so a ring could otherwise
-scroll a menu or leave R1 down under it. `GamePhase.UNKNOWN` keeps the ring: a
-build that cannot read the title's phase is still playing, and a sprint that dies
-because the tracker went quiet is the worse mistake. A lift, a phase change,
+once, so a thumb balanced on the rim does not chatter in and out of it. What the
+ring changes is the deflection — the tenth the inside holds back is what the
+ring adds — and the socket lights its rim while the thumb is out there. It sends
+no bit at all, so no ring can press the title's R1. A lift, a phase change,
 `ACTION_CANCEL`, pause, the editor, or a macro clears the stage.
 
 Both stages grab the socket at 1.35 R. A grab that could only start inside the
@@ -240,10 +234,10 @@ any number fails there.
 ## Stick 2 (the second movement socket)
 
 `stick2` is the movement stick again -- same 150 dp socket, same 1.35 R grab, same
-shaping, same left axis (`value` 0) -- with **no sprint of its own**: no 0.92 rim
-latch, no two-stage ring, so pushing it to its edge is still full pace. It is for
-the title's menus, where a run is a scroll, and for dribbling that has to stay at
-a walking pace.
+shaping, same left axis (`value` 0) -- with **no ring of its own**: no two-stage
+zone, so pushing it to its edge is still full pace. (The first stick sends no
+sprint from its rim either; see above.) It is for the title's menus, where a run
+is a scroll, and for dribbling that has to stay at a walking pace.
 
 Both sticks state the same axis, so `pushState` takes the **further-deflected one**
 rather than adding them: a thumb on each cannot ask for twice the deflection the
@@ -272,8 +266,7 @@ The ball-carrying controls are the pad's own, so most of them need no new
 button and are listed here so nobody adds one:
 
 - **Standard dribble.** The movement stick.
-- **Sprint dribble.** Hold RB, or push the stick past the latch (0.92 press,
-  0.82 release) while RB is held or alone on the rim.
+- **Sprint dribble.** Hold RB. The stick does not sprint from its rim.
 - **Knock ball ahead / speed burst (2x RB).** Not a new control: it is two taps
   of the Sprint button, and the pad already sends each tap as its own press
   edge, so the title sees two presses. `TouchClaims` gives every new press a
@@ -393,7 +386,7 @@ the attacking name while the defending pad is out:
 | X | SHOOT | **SLIDE** | Slide tackle |
 | Y | THROUGH | **GK** | Goalkeeper rush |
 | LB | LB | **SWITCH** | Player switch |
-| stick rim / RB | sprint | sprint | Defensive sprint (same 0.92/0.82 latch) |
+| RB | RB | RB | Sprint dribble while held (the stick sends nothing) |
 
 The far top-left LB is an **attacking** control now (`PhaseMask.ATTACK`): without
 the ball the switch has to be under the right thumb, so the defending pad has its
@@ -486,8 +479,8 @@ editor as before, with a **More…** menu on the strip:
   size, opacity and visibility into a defending copy. While the DEF pad is out,
   dragging and the sliders edit that copy; choose the menu again to merge it.
 - **Add a control…**: restores any factory control the player removed (d-pad,
-  L3/R3, skill palette, second LB, and so on). The movement stick and camera
-  region cannot be removed.
+  L3/R3, skill palette, second LB, and so on). The movement stick cannot be
+  removed; the look (camera) region can.
 - **Remove this control.** Undo brings it back; the removal is remembered in
   the file.
 - **Undo / Redo**: twenty snapshots per editing session, including drags and
@@ -506,8 +499,9 @@ per-stance copy, role, display names, and removed controls.
 - Every `save()` rotates the previous file to `controls.backup.json`.
 - If the file cannot be parsed, it is copied to `controls.broken.json` and the
   session starts on the factory pad; nothing is deleted.
-- On load, the movement stick and camera region are restored if missing, and a
-  pad with fewer than three visible controls is treated as broken and reset.
+- On load, the movement stick is restored if missing (the look region is
+  removable), and a pad with fewer than three visible controls is treated as
+  broken and reset.
 - **Restore default controls** (Settings → Controls, and the editor's Reset
   all) confirms, saves the current pad as the backup, then writes the factory
   pad for the active profile.
@@ -752,3 +746,39 @@ sibling `.part` file, flushes it, and renames it over the target; if the rename 
 refused the target is removed before the move is retried, and the temporary never
 survives a failure. A crash mid-save leaves the previous layout readable, never a
 truncated one.
+
+## Reading the pad in logcat
+
+The overlay writes what it is sending to the title, so a stick that does nothing
+or a flick that never became a shot can be seen from a phone instead of
+guessed at. The tag is `PES17.Touch`:
+
+```
+adb logcat -s PES17.Touch
+```
+
+One line per pushed state names both stick throws as they are sent (after the
+deadzone and curve) and every bit in the state, plus the two analogue triggers:
+
+```
+axes l=(+0.62,+0.00) r=(+0.00,-0.31) buttons=0x0100 LT=0 RT=0
+```
+
+A thumb that is moving is thinned to two lines a second (`AXIS_GAP_MS`), which
+keeps a sixty-hertz stream readable; a bit that changes is printed at once,
+because a press that begins and ends between two of the title's polls is the
+frame a dropped shot hides in. A frame with nothing new prints nothing.
+
+Each finished swipe gets its own line, including the ones that send nothing --
+silence on the pad looks the same as a tap otherwise:
+
+```
+swipe shoot down -> LT+0x4000
+swipe pass none -> nothing
+```
+
+So a dead stick shows centred axes while the thumb is on it, a dropped shot
+shows its swipe line with no matching `buttons=`/`LT=` change after it, and a
+title that misses a steady throw shows the axes arriving as expected. Nothing is
+logged on the touch events themselves, so the rate is bounded by the pad's own
+pushes.

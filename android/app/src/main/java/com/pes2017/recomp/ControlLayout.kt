@@ -118,12 +118,12 @@ enum class ControlKind {
     TACTICAL,
 }
 
-/** When a control belongs on screen. */
+    /** When a control belongs on screen. */
 enum class PhaseMask {
     ALWAYS,
     /** The title's menus, including while it loads. */
     MENUS,
-    /** A match in progress. */
+    /** Over the pitch: a match, or a phase the tracker has not read yet. */
     MATCH,
     /** A match, with the attacking pad chosen (gamepad and touch alike). */
     ATTACK,
@@ -190,7 +190,12 @@ enum class GamePhase {
     fun shows(mask: PhaseMask, stance: PadStance = PadStance.ATTACK): Boolean = when (mask) {
         PhaseMask.ALWAYS -> true
         PhaseMask.MENUS -> this != GamePhase.MATCH
-        PhaseMask.MATCH -> this == GamePhase.MATCH
+        // A match control is one that has no place in the title's menus. A
+        // phase the tracker has not read yet keeps it, the same way it keeps
+        // the menus' controls: the mentality pair vanishing over the pitch
+        // because the tracker went quiet is the worse mistake, and a control
+        // that is hidden on a guess cannot be pressed at all.
+        PhaseMask.MATCH -> this != GamePhase.MENUS
         // An attacking or defending control is a match control that only one
         // of the two pads carries. An unknown phase keeps it, as it keeps the
         // menus' controls: hiding it on a guess would be worse.
@@ -449,9 +454,15 @@ class ControlLayout private constructor(
         return true
     }
 
-    /** Takes a control off the pad, remembering it so a reload honours the choice. */
+    /**
+     * Takes a control off the pad, remembering it so a reload honours the
+     * choice. The movement stick is the one control that cannot go: a pad with
+     * no stick cannot play, and the same file is the one the next start reads.
+     * The look region is removable -- a player who turns the view with a pad or
+     * does not want a camera band can take it off.
+     */
     fun remove(id: String): Boolean {
-        if (id == "stick" || id == "look") return false
+        if (id == "stick") return false
         val had = elements.removeAll { it.id == id }
         if (had) removed.add(id)
         return had
@@ -805,9 +816,9 @@ class ControlLayout private constructor(
         }
 
         /**
-         * Repairs a layout that could not be read cleanly: the movement stick
-         * and the camera region are not optional, and a pad with almost nothing
-         * left on it is indistinguishable from a broken file, so it starts over.
+         * Repairs a layout that could not be read cleanly: the movement stick is
+         * not optional, and a pad with almost nothing left on it is
+         * indistinguishable from a broken file, so it starts over.
          */
         /**
          * The v8 migration: a layout from before the canonical map carried a
@@ -829,11 +840,9 @@ class ControlLayout private constructor(
         }
 
         private fun sanitize(layout: ControlLayout) {
-            for (id in listOf("stick", "look")) {
-                if (layout.find(id) == null) {
-                    defaults(layout.widthDp, layout.heightDp, layout.profile).find(id)
-                        ?.let { layout.elements.add(it) }
-                }
+            if (layout.find("stick") == null) {
+                defaults(layout.widthDp, layout.heightDp, layout.profile).find("stick")
+                    ?.let { layout.elements.add(it) }
             }
             // Only an empty pad is certainly broken: a player may deliberately
             // hide all but one control, and wiping that would be a bug.
@@ -982,10 +991,10 @@ class ControlLayout private constructor(
                     // 75 dp of radius around a centre 95 dp up, so its rim is at
                     // 170 dp and the switch's own half-height clears it by a
                     // thumb's width. 64 dp across because its two halves say
-                    // MENU and MATCH now, and words need more room than digits.
+                    // MATCH and MENU now, and words need more room than digits.
                     // Always on screen: the player's own switch, reachable in a
-                    // match, in a menu and before kick-off alike. (The ring's RB
-                    // is still match-only -- see pushState.)
+                    // match, in a menu and before kick-off alike. It holds no
+                    // bit: the ring is travel, not a sprint.
                     place("stick_mode", ControlKind.STICK_MODE, 0, "MODE", 95f, -200f, 64f, 0.55f),
 
                     // Right thumb: the four actions as the pad's diamond. `sub`

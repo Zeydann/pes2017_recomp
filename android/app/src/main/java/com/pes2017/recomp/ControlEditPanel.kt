@@ -732,7 +732,7 @@ class ControlEditPanel(
     }
 
     private fun removeControl(element: ControlElement) {
-        if (element.id == "stick" || element.id == "look") {
+        if (element.id == "stick") {
             Toast.makeText(activity, R.string.edit_remove_required, Toast.LENGTH_SHORT).show()
             return
         }
