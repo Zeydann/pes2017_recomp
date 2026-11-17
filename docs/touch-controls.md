@@ -180,7 +180,14 @@ and no release hysteresis -- a thumb taken back inside 0.95 stops running on
 the next sample. It is measured on the raw throw, so a curve cannot make a jog
 a sprint. While on, the pad's RB bit (`0x0200`, R1) is OR'd into every state
 push and the socket rim lights. Menus never sprint; every cancellation resets
-the latch.
+the latch, and so does the thumb leaving the stick.
+
+The latch arms on a **crossing**, not on a landing: the thumb has to be seen
+inside 0.95 and then pushed out past it. That is what keeps R1 out of the menus
+while the packaged engine reports no phase at all -- a menu press lands the
+thumb on the rim, which is a press, while a run is a push out from the middle.
+A thumb held on the rim without ever crossing does not sprint, and a thumb that
+lifts has to cross again on the next touch.
 
 ## Dribbling on the ball
 

@@ -18,16 +18,41 @@ class PadGesturesTest {
     // ---- sprint --------------------------------------------------------------
 
     @Test
-    fun aThumbAllTheWayOutSprints() {
+    fun aThumbPushedOutFromTheMiddleSprints() {
         val latch = SprintLatch()
+        assertFalse(latch.update(0.30f, 0f))
         assertTrue(latch.update(0.95f, 0f))
         assertTrue(latch.active)
         assertTrue(latch.update(0f, 0.95f))
     }
 
     @Test
+    fun aThumbThatLandsOnTheRimDoesNotSprint() {
+        // What a menu press looks like: the thumb arrives at the rim with no
+        // push out from the middle behind it. The phase is never reported by the
+        // packaged engine, so this is what keeps R1 out of the menus -- pressing
+        // down on the stick there switched the gallery back to the home tab.
+        val latch = SprintLatch()
+        assertFalse(latch.update(0f, 0.97f))
+        assertFalse(latch.active)
+        assertFalse("still held on the rim", latch.update(0f, 0.99f))
+    }
+
+    @Test
+    fun aNewTouchHasToPushOutAgain() {
+        // The overlay resets the latch while no thumb is on the stick, so a
+        // lift and a fresh landing on the rim is not a run either.
+        val latch = SprintLatch()
+        latch.update(0.30f, 0f)
+        assertTrue(latch.update(1f, 0f))
+        latch.reset()
+        assertFalse(latch.update(1f, 0f))
+    }
+
+    @Test
     fun justInsideTheReferencePointDoesNotSprint() {
         val latch = SprintLatch()
+        assertFalse(latch.update(0.30f, 0f))
         assertFalse(latch.update(0.94f, 0f))
         assertFalse(latch.active)
     }
@@ -38,6 +63,7 @@ class PadGesturesTest {
         // radius, with no hysteresis, so pulling the thumb back inside 0.95
         // stops it on the very next sample.
         val latch = SprintLatch()
+        assertFalse(latch.update(0.30f, 0f))
         assertTrue(latch.update(0.95f, 0f))
         assertFalse(latch.update(0.94f, 0f))
         assertFalse(latch.active)
@@ -47,6 +73,7 @@ class PadGesturesTest {
     @Test
     fun aCallerCanStillAskForAReleaseRing() {
         val latch = SprintLatch(pressAt = 0.92f, releaseAt = 0.82f)
+        assertFalse(latch.update(0.30f, 0f))
         assertTrue(latch.update(0.92f, 0f))
         assertTrue("between the two points it is latched", latch.update(0.85f, 0f))
         assertFalse(latch.update(0.80f, 0f))
@@ -55,6 +82,7 @@ class PadGesturesTest {
     @Test
     fun releasingTheStickStopsTheSprint() {
         val latch = SprintLatch()
+        latch.update(0.30f, 0f)
         latch.update(1f, 0f)
         assertFalse(latch.update(0f, 0f))
     }
@@ -62,6 +90,7 @@ class PadGesturesTest {
     @Test
     fun resetStopsAStuckSprint() {
         val latch = SprintLatch()
+        latch.update(0.30f, 0f)
         latch.update(1f, 0f)
         latch.reset()
         assertFalse(latch.active)

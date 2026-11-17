@@ -593,6 +593,7 @@ class TouchOverlayView @JvmOverloads constructor(
         var leftY = 0f
         var rightX = 0f
         var rightY = 0f
+        var leftThumb = false
 
         val now = SystemClock.uptimeMillis()
         // A grace that is over is let go here as well as by its own callback, so
@@ -621,6 +622,7 @@ class TouchOverlayView @JvmOverloads constructor(
                     val flicked = element.value != 0 && flicking
                     if (position != null && !flicked) {
                         if (element.value == 0) {
+                            leftThumb = true
                             leftX += position[0]
                             leftY += position[1]
                         } else {
@@ -686,7 +688,7 @@ class TouchOverlayView @JvmOverloads constructor(
         // curve cannot make a jog a sprint by squeezing the top of its range.
         // The menus keep the stick for the d-pad, where R1 is a menu button, so
         // this is a match gesture.
-        if (prefs.sprintFromStick && gamePhase != GamePhase.MENUS) {
+        if (prefs.sprintFromStick && gamePhase != GamePhase.MENUS && leftThumb) {
             if (sprintLatch.update(rawLx, rawLy)) buttons = buttons or NativeBridge.RB
         } else {
             sprintLatch.reset()

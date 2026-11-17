@@ -24,7 +24,7 @@ ISO importing and the Bluetooth/USB gamepad path were not modified.
 | Move-mode floating joystick (socket under the thumb, fixed base, knob relative to it) | Implemented; arithmetic unit-tested; not device-tested |
 | Fixed-mode joystick (layout socket, knob inside it, centres on release) | Implemented; same shared arithmetic; not device-tested |
 | Movement stick footprint and arithmetic: 62 dp radius at 130/110 dp, 1.35 x grab, throw = socket radius, linear, no deadzone (the reference apk's) | Implemented; unit-tested; not device-tested |
-| Sprint from the rim, press 0.95 of the socket radius on one threshold (the reference apk's), R1/RB, rim glow, reset on cancel | Implemented; latch unit-tested; mapping RB = sprint matches the PES 2017 manual; not device-tested |
+| Sprint from the rim, press 0.95 of the socket radius on one threshold (the reference apk's), R1/RB, rim glow, reset on cancel | Implemented; latch unit-tested; arms on a crossing of the rim, never on a thumb landing there, which is what stopped a menu press from sending R1; mapping RB = sprint matches the PES 2017 manual; not device-tested |
 | Four-direction swipes on all four action buttons (16 independent slots) | Slots and classification unit-tested; every slot now ships with a PES 2017 default (modifier + button or double tap); editor binds all forms; not device-tested |
 | Compound swipes: modifier + button, double tap, plain bit | Implemented (`SwipeAction`, `SwipeSequence`, `ComboHold`); timing unit-tested; every cancellation clears them; not device-tested |
 | Fake shot, Shoot → drag → Pass, cancelling the shot | Corrected to PES 2017's actual cancel rule (pass pressed while shoot is held); arming unit-tested; **not device-verified** |

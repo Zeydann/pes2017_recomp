@@ -233,7 +233,14 @@ class DoubleTap(private val windowMs: Long = WINDOW_MS) {
  * sprint by squeezing the top of its range.
  *
  * [reset] is what every cancellation path calls: pause, focus loss, the pad
- * being hidden or edited. A sprint cannot outlive the thumb that started it.
+ * being hidden or edited, and the thumb leaving the stick. A sprint cannot
+ * outlive the thumb that started it.
+ *
+ * The latch also tells a run from a menu press, which matters because the
+ * packaged engine never reports a phase, so the menus cannot be recognised as
+ * such: a thumb landing on the rim is a press, and only a thumb that crossed
+ * the rim from the inside arms. Without that, pressing down on the movement
+ * stick in a menu sent R1 and the menu switched tab.
  */
 class SprintLatch(
     private val pressAt: Float = 0.95f,
@@ -248,15 +255,39 @@ class SprintLatch(
     // caller that wants a release ring passes a smaller [releaseAt].
     private val release = releaseAt.coerceIn(0f, press)
 
-    /** One sample of the stick, from -1..1 on each axis. Returns [active]. */
+    // Whether this touch has been seen inside the press point. A thumb that
+    // arrives on the rim already -- which is exactly what a menu press looks
+    // like, the thumb landing in the down third of the socket -- does not arm
+    // the latch; only a thumb seen inside and then pushed out does. It costs a
+    // real run nothing, because a run is a push out from the middle, and it is
+    // what keeps the rim from pressing R1 in the menus, where R1 is a button.
+    private var crossed = false
+
+    /**
+     * One sample of the stick, from -1..1 on each axis, taken while a thumb is
+     * on it. Returns [active]. Call [reset] instead of updating while there is
+     * no thumb, so that the samples here belong to one touch and a new touch
+     * has to push out again.
+     */
     fun update(x: Float, y: Float): Boolean {
         val magnitude = hypot(x, y)
-        active = if (active) magnitude >= release else magnitude >= press
+        when {
+            active && magnitude < release -> {
+                active = false
+                crossed = true
+            }
+            !active && magnitude < press -> crossed = true
+            !active && crossed && magnitude >= press -> {
+                active = true
+                crossed = false
+            }
+        }
         return active
     }
 
     fun reset() {
         active = false
+        crossed = false
     }
 }
 
