@@ -18,6 +18,12 @@
     <string name="qg_scene">Scene resolution</string>
     <string name="qg_scale">Internal resolution</string>
     <string name="qg_fps">Frame rate limit</string>
+    <!-- The value column of the three rows above. They are format strings on
+         purpose, and a name is never one, so "%1$DX", "%1$D%%" and "%1$D"
+         cannot reach the player as text; they read "3x", "75%" and "45 FPS". -->
+    <string name="qg_scale_value">%1$dx</string>
+    <string name="qg_scene_value">%1$d%%</string>
+    <string name="qg_fps_value">%1$d FPS</string>
     <string name="qg_msaa">Anti-aliasing (MSAA)</string>
     <string name="qg_fsr">FSR upscaler</string>
     <string name="qg_heat">Lower the picture as the phone heats</string>

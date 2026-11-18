@@ -66,8 +66,11 @@ class SettingsActivity : AppCompatActivity() {
         switch(R.id.widescreen, prefs.widescreen) { prefs.widescreen = it }
         bar(R.id.ball_scale, R.id.ball_scale_label, 20, (prefs.ballScalePercent - 100) / 10,
             { getString(R.string.ball_scale, 100 + it * 10) }) { prefs.ballScalePercent = 100 + it * 10 }
-        bar(R.id.scene_scale, R.id.scene_scale_label, 10, (prefs.sceneScalePercent - 50) / 5,
-            { getString(R.string.scene_scale, 50 + it * 5) }) { prefs.sceneScalePercent = 50 + it * 5; presetTouched() }
+        bar(R.id.scene_scale, R.id.scene_scale_label, GraphicsOptions.SCENE_PERCENT.size - 1,
+            GraphicsOptions.SCENE_PERCENT.indexOf(prefs.sceneScalePercent),
+            { getString(R.string.scene_scale, GraphicsOptions.SCENE_PERCENT[it]) }) {
+            prefs.sceneScalePercent = GraphicsOptions.SCENE_PERCENT[it]; presetTouched()
+        }
         switch(R.id.msaa, prefs.multisampling) { prefs.multisampling = it; presetTouched() }
         switch(R.id.fsr, prefs.fsr) { prefs.fsr = it; presetTouched() }
         switch(R.id.frame_gen, prefs.frameGeneration) { prefs.frameGeneration = it }
@@ -86,9 +89,10 @@ class SettingsActivity : AppCompatActivity() {
             { getString(R.string.fsr_sharp, it / 10f) }) { prefs.fsrSharpness = it / 10f }
 
         // ---- performance: frame rate, heat and battery ----
-        bar(R.id.fps_limit, R.id.fps_limit_label, 6, (prefs.fpsLimit - 30) / 5,
-            { if (it == 6) getString(R.string.fps_limit_off) else getString(R.string.fps_limit, 30 + it * 5) }) {
-            prefs.fpsLimit = 30 + it * 5; presetTouched()
+        bar(R.id.fps_limit, R.id.fps_limit_label, GraphicsOptions.FPS_LIMIT.size - 1,
+            GraphicsOptions.FPS_LIMIT.indexOf(prefs.fpsLimit),
+            { getString(R.string.fps_limit, GraphicsOptions.FPS_LIMIT[it]) }) {
+            prefs.fpsLimit = GraphicsOptions.FPS_LIMIT[it]; presetTouched()
         }
         switch(R.id.prefer60, prefs.prefer60Hz) { prefs.prefer60Hz = it }
         // Off / Minimal / Normal / Complete, in Prefs.HUD_* order.
@@ -149,8 +153,13 @@ class SettingsActivity : AppCompatActivity() {
         switch(R.id.audio, prefs.audioEnabled) { prefs.audioEnabled = it }
 
         // ---- advanced: rendering, memory, testing ----
-        bar(R.id.render_scale, R.id.render_scale_label, 2, prefs.renderScale - 1,
-            { getString(R.string.render_scale, it + 1) }) { prefs.renderScale = it + 1 }
+        // The three lists are Build 24's own options (GraphicsOptions): a slider
+        // stops on exactly those values, and the value it prints is the one saved.
+        bar(R.id.render_scale, R.id.render_scale_label, GraphicsOptions.INTERNAL_SCALE.size - 1,
+            GraphicsOptions.INTERNAL_SCALE.indexOf(prefs.renderScale),
+            { getString(R.string.render_scale, GraphicsOptions.INTERNAL_SCALE[it]) }) {
+            prefs.renderScale = GraphicsOptions.INTERNAL_SCALE[it]
+        }
         switch(R.id.load_scale, prefs.loadScale) { prefs.loadScale = it; presetTouched() }
         switch(R.id.low_memory, prefs.lowMemory) { prefs.lowMemory = it; presetTouched() }
         // 0 means "let the runtime decide"; then 128 MB steps to 2 GB.

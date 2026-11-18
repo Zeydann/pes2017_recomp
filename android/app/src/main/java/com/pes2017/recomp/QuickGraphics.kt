@@ -59,7 +59,10 @@ object QuickGraphics {
 
         private fun setTier(tier: DeviceProfile.Tier) {
             val p = DeviceProfile.preset(tier)
-            v.scene = p.sceneScalePercent; v.scale = 1; v.msaa = p.multisampling; v.fsr = p.fsr
+            // The preset sets what DeviceProfile.preset defines. Internal resolution
+            // is not one of them, so a preset never resets a multiplier the player
+            // chose for this phone.
+            v.scene = p.sceneScalePercent; v.msaa = p.multisampling; v.fsr = p.fsr
             v.fps = p.fpsLimit; v.heat = p.heatScale; v.lowMemory = p.lowMemory; v.preset = tier.name
         }
 
@@ -77,31 +80,31 @@ object QuickGraphics {
             // value. The label is not a format string: a row handed the raw
             // resource prints "%1$d" at the player, and the row's capitals turn
             // that into "%1$D"; a value inside a long label is also the first
-            // thing a narrow panel truncates.
+            // thing a narrow panel truncates. The value is formatted here, so the
+            // three placeholders read "3x", "75%" and "45 FPS".
             rows += PesMenu.Row(
                 activity.getString(R.string.qg_scale),
-                detail = "${v.scale}x",
+                detail = activity.getString(R.string.qg_scale_value, v.scale),
                 onAdjust = { m, d ->
-                    v.scale = (v.scale + d).coerceIn(1, 3)
+                    v.scale = GraphicsOptions.step(GraphicsOptions.INTERNAL_SCALE, v.scale, d)
                     touched()
                     m.refresh()
                 },
             )
             rows += PesMenu.Row(
                 activity.getString(R.string.qg_scene),
-                detail = "${v.scene}%",
-                enabled = v.scale == 1,
+                detail = activity.getString(R.string.qg_scene_value, v.scene),
                 onAdjust = { m, d ->
-                    v.scene = (v.scene + d * 5).coerceIn(50, 100)
+                    v.scene = GraphicsOptions.step(GraphicsOptions.SCENE_PERCENT, v.scene, d)
                     touched()
                     m.refresh()
                 },
             )
             rows += PesMenu.Row(
                 activity.getString(R.string.qg_fps),
-                detail = "${v.fps} FPS",
+                detail = activity.getString(R.string.qg_fps_value, v.fps),
                 onAdjust = { m, d ->
-                    v.fps = (v.fps + d * 5).coerceIn(30, 60)
+                    v.fps = GraphicsOptions.step(GraphicsOptions.FPS_LIMIT, v.fps, d)
                     touched()
                     m.refresh()
                 },

@@ -37,16 +37,26 @@ class Prefs(context: Context) {
      * 1 = 1x native base dimensions, 2 = 2x multiplier, 3 = 3x multiplier.
      */
     var renderScale: Int
-        get() = store.getInt(KEY_RENDER_SCALE, 1).coerceIn(1, 3)
-        set(value) = store.edit().putInt(KEY_RENDER_SCALE, value.coerceIn(1, 3)).apply()
+        get() = GraphicsOptions.normalize(
+            GraphicsOptions.INTERNAL_SCALE,
+            store.getInt(KEY_RENDER_SCALE, 1).coerceIn(1, 3),
+        )
+        set(value) = store.edit()
+            .putInt(KEY_RENDER_SCALE, GraphicsOptions.normalize(GraphicsOptions.INTERNAL_SCALE, value))
+            .apply()
 
     /**
      * How large the 3D scene is drawn, in percent of 1280x720 (PES17_SCENE_SCALE,
      * 50 to 100). 75 matches the runtime's own default for a phone.
      */
     var sceneScalePercent: Int
-        get() = store.getInt(KEY_SCENE_SCALE, 75).coerceIn(50, 100)
-        set(value) = store.edit().putInt(KEY_SCENE_SCALE, value.coerceIn(50, 100)).apply()
+        get() = GraphicsOptions.normalize(
+            GraphicsOptions.SCENE_PERCENT,
+            store.getInt(KEY_SCENE_SCALE, 75).coerceIn(50, 100),
+        )
+        set(value) = store.edit()
+            .putInt(KEY_SCENE_SCALE, GraphicsOptions.normalize(GraphicsOptions.SCENE_PERCENT, value))
+            .apply()
 
     /**
      * How much larger the match ball is drawn, in percent (PES17_BALL_SCALE, 100 to 300): the ball
@@ -145,13 +155,18 @@ class Prefs(context: Context) {
 
     /**
      * Frames a second the match is limited to (PES17_FPS_LIMIT), for heat and battery: 30 to 60
-     * in steps of 5, where 60 is the console's own pacing and no limit. Before this was a
-     * setting of its own, the old 30 FPS switch (cap30) stood for 30.
+     * in steps of 5 (GraphicsOptions.FPS_LIMIT), where 60 is the console's own pacing and no
+     * limit. Before this was a setting of its own, the old 30 FPS switch (cap30) stood for 30.
      */
     var fpsLimit: Int
-        get() = if (store.contains(KEY_FPS_LIMIT)) store.getInt(KEY_FPS_LIMIT, 60).coerceIn(30, 60)
-                else if (store.getBoolean(KEY_CAP30, false)) 30 else 60
-        set(value) = store.edit().putInt(KEY_FPS_LIMIT, value.coerceIn(30, 60)).apply()
+        get() {
+            val stored = if (store.contains(KEY_FPS_LIMIT)) store.getInt(KEY_FPS_LIMIT, 60).coerceIn(30, 60)
+                         else if (store.getBoolean(KEY_CAP30, false)) 30 else 60
+            return GraphicsOptions.normalize(GraphicsOptions.FPS_LIMIT, stored)
+        }
+        set(value) = store.edit()
+            .putInt(KEY_FPS_LIMIT, GraphicsOptions.normalize(GraphicsOptions.FPS_LIMIT, value))
+            .apply()
 
     /** Skip the large vertex shadow buffer (PES17_NO_SHADOW), for phones with little memory. */
     var lowMemory: Boolean
