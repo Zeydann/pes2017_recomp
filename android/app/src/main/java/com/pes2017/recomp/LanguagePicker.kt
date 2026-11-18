@@ -19,9 +19,14 @@ object LanguagePicker {
         val names = Localization.TAGS
             .map { activity.getString(Localization.label(it)) }
             .toTypedArray()
+        // No setMessage here, deliberately. AppCompat's AlertController shows a
+        // message *instead of* the list: setupContent() attaches the ListView
+        // only in the branch where there is no message, so asking for both
+        // produced a dialog with the hint and none of the six languages to
+        // pick. The hint already reads in the launcher's own detail panel
+        // (MainActivity's LANGUAGE entry), which is where it belongs.
         AlertDialog.Builder(activity)
             .setTitle(R.string.language_title)
-            .setMessage(R.string.language_hint)
             .setSingleChoiceItems(names, selected) { dialog, which ->
                 dialog.dismiss()
                 Localization.select(prefs, Localization.TAGS[which])

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The six languages the app ships (res/values-ar, -fr, -es, -ru, -pt-rPT).
+
+  Android 13 and later do not take an app's word for what it speaks: the
+  framework keeps the chosen language per app and checks it against this list.
+  Without the file the app declares no languages at all, so a choice made in
+  the LANGUAGE screen is not one the system will keep, and Settings has nothing
+  to show under App languages.
+
+  European Portuguese is spelled pt-PT for the same reason Localization uses it:
+  a bare "pt" would also match a Brazilian table from a library.
+-->
+<locale-config xmlns:android="http://schemas.android.com/apk/res/android">
+    <locale android:name="en" />
+    <locale android:name="ar" />
+    <locale android:name="fr" />
+    <locale android:name="es" />
+    <locale android:name="ru" />
+    <locale android:name="pt-PT" />
+</locale-config>
