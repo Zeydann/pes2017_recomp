@@ -130,9 +130,9 @@ class TouchGeometryTest {
     }
 
     @Test
-    fun theStanceChipAndSwitchStayInsideTheGestureBarInset() {
+    fun theSwitchAndActionButtonsStayInsideTheGestureBarInset() {
         val layout = layout()
-        for (id in listOf("stance", "switch", "a")) {
+        for (id in listOf("switch", "a")) {
             val element = layout.find(id)!!
             assertTrue(
                 "$id reaches into the bottom inset",

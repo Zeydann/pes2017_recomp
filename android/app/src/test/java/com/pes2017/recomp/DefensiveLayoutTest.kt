@@ -72,21 +72,6 @@ class DefensiveLayoutTest {
     // ---- nothing new lands on anything old ----------------------------------
 
     @Test
-    fun theStanceChipClearsEverythingElseOnTheAttackingPad() {
-        val layout = layout()
-        val chip = layout.find("stance")!!
-        for (other in layout.elements) {
-            if (other === chip || other.kind == ControlKind.LOOK) continue
-            if (!other.shownIn(GamePhase.MATCH, PadStance.ATTACK)) continue
-            if (!other.visible) continue
-            assertTrue(
-                "stance chip overlaps ${other.id}",
-                clearance(chip, other) > 0f,
-            )
-        }
-    }
-
-    @Test
     fun theSwitchClearsEverythingElseOnTheDefendingPad() {
         val layout = layout()
         val near = layout.find("switch")!!

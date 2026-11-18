@@ -118,7 +118,7 @@ class TogglePadTest {
 
     @Test
     fun `controls that cannot latch report nothing to hold`() {
-        for (id in listOf("stick", "look", "dpad", "swipe", "trick", "stance", "sw1")) {
+        for (id in listOf("stick", "look", "dpad", "swipe", "trick", "sw1")) {
             val element = pad().find(id)!!
             assertFalse("$id does not latch", element.latches())
             assertEquals("$id holds nothing", LatchHold.NONE, element.latchHold())

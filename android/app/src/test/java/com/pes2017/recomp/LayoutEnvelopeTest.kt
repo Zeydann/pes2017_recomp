@@ -101,7 +101,7 @@ class LayoutEnvelopeTest {
     fun aLayoutThisBuildCannotReadIsRefused() {
         // Inner version newer than the build: ControlLayout.parse says no.
         val text = LayoutEnvelope.export(layout(), "Newer", "1")
-            .replace(Regex("\"version\"\\s*:\\s*8"), "\"version\": 99")
+            .replace(Regex("\"version\"\\s*:\\s*9"), "\"version\": 99")
         assertTrue(LayoutEnvelope.import(text) is LayoutEnvelope.ImportResult.Rejected)
     }
 
