@@ -115,6 +115,11 @@
                     android:text="@string/check_updates" />
 
                 <Button
+                    android:id="@+id/entry_language"
+                    style="@style/MenuEntry"
+                    android:text="@string/language" />
+
+                <Button
                     android:id="@+id/entry_quit"
                     style="@style/MenuEntry"
                     android:text="@string/quit_launcher" />
