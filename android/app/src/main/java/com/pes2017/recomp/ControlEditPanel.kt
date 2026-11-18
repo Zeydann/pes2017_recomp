@@ -559,8 +559,8 @@ class ControlEditPanel(
      * one place Add a Control can be found without first picking a control, as
      * a player who has removed something looks for it before choosing anything
      * -- and with a control selected it offers only what acts on that control.
-     * Saving, loading, importing and exporting the whole pad live in the global
-     * list and the strip's own Layouts button, never on one control.
+     * Saving, loading, importing and exporting the whole pad live behind the
+     * strip's own Layouts button, never on one control or in this list.
      */
     private fun showMore() {
         val element = current ?: overlay.selected
@@ -569,24 +569,17 @@ class ControlEditPanel(
         if (element == null) {
             labels.add(activity.getString(R.string.edit_add))
             actions.add { addControl() }
-            labels.add(activity.getString(R.string.edit_profiles))
-            actions.add { showProfiles() }
-            labels.add(activity.getString(R.string.layout_export))
-            actions.add { shareLayout(overlay.layout, activity.getString(R.string.layout_current)) }
-            labels.add(activity.getString(R.string.layout_import))
-            actions.add { importLayout() }
             labels.add(activity.getString(R.string.edit_undo))
             actions.add { undo() }
             labels.add(activity.getString(R.string.edit_redo))
             actions.add { redo() }
         } else {
-            if (element.kind == ControlKind.BUTTON || element.kind == ControlKind.LATCH) {
+            // A custom toggle keeps the action it was assigned: its binding is
+            // that action, not a pad bit, and the strip's own TG mapping button
+            // is still where the mapping is changed.
+            if (element.kind == ControlKind.BUTTON) {
                 labels.add(activity.getString(R.string.edit_bind))
                 actions.add { pickBinding(element) }
-            }
-            if (element.kind == ControlKind.LATCH) {
-                labels.add(activity.getString(R.string.toggle_mapping))
-                actions.add { pickToggleMapping() }
             }
             labels.add(activity.getString(R.string.edit_rename))
             actions.add { rename(element) }
@@ -737,12 +730,6 @@ class ControlEditPanel(
         actions.add { saveCurrentAs() }
         labels.add(activity.getString(R.string.layout_export_current))
         actions.add { shareLayout(overlay.layout, activity.getString(R.string.layout_current)) }
-        // The two factory pads stay one tap away: a player who wants the pad
-        // back the way it shipped should not have to remember to delete a slot.
-        labels.add(activity.getString(R.string.profile_modern))
-        actions.add { loadBuiltIn(PROFILE_MODERN) }
-        labels.add(activity.getString(R.string.profile_classic))
-        actions.add { loadBuiltIn(PROFILE_CLASSIC) }
         for (id in (1..LayoutStore.MAX_NUMBERED).map { it.toString() }) {
             val slot = slots.firstOrNull { it.id == id }
             if (slot == null) {

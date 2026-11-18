@@ -28,6 +28,22 @@ class TogglePadTest {
     }
 
     @Test
+    fun `the close-control toggle is a visible right trigger that latches`() {
+        val controll = pad().find("controll")
+        assertNotNull("the close-control toggle ships with the pad", controll)
+        controll!!
+        assertEquals(ControlKind.TRIGGER, controll.kind)
+        assertEquals("it holds the right trigger", 1, controll.value)
+        assertTrue("tapping it latches", controll.toggle)
+        assertTrue("it ships on the pad", controll.visible)
+        assertEquals("Controll", controll.label)
+        val hold = controll.latchHold()
+        assertTrue("it holds R2 while engaged", hold.rightTrigger)
+        assertFalse(hold.leftTrigger)
+        assertEquals(0, hold.buttons)
+    }
+
+    @Test
     fun `the six custom toggles ship hidden, unassigned, and always latching`() {
         val pad = pad()
         for (id in listOf("tg1", "tg2", "tg3", "tg4", "tg5", "tg6")) {

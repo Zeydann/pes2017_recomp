@@ -33,6 +33,11 @@ object SwipeLabels {
         // directions are bound to face buttons. A spare bound to LB + Y is
         // playing the chipped through ball, so the pill says exactly that -- as
         // it does over the through-ball button -- instead of "LB + Y".
+        // The advanced-instruction button's four arms are the instructions
+        // themselves, and the floating pill over it should say so. This is the
+        // gameplay label only: the editor still lists the LT + d-pad arm each
+        // direction sends, because that is what a player edits there.
+        advancedInstruction(element, action)?.let { return it }
         val role = when {
             element.role != ControlRole.NONE -> element.role
             element.kind == ControlKind.CUSTOM -> ControlRole.of(action.bit)
@@ -60,6 +65,27 @@ object SwipeLabels {
 
     /** The four directions, in the order the file and the editor list them. */
     private val DIRECTIONS = arrayOf(Swipe.UP, Swipe.DOWN, Swipe.LEFT, Swipe.RIGHT)
+
+    /**
+     * The four advanced instructions, as the floating HUD names them. Only the
+     * factory binding is named this way: once a direction is rebound to
+     * something else, the label follows the command it now sends.
+     */
+    private fun advancedInstruction(element: ControlElement, action: SwipeAction): String? {
+        if (element.id != ADVANCE_BUTTON) return null
+        if (action.doubleTap || action.flick != SwipeFlick.NONE) return null
+        if (action.modifier != SwipeModifier.LT) return null
+        return when (action.bit) {
+            NativeBridge.UP -> "Attack 1"
+            NativeBridge.DOWN -> "Attack 2"
+            NativeBridge.RIGHT -> "Defense 2"
+            NativeBridge.LEFT -> "Defense 1"
+            else -> null
+        }
+    }
+
+    /** The id of the advanced-instruction button (sw2, on-screen "ADV"). */
+    private const val ADVANCE_BUTTON = "sw2"
 
     /** The four action buttons' own vocabulary, or null for anything else. */
     private fun namedFor(role: ControlRole, action: SwipeAction): String? {

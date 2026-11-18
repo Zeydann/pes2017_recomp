@@ -763,16 +763,15 @@ class TouchOverlayView @JvmOverloads constructor(
                 ry = combo.flick.y
             }
         }
-        // Sprint from the match stick's rim: a thumb all the way out runs until
-        // it comes back inside the latch's release point. Three guards keep it
-        // from becoming the old accidental R1 -- it is only the first stick
-        // (`"stick"`), only in the standard MATCH stage (the ring is gone from
-        // the MENU stage), and only while the title is on the pitch, so the
-        // stick can never press R1 in the title's own menus.
+        // Sprint from the MATCH stick's rim: a thumb all the way out runs until
+        // it comes back inside the latch's release point. The switch above the
+        // socket is the authority, not a guess at what the title is doing -- the
+        // rim runs in the MATCH half only, and the MENU half sends no RB at all,
+        // so the same toggle that reads menus also decides whether a run can
+        // start. It is still only the first stick (`"stick"`): Stick 2 and the
+        // skill stick keep their own throws.
         val sprintThrow = stickPositions[MOVE_STICK]
-        if (gamePhase == GamePhase.MATCH && prefs.stickStage == Prefs.STAGE_ONE &&
-            sprintThrow != null
-        ) {
+        if (prefs.stickStage == Prefs.STAGE_ONE && sprintThrow != null) {
             sprintLatch.update(sprintThrow[0], sprintThrow[1])
         } else {
             sprintLatch.reset()
@@ -1263,7 +1262,12 @@ class TouchOverlayView @JvmOverloads constructor(
                 prefs.stickStage =
                     if (prefs.stickStage == Prefs.STAGE_TWO) Prefs.STAGE_ONE else Prefs.STAGE_TWO
                 resetTwoStage()
+                // A flip to MENU lets go of the run at once rather than on the
+                // next state push: RB is the title's next key, and a menu must
+                // not be scrolled by a rim the player just switched away from.
+                sprintLatch.reset()
                 invalidate()
+                if (NativeBridge.isLoaded()) pushState()
             }
         }
         // The team mentality pair: one tap sends the title's own double press of
@@ -2250,8 +2254,10 @@ class TouchOverlayView @JvmOverloads constructor(
         // The direction a thumb on this spare is holding right now: its second
         // "active" state, since nothing of its own is down while the thumb is.
         val spareSwipe = if (isSpare) liveSwipe(element) else Swipe.NONE
-        val isRT = id == "rt"
-        val isLT = id == "lt"
+        // By side rather than by id: the jockey and close-control toggles are
+        // triggers the pad grew later, and each draws as the trigger it holds.
+        val isRT = id == "rt" || (element.kind == ControlKind.TRIGGER && element.value != 0)
+        val isLT = id == "lt" || (element.kind == ControlKind.TRIGGER && element.value == 0)
         // By bit rather than by id, so the defending switch -- a second LB in
         // reach of the right thumb -- draws like the bumper it is.
         val isBumper = element.kind == ControlKind.BUTTON &&
@@ -2457,19 +2463,26 @@ class TouchOverlayView @JvmOverloads constructor(
 
             drawSwipeArrows(canvas, element, cx, cy, r, alpha * fadeFactor)
         } else if (isRT || isLT) {
-            // Xbox Ergonomic Trigger (RT / LT)
+            // Xbox Ergonomic Trigger (RT / LT). A latched trigger is lit in R2's
+            // red whatever side it holds: it is on with no thumb on it, and the
+            // activated face is the one thing that has to read at a glance.
+            val activated = element.toggle && claims.isToggled(element.id)
+            val face = if (activated) COLOR_RT else coreColor
+            val faceGlow = if (activated) COLOR_RT_GLOW else glowColor
             val fillA = (alpha * fadeFactor * (if (pressed) 190 else 95)).toInt().coerceIn(0, 255)
-            fill.color = Color.argb(fillA, Color.red(coreColor), Color.green(coreColor), Color.blue(coreColor))
+            fill.color = Color.argb(fillA, Color.red(face), Color.green(face), Color.blue(face))
             canvas.drawCircle(cx, cy, r, fill)
 
             stroke.color = Color.argb(
                 (alpha * fadeFactor * (if (pressed) 255 else 170)).toInt().coerceIn(0, 255),
-                Color.red(glowColor), Color.green(glowColor), Color.blue(glowColor),
+                Color.red(faceGlow), Color.green(faceGlow), Color.blue(faceGlow),
             )
             stroke.strokeWidth = max(2f, r * 0.065f)
             canvas.drawCircle(cx, cy, r - stroke.strokeWidth * 0.5f, stroke)
 
-            text.textSize = r * 0.58f
+            // Fitted, because a renamed trigger can say more than "RT": the
+            // close-control toggle ships as "Controll".
+            text.textSize = fitText(text, label, r * 1.5f, r * 0.58f)
             text.color = Color.WHITE
             canvas.drawText(label, cx, cy - (text.descent() + text.ascent()) * 0.5f, text)
 
@@ -2597,6 +2610,7 @@ class TouchOverlayView @JvmOverloads constructor(
     private fun drawLatchRing(
         canvas: Canvas, element: ControlElement, cx: Float, cy: Float, r: Float, alpha: Float,
     ) {
+        val accent = latchAccent(element)
         // The halo first: a wide, soft band just outside the rim, so an
         // engaged toggle glows -- visible from across the pad -- instead of
         // reading as a thin outline that is easy to miss over bright turf. It
@@ -2604,21 +2618,31 @@ class TouchOverlayView @JvmOverloads constructor(
         // legible.
         stroke.color = Color.argb(
             (alpha * 85f).toInt().coerceIn(0, 255),
-            Color.red(COLOR_LATCH), Color.green(COLOR_LATCH), Color.blue(COLOR_LATCH),
+            Color.red(accent), Color.green(accent), Color.blue(accent),
         )
         stroke.strokeWidth = max(4f, r * 0.22f)
         canvas.drawCircle(cx, cy, r + stroke.strokeWidth * 0.9f, stroke)
 
         stroke.color = Color.argb(
             (alpha * 235f).toInt().coerceIn(0, 255),
-            Color.red(COLOR_LATCH), Color.green(COLOR_LATCH), Color.blue(COLOR_LATCH),
+            Color.red(accent), Color.green(accent), Color.blue(accent),
         )
         stroke.strokeWidth = max(2f, r * 0.10f)
         canvas.drawCircle(cx, cy, r + stroke.strokeWidth * 1.1f, stroke)
         fill.color = Color.argb(
-            255, Color.red(COLOR_LATCH), Color.green(COLOR_LATCH), Color.blue(COLOR_LATCH),
+            255, Color.red(accent), Color.green(accent), Color.blue(accent),
         )
         canvas.drawCircle(cx + r * 0.70f, cy - r * 0.70f, max(3f * density, r * 0.15f), fill)
+    }
+
+    /**
+     * The colour a latch's halo glows in. JCK and the close-control toggle
+     * speak in R2's red, the colour of an activated trigger; every other toggle
+     * keeps the one blue that means "on and holding" elsewhere on the pad.
+     */
+    private fun latchAccent(element: ControlElement): Int = when {
+        element.id == "jockey" || element.id == "controll" -> COLOR_RT_GLOW
+        else -> COLOR_LATCH
     }
 
     /**

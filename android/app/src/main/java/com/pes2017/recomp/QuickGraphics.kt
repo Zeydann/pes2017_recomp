@@ -144,7 +144,11 @@ object QuickGraphics {
         AlertDialog.Builder(activity)
             .setTitle(R.string.qg_title)
             .setView(ScrollView(activity).apply { addView(column) })
-            .setNegativeButton(R.string.cancel, null)
+            // Cancel and Back are the paths that close without relaunching, and
+            // they close once: a blanket dismiss listener also fired on the
+            // positive button, which would have resumed a run that Apply is
+            // already restarting.
+            .setNegativeButton(R.string.cancel) { _, _ -> onClose() }
             .setPositiveButton(R.string.qg_apply) { _, _ ->
                 val intent = Intent(activity, MainActivity::class.java)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
@@ -155,7 +159,7 @@ object QuickGraphics {
                 activity.startActivity(intent)
                 onApply()
             }
-            .setOnDismissListener { onClose() }
+            .setOnCancelListener { onClose() }
             .show()
     }
 

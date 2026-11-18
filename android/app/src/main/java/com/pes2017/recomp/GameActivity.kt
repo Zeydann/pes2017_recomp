@@ -93,6 +93,14 @@ class GameActivity : AppCompatActivity(), NativeListener {
      * player went from it into the editor, which pauses for itself.
      */
     private var menuOpen = false
+
+    /**
+     * Set while the quick graphics dialog is open. It is a pause of its own: the
+     * pause menu is already gone by the time it opens, so this is what keeps the
+     * match from starting behind a settings dialog, and its close is what
+     * resumes exactly once.
+     */
+    private var quickGraphicsOpen = false
     private var cachedRendererInfo = ""
 
     private var cpuUsagePercent = -1f
@@ -955,28 +963,59 @@ class GameActivity : AppCompatActivity(), NativeListener {
         }
         labels.add(getString(if (prefs.touchControls) R.string.hide_touch_controls else R.string.show_touch_controls) to { _: android.content.DialogInterface -> setTouchControls(!prefs.touchControls) })
         labels.add(getString(if (prefs.gamepadEnabled) R.string.disable_gamepad else R.string.enable_gamepad) to { _: android.content.DialogInterface -> setGamepad(!prefs.gamepadEnabled) })
+        // Quick graphics keeps the pause while it is open, so the row that opens
+        // it is remembered rather than looked up by its words.
+        var quickGraphicsIndex = -1
         labels.add(getString(R.string.qg_menu) to { _: android.content.DialogInterface ->
-            QuickGraphics.show(this, prefs, onApply = { quit() }, onClose = { goFullscreen() })
+            openQuickGraphics()
         })
+        quickGraphicsIndex = labels.size - 1
         labels.add(getString(R.string.hud_menu) to { _: android.content.DialogInterface -> pickHudLevel() })
         labels.add(getString(R.string.quit) to { _: android.content.DialogInterface -> confirmQuit() })
         AlertDialog.Builder(this)
             .setTitle(R.string.paused)
             .setItems(labels.map { it.first }.toTypedArray()) { dialog, which ->
+                // Marked before the dismiss, because that listener is where the
+                // match would otherwise be resumed: quick graphics stays a
+                // pause until its own dialog closes.
+                if (which == quickGraphicsIndex) quickGraphicsOpen = true
                 dialog.dismiss()
                 labels[which].second(dialog)
             }
             .setOnDismissListener {
                 menuOpen = false
                 // The editor paused for itself and starts its own resume on the
-                // way out; quitting leaves nothing to resume.
-                if (started && !overlay.editing) {
+                // way out; quitting leaves nothing to resume; quick graphics
+                // resumes when its own dialog closes. Everything else resumes
+                // here, once.
+                if (started && !overlay.editing && !quickGraphicsOpen) {
                     NativeBridge.nativeSetPaused(false)
                     setGameState(playing = true)
                 }
                 goFullscreen()
             }
             .show()
+    }
+
+    /** Menu → Graphics & performance: the match stays paused until the dialog closes. */
+    private fun openQuickGraphics() {
+        QuickGraphics.show(
+            this, prefs,
+            onApply = {
+                // Apply & restart leaves this run for the launcher's new one:
+                // resuming here would start the old match behind the relaunch.
+                quickGraphicsOpen = false
+                quit()
+            },
+            onClose = {
+                quickGraphicsOpen = false
+                if (started && !overlay.editing) {
+                    NativeBridge.nativeSetPaused(false)
+                    setGameState(playing = true)
+                }
+                goFullscreen()
+            },
+        )
     }
 
     /** A physical pad took over: the touch pad is out of the way until the screen is touched. */
@@ -1125,8 +1164,8 @@ class GameActivity : AppCompatActivity(), NativeListener {
         warnIfPowerSaving()
         if (!started) return
         // A menu still open across a trip out of the app stays a pause: its own
-        // dismissal is what starts the match again.
-        if (!menuOpen) {
+        // dismissal is what starts the match again. So does quick graphics.
+        if (!menuOpen && !quickGraphicsOpen) {
             NativeBridge.nativeSetPaused(false)
             setGameState(playing = true)
         }

@@ -24,7 +24,7 @@ and controlled variants) and the project's own layout notes in `ControlLayout.kt
 | `0x4000` | X | Square (□) | Shoot (power gauge while held, shot on release) | Chip = LB + shoot; finesse = RT during the gauge |
 | `0x8000` | Y | Triangle (△) | Through pass | LB + Y is the lofted through ball |
 | `0x0100` | LB | L1 | Change player | Also held as a modifier (one-two, chip, lofted through) |
-| `0x0200` | RB | R1 | Sprint dribble while held; double tap is the knock-on | RB button only: the stick sends nothing |
+| `0x0200` | RB | R1 | Sprint dribble while held; double tap is the knock-on | The MATCH stick's rim also holds it; the MENU stick sends nothing |
 | trigger 0 | LT | L2 | Manual modifiers | Held by a compound swipe as an axis value |
 | trigger 1 | RT | R2 | Close control; finesse shot during the gauge | Same |
 | `0x0010` | START | Start | Pause | |
@@ -193,13 +193,13 @@ can see a flick that began and ended between two frames.
 
 ## Sprint from the match stick's rim
 
-Only the first movement stick (`id: "stick"`), only in the standard **MATCH**
-stage, and only while the title is on the pitch, sends RB when the thumb is out
-at the rim. `SprintLatch` starts the run at 0.92 of the throw and keeps it until
-the thumb comes back inside 0.82, so a thumb balanced on the edge cannot chatter.
-The three guards are what keep it from being the old accidental R1: the MENU
-stage does not sprint, Stick 2 and the skill stick never do, and no menu phase
-can reach the latch, where R1 is a menu key rather than a run.
+Only the first movement stick (`id: "stick"`) and only the **MATCH** half of the
+switch above its socket sends RB when the thumb is out at the rim. `SprintLatch`
+starts the run at 0.92 of the throw and keeps it until the thumb comes back
+inside 0.82, so a thumb balanced on the edge cannot chatter. The switch is the
+authority, not a guess at what the title is doing: switching to MENU lets go of
+the run and of RB in the same frame, switching back to MATCH lets the rim start
+it again, and Stick 2 and the skill stick keep their own throws.
 
 ## The two-stage stick
 
@@ -283,7 +283,7 @@ The ball-carrying controls are the pad's own, so most of them need no new
 button and are listed here so nobody adds one:
 
 - **Standard dribble.** The movement stick.
-- **Sprint dribble.** Hold RB. The stick does not sprint from its rim.
+- **Sprint dribble.** Hold RB, or push the MATCH movement stick out to its rim.
 - **Knock ball ahead / speed burst (2x RB).** Not a new control: it is two taps
   of the Sprint button, and the pad already sends each tap as its own press
   edge, so the title sees two presses. `TouchClaims` gives every new press a
@@ -397,7 +397,7 @@ the attacking name while the defending pad is out:
 | X | SHOOT | **SLIDE** | Slide tackle |
 | Y | THROUGH | **GK** | Goalkeeper rush |
 | LB | LB | **SWITCH** | Player switch |
-| RB | RB | RB | Sprint dribble while held (the stick sends nothing) |
+| RB | RB | RB | Sprint dribble while held (the MATCH stick's rim holds it too) |
 
 The far top-left LB is an **attacking** control now (`PhaseMask.ATTACK`): without
 the ball the switch has to be under the right thumb, so the defending pad has its

@@ -1165,6 +1165,15 @@ class ControlLayout private constructor(
                     place("jockey", ControlKind.TRIGGER, 0, "JCK", 176f, 76f, 56f, 0.45f,
                         visible = false, toggle = true, role = ControlRole.JOCKEY),
 
+                    // The close-control toggle: the right trigger, latched. R2 is
+                    // held for as long as the toggle is on, so the thumb that
+                    // would be holding close control can press something else
+                    // instead. A trigger, so it draws and reads exactly like R2
+                    // does. It sits in the free band below the d-pad, clear of
+                    // every default control and of sw1/sw2's swipe corridors.
+                    place("controll", ControlKind.TRIGGER, 1, "Controll", 245f, 205f, 56f,
+                        toggle = true, shownWhen = PhaseMask.MATCH),
+
                     // Six custom toggles, hidden and unassigned: a latch the
                     // player assigns to whatever the pad is missing, one game
                     // action each, held for as long as the toggle is on.

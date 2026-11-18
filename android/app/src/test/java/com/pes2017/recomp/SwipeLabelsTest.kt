@@ -84,4 +84,40 @@ class SwipeLabelsTest {
     fun anUnboundDirectionHasNoName() {
         assertEquals("", SwipeLabels.describe(button("x", NativeBridge.X), SwipeAction.NONE))
     }
+
+    @Test
+    fun theAdvancedInstructionButtonNamesItsFourArms() {
+        // The floating pill says the instruction, not the arm it sends; the
+        // editor's own direction list is untouched.
+        val adv = ControlElement(
+            "sw2", ControlKind.TACTICAL, 0, "ADV", 0.5f, 0.5f, 88f,
+        )
+        assertEquals(
+            "Attack 1",
+            SwipeLabels.describe(adv, SwipeAction.held(SwipeModifier.LT, NativeBridge.UP)),
+        )
+        assertEquals(
+            "Attack 2",
+            SwipeLabels.describe(adv, SwipeAction.held(SwipeModifier.LT, NativeBridge.DOWN)),
+        )
+        assertEquals(
+            "Defense 2",
+            SwipeLabels.describe(adv, SwipeAction.held(SwipeModifier.LT, NativeBridge.RIGHT)),
+        )
+        assertEquals(
+            "Defense 1",
+            SwipeLabels.describe(adv, SwipeAction.held(SwipeModifier.LT, NativeBridge.LEFT)),
+        )
+    }
+
+    @Test
+    fun aReboundAdvancedArmReadsTheBindingItSendsNow() {
+        val adv = ControlElement(
+            "sw2", ControlKind.TACTICAL, 0, "ADV", 0.5f, 0.5f, 88f,
+        )
+        assertEquals(
+            "LB + D-Pad Up",
+            SwipeLabels.describe(adv, SwipeAction.held(SwipeModifier.LB, NativeBridge.UP)),
+        )
+    }
 }
