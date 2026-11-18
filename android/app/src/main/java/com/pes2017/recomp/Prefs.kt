@@ -13,6 +13,17 @@ class Prefs(context: Context) {
     private val store: SharedPreferences =
         context.applicationContext.getSharedPreferences("pes17", Context.MODE_PRIVATE)
 
+    // ---- language ---------------------------------------------------------
+
+    /**
+     * The language every screen is drawn in, one of [Localization.TAGS]. Empty
+     * only before the first start, which chooses English; from then on it is
+     * written here so the choice survives a restart and an update.
+     */
+    var language: String
+        get() = store.getString(KEY_LANGUAGE, "") ?: ""
+        set(value) = store.edit().putString(KEY_LANGUAGE, value).apply()
+
     // ---- graphics ---------------------------------------------------------
 
     /**
@@ -626,5 +637,6 @@ class Prefs(context: Context) {
         private const val KEY_PRESET = "performancePreset"
         private const val KEY_GPU_BUILD = "gpuNameBuild"
         private const val KEY_GPU_NAME = "gpuName"
+        private const val KEY_LANGUAGE = "language"
     }
 }

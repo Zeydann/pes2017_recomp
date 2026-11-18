@@ -528,11 +528,13 @@ class ControlEditPanel(
     /** How one swipe binding reads in the editor: "LB + A", "B ×2", "A", "LB + LS Up". */
     private fun actionName(action: SwipeAction): String = when {
         !action.bound -> activity.getString(R.string.button_none)
-        action.flick != SwipeFlick.NONE && action.bit == 0 -> when (action.modifier) {
-            SwipeModifier.NONE -> SwipeLabels.flickName(action.flick)
-            else -> SwipeLabels.modifierName(action.modifier) + " + " +
-                SwipeLabels.flickName(action.flick)
-        }
+        action.flick != SwipeFlick.NONE && action.bit == 0 ->
+            ControlVocabulary.of(activity, SwipeLabels.flickName(action.flick)).let { flick ->
+                when (action.modifier) {
+                    SwipeModifier.NONE -> flick
+                    else -> SwipeLabels.modifierName(action.modifier) + " + " + flick
+                }
+            }
         action.doubleTap -> bitName(action.bit) + " ×2"
         action.modifier != SwipeModifier.NONE ->
             SwipeLabels.modifierName(action.modifier) + " + " + bitName(action.bit)
@@ -540,7 +542,9 @@ class ControlEditPanel(
     }
 
     /** The name printed for a pad bit, as the console's own face names mark them. */
-    private fun bitName(bit: Int): String = when (bit) {
+    private fun bitName(bit: Int): String = ControlVocabulary.of(activity, rawBitName(bit))
+
+    private fun rawBitName(bit: Int): String = when (bit) {
         0 -> activity.getString(R.string.button_none)
         NativeBridge.A -> "A"
         NativeBridge.B -> "B"
@@ -882,7 +886,7 @@ class ControlEditPanel(
                 R.string.toggle_mapping_title,
                 ControlLayout.labelFor(element, overlay.playStation),
             ),
-            actions.map { it.label },
+            actions.map { ControlVocabulary.toggle(activity, it) },
             checked = selected,
         ) { which ->
             remember()

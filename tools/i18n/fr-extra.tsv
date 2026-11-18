@@ -1,0 +1,53 @@
+act_shot	Tir
+act_cross	Centre
+act_pass	Passe
+act_through	Passe en profondeur
+act_double_shot	Double tir
+act_low_cross	Centre au sol
+act_double_pass	Double passe
+act_double_through	Double passe en profondeur
+act_chip_shot	Tir piqué
+act_finesse_shot	Tir enroulé
+act_manual_shot	Tir manuel
+act_driven_shot	Tir puissant
+act_early_cross	Centre précoce
+act_manual_cross	Centre manuel
+act_controlled_cross	Centre contrôlé
+act_driven_cross	Centre puissant
+act_one_two	Une-deux
+act_manual_pass	Passe manuelle
+act_driven_pass	Passe puissante
+act_controlled_pass	Passe contrôlée
+act_chipped_through	Passe en profondeur piquée
+act_manual_through	Passe en profondeur manuelle
+act_lofted_through	Passe en profondeur levée
+act_controlled_through	Passe en profondeur contrôlée
+act_attack_1	Attaque 1
+act_attack_2	Attaque 2
+act_defense_2	Défense 2
+act_defense_1	Défense 1
+flick_ls_up	LS haut
+flick_ls_down	LS bas
+flick_ls_left	LS gauche
+flick_ls_right	LS droite
+flick_rs_up	RS haut
+flick_rs_down	RS bas
+flick_rs_left	RS gauche
+flick_rs_right	RS droite
+bit_start	Start
+bit_select	Select
+bit_dpad_up	Croix haut
+bit_dpad_down	Croix bas
+bit_dpad_left	Croix gauche
+bit_dpad_right	Croix droite
+bit_action	Action
+toggle_nothing	Rien (non attribué)
+toggle_sprint	Sprint : RT
+toggle_jockey	Marquage : LT
+toggle_running_jockey	Marquage en course : LT + RT
+toggle_teammate_pressure	Pressing du coéquipier : RB
+toggle_pressure	Pressing : A
+toggle_manual_gk	Déplacement manuel du gardien : R3
+toggle_super_cancel	Super annulation : RB + RT
+toggle_shielding	Protection : LT
+toggle_player_movement	Déplacement du joueur : LS

@@ -50,8 +50,13 @@ object QuickGraphics {
         private val tiers = DeviceProfile.Tier.values()
 
         /** Chosen tier when the values still match it, for the checked dot. */
-        private fun tierName(tier: DeviceProfile.Tier): String =
-            tier.name.lowercase().replaceFirstChar { it.uppercase() }
+        private fun tierName(tier: DeviceProfile.Tier): String = activity.getString(
+            when (tier) {
+                DeviceProfile.Tier.LOW -> R.string.preset_low
+                DeviceProfile.Tier.MEDIUM -> R.string.preset_medium
+                DeviceProfile.Tier.HIGH -> R.string.preset_high
+            },
+        )
 
         private fun touched() {
             v.preset = DeviceProfile.PRESET_CUSTOM
@@ -113,7 +118,7 @@ object QuickGraphics {
             fun toggle(label: String, get: () -> Boolean, set: (Boolean) -> Unit) {
                 rows += PesMenu.Row(
                     label,
-                    detail = if (get()) "On" else "Off",
+                    detail = activity.getString(if (get()) R.string.on else R.string.off),
                     onAdjust = { m, _ -> set(!get()); touched(); m.refresh() },
                 )
             }
@@ -132,8 +137,7 @@ object QuickGraphics {
                 activity.getString(R.string.qg_title),
                 message = activity.getString(R.string.qg_note),
                 rows = rows,
-                hint = "Renderer reads these as a match starts. 1x = 1280x720; " +
-                    "2x and 3x are for powerful GPUs.",
+                hint = activity.getString(R.string.qg_hint),
             )
         }
 

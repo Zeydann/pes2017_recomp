@@ -1,0 +1,53 @@
+act_shot	Удар
+act_cross	Навес
+act_pass	Пас
+act_through	Пас в разрез
+act_double_shot	Двойной удар
+act_low_cross	Низкий навес
+act_double_pass	Двойной пас
+act_double_through	Двойной пас в разрез
+act_chip_shot	Удар «парашютом»
+act_finesse_shot	Кручёный удар
+act_manual_shot	Ручной удар
+act_driven_shot	Силовой удар
+act_early_cross	Ранний навес
+act_manual_cross	Ручной навес
+act_controlled_cross	Контролируемый навес
+act_driven_cross	Силовой навес
+act_one_two	«Стенка»
+act_manual_pass	Ручной пас
+act_driven_pass	Силовой пас
+act_controlled_pass	Контролируемый пас
+act_chipped_through	Пас в разрез «парашютом»
+act_manual_through	Ручной пас в разрез
+act_lofted_through	Навесной пас в разрез
+act_controlled_through	Контролируемый пас в разрез
+act_attack_1	Атака 1
+act_attack_2	Атака 2
+act_defense_2	Защита 2
+act_defense_1	Защита 1
+flick_ls_up	LS вверх
+flick_ls_down	LS вниз
+flick_ls_left	LS влево
+flick_ls_right	LS вправо
+flick_rs_up	RS вверх
+flick_rs_down	RS вниз
+flick_rs_left	RS влево
+flick_rs_right	RS вправо
+bit_start	Старт
+bit_select	Выбор
+bit_dpad_up	Крестовина вверх
+bit_dpad_down	Крестовина вниз
+bit_dpad_left	Крестовина влево
+bit_dpad_right	Крестовина вправо
+bit_action	Действие
+toggle_nothing	Ничего (не назначено)
+toggle_sprint	Спринт: RT
+toggle_jockey	Опека: LT
+toggle_running_jockey	Опека на бегу: LT + RT
+toggle_teammate_pressure	Давление партнёра: RB
+toggle_pressure	Давление: A
+toggle_manual_gk	Ручное движение вратаря: R3
+toggle_super_cancel	Суперотмена: RB + RT
+toggle_shielding	Прикрытие мяча: LT
+toggle_player_movement	Движение игрока: LS

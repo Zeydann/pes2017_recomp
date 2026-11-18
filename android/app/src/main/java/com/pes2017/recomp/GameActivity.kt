@@ -348,7 +348,7 @@ class GameActivity : AppCompatActivity(), NativeListener {
 
         registerMacroControl()
         Trail.note(this, "game: starting")
-        if (!NativeBridge.load()) {
+        if (!NativeBridge.load(this)) {
             fail(getString(R.string.error_library, NativeBridge.loadError() ?: "?"))
             return
         }
@@ -1513,7 +1513,7 @@ class GameActivity : AppCompatActivity(), NativeListener {
     private fun warnIfPowerSaving() {
         val power = getSystemService(android.content.Context.POWER_SERVICE) as? android.os.PowerManager ?: return
         if (power.isPowerSaveMode)
-            android.widget.Toast.makeText(this, "Battery Saver is on: the game runs slower and less smoothly. Turn it off for 60 fps.",
+            android.widget.Toast.makeText(this, getString(R.string.battery_saver_warning),
                 android.widget.Toast.LENGTH_LONG).show()
     }
 
@@ -1529,7 +1529,7 @@ class GameActivity : AppCompatActivity(), NativeListener {
                 setSingleLine(true)
             }
             val dialog = androidx.appcompat.app.AlertDialog.Builder(this)
-                .setTitle(if (title.isBlank()) "Enter text" else title)
+                .setTitle(if (title.isBlank()) getString(R.string.enter_text) else title)
                 .setMessage(description)
                 .setView(input)
                 .setCancelable(false)
@@ -1596,12 +1596,12 @@ class GameActivity : AppCompatActivity(), NativeListener {
             if (isFinishing) return@post
             if (text.startsWith("GPU lacks") || text.startsWith("Failed to") || text.startsWith("No Vulkan")) {
                 AlertDialog.Builder(this)
-                    .setTitle("Renderer Notice")
-                    .setMessage("$text\n\nYour device GPU does not provide Vulkan 1.3 or VK_KHR_dynamic_rendering. The game will run in headless mode without video output. Check the log for details.")
-                    .setPositiveButton("View Log") { _, _ ->
+                    .setTitle(R.string.renderer_notice)
+                    .setMessage(getString(R.string.renderer_notice_body, text))
+                    .setPositiveButton(R.string.view_log_button) { _, _ ->
                         finish()
                     }
-                    .setNegativeButton("Continue Headless", null)
+                    .setNegativeButton(R.string.continue_headless, null)
                     .show()
             } else if (text.isNotEmpty() && prefs.showStats) {
                 statsText.text = text

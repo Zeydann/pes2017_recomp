@@ -1,0 +1,53 @@
+act_shot	تسديدة
+act_cross	عرضية
+act_pass	تمريرة
+act_through	تمريرة بينية
+act_double_shot	تسديدة مزدوجة
+act_low_cross	عرضية منخفضة
+act_double_pass	تمريرة مزدوجة
+act_double_through	تمريرة بينية مزدوجة
+act_chip_shot	تسديدة مقوّسة
+act_finesse_shot	تسديدة ملتفة
+act_manual_shot	تسديدة يدوية
+act_driven_shot	تسديدة قوية
+act_early_cross	عرضية مبكرة
+act_manual_cross	عرضية يدوية
+act_controlled_cross	عرضية متحكَّم بها
+act_driven_cross	عرضية قوية
+act_one_two	واحد-اثنان
+act_manual_pass	تمريرة يدوية
+act_driven_pass	تمريرة قوية
+act_controlled_pass	تمريرة متحكَّم بها
+act_chipped_through	تمريرة بينية مقوّسة
+act_manual_through	تمريرة بينية يدوية
+act_lofted_through	تمريرة بينية مرتفعة
+act_controlled_through	تمريرة بينية متحكَّم بها
+act_attack_1	هجوم 1
+act_attack_2	هجوم 2
+act_defense_2	دفاع 2
+act_defense_1	دفاع 1
+flick_ls_up	LS أعلى
+flick_ls_down	LS أسفل
+flick_ls_left	LS يسارًا
+flick_ls_right	LS يمينًا
+flick_rs_up	RS أعلى
+flick_rs_down	RS أسفل
+flick_rs_left	RS يسارًا
+flick_rs_right	RS يمينًا
+bit_start	بدء
+bit_select	اختيار
+bit_dpad_up	الأسهم أعلى
+bit_dpad_down	الأسهم أسفل
+bit_dpad_left	الأسهم يسارًا
+bit_dpad_right	الأسهم يمينًا
+bit_action	إجراء
+toggle_nothing	لا شيء (غير مُسنَد)
+toggle_sprint	سرعة: RT
+toggle_jockey	مراقبة: LT
+toggle_running_jockey	مراقبة أثناء الجري: LT + RT
+toggle_teammate_pressure	ضغط الزميل: RB
+toggle_pressure	ضغط: A
+toggle_manual_gk	حركة الحارس اليدوية: R3
+toggle_super_cancel	إلغاء فائق: RB + RT
+toggle_shielding	حماية الكرة: LT
+toggle_player_movement	حركة اللاعب: LS

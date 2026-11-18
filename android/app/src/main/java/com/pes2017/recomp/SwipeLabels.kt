@@ -17,15 +17,21 @@ object SwipeLabels {
      * The name of [action] on [element], in title case: "Chip Shot", "Low
      * Cross", "One-Two". Never empty for a bound action.
      */
-    fun describe(element: ControlElement, action: SwipeAction): String {
+    fun describe(
+        element: ControlElement,
+        action: SwipeAction,
+        /** Turns a name into the current language; bindings are left alone. */
+        translate: (String) -> String = { it },
+    ): String {
         if (!action.bound) return ""
         // A stick throw is its own vocabulary: "LS Up", "LB + RS Left". It has
         // no button to name and no PES command to resolve to, so it is read the
         // same way on every control.
         if (action.flick != SwipeFlick.NONE && action.bit == 0) {
+            val flick = translate(flickName(action.flick))
             return when (action.modifier) {
-                SwipeModifier.NONE -> flickName(action.flick)
-                else -> modifierName(action.modifier) + " + " + flickName(action.flick)
+                SwipeModifier.NONE -> flick
+                else -> modifierName(action.modifier) + " + " + flick
             }
         }
         // The role follows the command the gesture actually sends, not only the
@@ -37,15 +43,15 @@ object SwipeLabels {
         // themselves, and the floating pill over it should say so. This is the
         // gameplay label only: the editor still lists the LT + d-pad arm each
         // direction sends, because that is what a player edits there.
-        advancedInstruction(element, action)?.let { return it }
+        advancedInstruction(element, action)?.let { return translate(it) }
         val role = when {
             element.role != ControlRole.NONE -> element.role
             element.kind == ControlKind.CUSTOM -> ControlRole.of(action.bit)
             else -> ControlRole.of(element.value)
         }
         val named = namedFor(role, action)
-        if (named != null) return named
-        return plain(element, action)
+        if (named != null) return translate(named)
+        return plain(element, action, translate)
     }
 
     /**
@@ -132,8 +138,12 @@ object SwipeLabels {
     }
 
     /** A spare or a rebound control: "LB + A", "B ×2", "A". */
-    private fun plain(element: ControlElement, action: SwipeAction): String {
-        val bit = bitName(action.bit, element)
+    private fun plain(
+        element: ControlElement,
+        action: SwipeAction,
+        translate: (String) -> String,
+    ): String {
+        val bit = translate(bitName(action.bit, element))
         return when {
             action.doubleTap -> "$bit ×2"
             action.modifier != SwipeModifier.NONE ->

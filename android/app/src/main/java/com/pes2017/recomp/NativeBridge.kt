@@ -1,5 +1,6 @@
 package com.pes2017.recomp
 
+import android.content.Context
 import android.util.Log
 
 /**
@@ -23,13 +24,17 @@ object NativeBridge {
      * launcher, which then says what is wrong instead of disappearing.
      */
     @Synchronized
-    fun load(): Boolean {
+    fun load(context: Context? = null): Boolean {
         if (loaded) return true
         // The library is built for ARMv8.2-A (inline LSE atomics for the guest's
         // lwarx/stwcx., fp16, dot product). On an older core the first such
         // instruction is SIGILL inside loadLibrary, which no catch below sees, so
         // the CPU is checked first and the launcher says why.
-        missingCpuFeature()?.let { loadError = "This phone's CPU lacks $it (ARMv8.2-A is required)"; return false }
+        missingCpuFeature()?.let { feature ->
+            loadError = context?.getString(R.string.cpu_missing_feature, feature)
+                ?: "This phone's CPU lacks $feature (ARMv8.2-A is required)"
+            return false
+        }
         return try {
             System.loadLibrary("pes17")
             loaded = true

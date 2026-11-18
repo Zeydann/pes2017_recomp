@@ -1,0 +1,53 @@
+act_shot	Remate
+act_cross	Cruzamento
+act_pass	Passe
+act_through	Passe em profundidade
+act_double_shot	Remate duplo
+act_low_cross	Cruzamento rasteiro
+act_double_pass	Passe duplo
+act_double_through	Passe em profundidade duplo
+act_chip_shot	Remate picado
+act_finesse_shot	Remate com efeito
+act_manual_shot	Remate manual
+act_driven_shot	Remate forte
+act_early_cross	Cruzamento antecipado
+act_manual_cross	Cruzamento manual
+act_controlled_cross	Cruzamento controlado
+act_driven_cross	Cruzamento forte
+act_one_two	Um-dois
+act_manual_pass	Passe manual
+act_driven_pass	Passe forte
+act_controlled_pass	Passe controlado
+act_chipped_through	Passe em profundidade picado
+act_manual_through	Passe em profundidade manual
+act_lofted_through	Passe em profundidade bombeado
+act_controlled_through	Passe em profundidade controlado
+act_attack_1	Ataque 1
+act_attack_2	Ataque 2
+act_defense_2	Defesa 2
+act_defense_1	Defesa 1
+flick_ls_up	LS cima
+flick_ls_down	LS baixo
+flick_ls_left	LS esquerda
+flick_ls_right	LS direita
+flick_rs_up	RS cima
+flick_rs_down	RS baixo
+flick_rs_left	RS esquerda
+flick_rs_right	RS direita
+bit_start	Start
+bit_select	Select
+bit_dpad_up	Cruz para cima
+bit_dpad_down	Cruz para baixo
+bit_dpad_left	Cruz para a esquerda
+bit_dpad_right	Cruz para a direita
+bit_action	Ação
+toggle_nothing	Nada (sem atribuição)
+toggle_sprint	Sprint: RT
+toggle_jockey	Marcação: LT
+toggle_running_jockey	Marcação em corrida: LT + RT
+toggle_teammate_pressure	Pressão do colega: RB
+toggle_pressure	Pressão: A
+toggle_manual_gk	Movimento manual do guarda-redes: R3
+toggle_super_cancel	Super cancelamento: RB + RT
+toggle_shielding	Proteção: LT
+toggle_player_movement	Movimento do jogador: LS

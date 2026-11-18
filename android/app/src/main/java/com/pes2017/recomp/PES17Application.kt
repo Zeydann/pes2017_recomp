@@ -23,6 +23,13 @@ class PES17Application : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // The language is handed to AppCompat before any screen is built, so the
+        // very first window is already in the saved language. English is written
+        // in on a fresh install, whatever language the phone itself uses.
+        try {
+            Localization.ensure(Prefs(this))
+        } catch (_: Throwable) {
+        }
         Trail.install(this)
         Trail.note(this, "app: process started")
     }

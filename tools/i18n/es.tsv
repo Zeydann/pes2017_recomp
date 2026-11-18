@@ -1,0 +1,469 @@
+check_updates	BUSCAR ACTUALIZACIONES
+quit_launcher	SALIR
+up_to_date	Esta es la última versión publicada (%1$s).
+graphics_driver	Controlador gráfico
+settings	Ajustes
+view_log	Registro
+close	Cerrar
+cancel	Cancelar
+reset	Restablecer
+qg_menu	Gráficos y rendimiento
+qg_title	Gráficos y rendimiento
+qg_preset	Ajuste predefinido
+qg_scene	Resolución de la escena
+qg_scale	Resolución interna
+qg_fps	Límite de fotogramas
+qg_msaa	Antialiasing (MSAA)
+qg_fsr	Escalado FSR
+qg_heat	Bajar la imagen cuando el móvil se calienta
+qg_crowd	Público
+qg_lowmem	Modo de poca memoria (sin búfer de sombras)
+qg_apply	Aplicar y reiniciar
+qg_note	Los ajustes de imagen se leen al empezar un partido, así que aplicarlos reinicia el juego (más o menos lo que tarda en arrancar). Tus partidas guardadas se conservan.
+done	Listo
+share	Compartir
+status_library_missing	No se pudo cargar el motor:¶%1$s
+footer	%1$s     ●     Controlador: %2$s     ●     Versión %3$s, %4$s     ●     PORT NO OFICIAL HECHO POR AFICIONADOS. SIN RELACIÓN CON KONAMI. USA TU PROPIA COPIA.
+choose_source	Explorar el almacenamiento del móvil
+begin_install	Instalar
+no_source	Aún no has elegido nada.
+chosen	Instalando desde:¶%1$s
+installing	%1$s  (%2$d %%)
+install_done	Los archivos del juego están instalados.
+install_failed	La instalación no terminó:¶%1$s
+install_cancelled	Cancelado. Lo copiado se conserva, así que al empezar de nuevo continuará desde ahí.
+install_running_warning	La instalación sigue en marcha. Salir ahora la detiene; se puede continuar más tarde.
+no_space	No hay espacio libre suficiente: %1$s libres y hacen falta unos 7 GB.
+unknown_reason	sin motivo indicado
+last_crash	La aplicación se detuvo la última vez
+log_empty	Aún no hay nada en el registro.
+log_none	Sin errores ni avisos en esta ejecución.
+log_counts	%1$d errores, %2$d avisos
+log_where	Hasta dónde llegó:
+log_stopped	La última ejecución se detuvo:
+log_more	y %1$d más, contados pero no mostrados
+log_everything	El registro completo
+log_share_note	Al compartir se envía el registro completo, no este resumen.
+pick_with_files	Elegir con la aplicación Archivos
+import_file	Importar
+copying_file	Copiando %1$s (%2$d %%)
+import_explained	La aplicación Archivos entrega un documento en lugar de una ruta, así que el archivo se copia primero dentro de esta aplicación: %1$s ahora y unos 7 GB más para el juego instalado. Quedan %2$s libres.¶¶Si va justo de espacio, usa «Explorar el almacenamiento del móvil»: lee el archivo donde está.
+import_explained_unknown	La aplicación Archivos entrega un documento en lugar de una ruta, así que el archivo se copia primero dentro de esta aplicación. Una imagen de disco ocupa varios gigabytes y el juego instalado necesita unos 7 GB más.¶¶Si va justo de espacio, usa «Explorar el almacenamiento del móvil»: lee el archivo donde está.
+copying	Copiando: %1$s
+up_one	..  (subir un nivel)
+driver_hint	Los móviles Adreno pueden usar el controlador Turnip de Mesa, a menudo mucho más rápido que el que trae el teléfono y que a veces dibuja bien lo que el original hace mal. Importa el zip del controlador tal como lo descargaste; se descomprime en el almacenamiento propio de la aplicación.
+import_driver	Importar un controlador (.zip)
+driver_system	El controlador del propio teléfono
+driver_in_use	En uso: %1$s
+driver_imported	%1$s importado.
+driver_bad_zip	Ese archivo no parece un controlador: no tiene un meta.json que nombre la biblioteca que contiene.
+driver_not_arm64	Ese controlador no es para este teléfono (hace falta arm64).
+download_driver	Descargar un controlador
+driver_source_recommended	Recomendado para esta GPU (Turnip, K11MCH1 / StevenMXZ)
+driver_source_purple	MrPurple Turnip (unificado, Android 11+)
+driver_downloading	Descargando el controlador…
+driver_none_for_gpu	No hay controlador descargable para la GPU de este teléfono: solo lo tienen las Adreno 6xx, 7xx y 8xx.
+driver_download_failed	La descarga falló. Comprueba la conexión e inténtalo de nuevo.
+driver_downloaded	%1$s descargado y establecido como controlador.
+driver_remove	Quitar
+driver_removed	Quitado.
+driver_api	Vulkan %1$s, para Android API %2$d y posteriores
+section_storage	Almacenamiento
+storage_computing	Midiendo…
+back	◀  Atrás
+saves_files	Partidas guardadas
+section_saves	Datos guardados
+saves_summary	%1$d paquetes de guardado en %2$s: %3$s
+saves_none	Aún no hay partidas guardadas en %1$s.
+backup_saves	Copiar las partidas…
+restore_saves	Restaurar las partidas…
+saves_backup_hint	Master League, Become a Legend, datos de edición y ajustes, todo en un zip que puedes guardar donde quieras (Descargas, Drive). También se hace una copia automática cada vez que inicias desde el menú; se conservan las 5 últimas. Al restaurar, tus partidas actuales se dejan al lado como saves.before-restore-…
+restore_from_file	Desde un archivo de copia…
+restore_auto_entry	Automática: %1$s
+restore_confirm_title	¿Sustituir tus partidas?
+restore_confirm	Las partidas que hay ahora en el teléfono se apartan (no se borran) y ocupan su lugar las de la copia.
+restore	Restaurar
+backup_done	%1$d archivos copiados.
+restore_done	%1$d archivos restaurados.
+backup_failed	La copia falló: %1$s
+restore_failed	La restauración falló: %1$s
+restore_game_running	Sal del juego primero: sus partidas no se pueden sustituir mientras se ejecuta.
+storage_line	%1$s: %2$s
+clear_shaders	Vaciar la caché de shaders
+clear_logs	Vaciar los registros
+shaders_cleared	Caché de shaders vaciada. Los shaders se recompilan mientras juegas.
+logs_cleared	Registros vaciados.
+update_title	Actualización disponible: %1$s
+update_message	Esta instalación es %1$s. La versión publicada es %2$s.¶¶Abre la página de la versión e instala el APK encima de este: sin desinstalar y sin perder datos.
+build_label	%1$s (compilación %2$d)
+update_check_none	Todavía no se ha publicado ninguna versión.
+update_check_offline	No se pudieron buscar actualizaciones: sin conexión a Internet.
+update_check_failed	No se pudieron buscar actualizaciones: %1$s.
+update_check_rate_limited	No se pudieron buscar actualizaciones: GitHub está limitando las peticiones de esta red. Inténtalo más tarde.
+update_download	Descargar e instalar
+update_downloading	Descargando la actualización…
+update_failed	La descarga falló. Abre mejor la página de la versión.
+open_page	Página de la versión
+skip_version	Omitir esta versión
+menu	Menú
+paused	En pausa
+resume	Continuar
+edit_controls	Editar controles
+edit_controls_short	Editar
+hide_touch_controls	Ocultar los controles en pantalla
+show_touch_controls	Mostrar los controles en pantalla
+disable_gamepad	Ignorar los mandos físicos
+enable_gamepad	Usar mandos físicos
+quit	Salir
+quit_explained	El juego termina ahora. Se pierde todo lo que el juego no haya guardado.
+cannot_start	El juego no pudo empezar
+error_library	La biblioteca del motor no se pudo cargar:¶%1$s
+error_not_installed	Los archivos del juego no están instalados. Instálalos primero desde el menú.
+error_start	El motor no se pudo iniciar. El registro tiene los detalles.
+run_channel	Hay una partida en marcha
+run_working	En marcha. Salir de la aplicación no termina el juego.
+edit_pick_one	Toca un control para cogerlo. Arrástralo para moverlo y pellízcalo para cambiar su tamaño.
+edit_selected	%1$s — arrastra para mover, pellizca para cambiar el tamaño
+edit_hint	Los controles ocultos se muestran aquí tenues para poder volver a activarlos.
+size	Tamaño
+opacity	Opacidad
+shown	Activado/Desactivado
+toggle	Se queda pulsado
+snap	Ajustar
+reset_one	Restablecer este
+reset_all	Restablecer todo
+reset_all_explained	Cada control vuelve a donde empezó y a su tamaño original.
+wordmark	PES17 Recompiled para Android
+wordmark_year	2017
+disclaimer	PORT NO OFICIAL HECHO POR AFICIONADOS. SIN RELACIÓN CON KONAMI. USA TU PROPIA COPIA.
+detail_default_title	MENÚ PRINCIPAL
+detail_default_text	Elige una entrada: sus detalles aparecen aquí y al escogerla se actúa al momento.
+version_tag	%1$s · compilación %2$d · EUROPA
+install_and_play	INSTALAR Y JUGAR
+play	SAQUE INICIAL
+entry_select_folder	ELEGIR CARPETA DEL JUEGO
+entry_install	INSTALAR DESDE UNA IMAGEN DE DISCO
+entry_settings	AJUSTES
+direct_launch	Empezar el partido nada más abrir la aplicación
+select_folder_hint	La aplicación busca primero el juego en este teléfono por su cuenta. Si no lo encuentra, indícale la carpeta que contiene tus archivos de PES 2017 (default.xex y los archivos .cpk). Si Android aún no ha dejado que la aplicación lea esa parte del almacenamiento, lo preguntará antes.
+settings_hint	Imagen, rendimiento, controles y archivos del juego de este port.
+install_game	Instalar los archivos del juego
+install_hint	Indica una imagen de disco (.iso) de tu propia copia de PES 2017, o la carpeta donde se extrajeron sus archivos (default.xex y los archivos .cpk). Solo se copian al almacenamiento de la aplicación los archivos que el juego necesita; hacen falta unos 7 GB libres.
+status_not_installed	Aún no has elegido ninguna carpeta de juego.¶¶Esta aplicación no contiene datos del juego. Elige la carpeta con tu propia copia de PES 2017 o instala desde una imagen de disco.
+status_ready	Partido listo.¶Carpeta del juego: %1$s
+status_ready_auto	Partido listo. Los archivos del juego se encontraron en este teléfono:¶%1$s
+status_folder_missing	La carpeta de juego elegida ya no existe o no se puede leer:¶%1$s¶¶Elígela otra vez.
+status_needs_access	La carpeta de juego está definida, pero Android no ha dado permiso a la aplicación para leerla:¶%1$s
+pick_folder	Copiar una carpeta de juego extraída (no hace falta permiso)
+folder_title	Carpeta del juego
+folder_no_xex	Esa carpeta no tiene default.xex. Elige la carpeta que contiene default.xex y los archivos .cpk.
+folder_found_inside	Juego encontrado un nivel más abajo:¶%1$s
+folder_wrong_game	Este default.xex no es el ejecutable de PES 2017 (Europa) del que se recompiló esta aplicación. Puede que no funcione.
+folder_use_anyway	Usar de todos modos
+folder_use_here	Usar esta carpeta
+folder_set	El juego se ejecutará desde:¶%1$s¶¶Las partidas guardadas y las cachés se guardan en su carpeta superior.
+folder_unreadable_path	Android entrega esta carpeta como un documento, no como una ruta, así que el juego no puede ejecutarse desde ahí.
+folder_import_explained	¿Copiar %1$s de archivos del juego (default.xex, los archivos .cpk) dentro de la aplicación? Quedan %2$s libres.
+access_title	Hace falta acceso al almacenamiento
+access_explained	El juego lee sus archivos por ruta, y Android solo permite hacerlo fuera de la carpeta de la aplicación si autorizas «Acceso a todos los archivos». Autorízalo en la pantalla siguiente y vuelve: la carpeta elegida se recuerda.¶¶También puedes copiar los archivos dentro de la aplicación; eso no necesita permiso pero usa el espacio dos veces.
+allow_storage	Permitir acceso al almacenamiento
+copy_instead	Copiar dentro de la aplicación
+storage_granted	Acceso al almacenamiento: permitido
+storage_not_granted	Acceso al almacenamiento: no permitido (hace falta para ejecutar desde una carpeta fuera de la aplicación)
+storage_explained	Android solo deja leer archivos fuera de la carpeta de la aplicación si lo autorizas. Sin eso, pon la imagen de disco en Android/data/%1$s/files y elígela desde ahí.
+use_this_folder	Usar esta carpeta
+tab_graphics	GRÁFICOS Y RENDIMIENTO
+tab_performance	RENDIMIENTO
+tab_controls	CONTROLES Y SONIDO
+tab_advanced	AVANZADO
+tab_files	ARCHIVOS DEL JUEGO
+section_preset	Ajuste de calidad
+section_display	Pantalla
+section_image_quality	Calidad de imagen
+section_frame_rate	Fotogramas
+section_thermal	Calor y batería
+section_rendering	Renderizado
+section_memory	Memoria y carga
+section_experiments	Experimentos (para buscar fallos)
+experiments_hint	Para móviles con un fallo de imagen, como un destello negro o jugadores negros. Cambia una opción cada vez, reinicia el juego, juega un partido y captura (CAPTURE) lo que viste. Vuelve a dejarla como estaba si no ayuda. Se aplica en el siguiente arranque.
+arena_hint	Tamaño del área de fotogramas en MB. Los móviles con mucha memoria usan una grande por defecto; una más pequeña es la que usan los teléfonos que se ven bien.
+arena_auto	Auto
+exp_legacy	Ruta de renderizado clásica
+exp_legacy_hint	Dibuja con pasos de renderizado y estado fijado, como los móviles antiguos, en lugar de renderizado dinámico.
+exp_no_table	Saltar el paso de la tabla de colores
+exp_no_table_hint	Muestra el fotograma sin la tabla de colores de pantalla del juego.
+exp_bc_hw	Decodificación de texturas por hardware en Adreno
+exp_bc_hw_hint	Deja que la GPU decodifique las texturas BC en lugar de la CPU. Desactivado por defecto en Qualcomm por un parpadeo antiguo.
+exp_dynamic_depth	Estado de profundidad por dibujado en Adreno
+exp_dynamic_depth_hint	Fija profundidad, stencil y descarte de caras en cada dibujado en lugar de fijarlos en las tuberías (en Qualcomm lo fijado es lo predeterminado).
+section_testing	Pruebas
+section_developer	Desarrollador
+developer_tools	Herramientas de desarrollo
+developer_tools_hint	Muestra las herramientas solo de depuración durante un partido: el botón CAPTURE, el botón REC MACRO junto a Menú, la reproducción de macros en el menú de pausa, la ficha de detalle y la consola del HUD, y las opciones de prueba de abajo. Déjalo desactivado para jugar.
+section_hud	HUD de rendimiento
+hud_off	Desactivado
+hud_minimal	Mínimo
+hud_normal	Normal
+hud_complete	Completo
+hud_level_hint	El dato de la esquina superior izquierda de un partido. Mínimo: fotogramas por segundo. Normal: añade tiempo por fotograma y temperatura. Completo: añade CPU, memoria y texturas en una segunda línea. También en un partido: pausa y elige «HUD de rendimiento».
+hud_menu	HUD de rendimiento
+button_style	Etiquetas de los botones
+button_style_playstation	PlayStation (✕ ○ □ △)
+button_style_xbox	Xbox (A B X Y)
+arrange_controls	Colocar los controles en pantalla
+arrange_controls_hint	Arrastra un control para moverlo, pellízcalo o usa el deslizador de tamaño para cambiarlo, y oculta los que no uses. Un control soltado sobre otro se aparta. También en un partido: pausa y elige «Editar controles».
+arrange_hint	Toca un control para cogerlo
+advanced_warning	Para experimentar y resolver problemas. Los valores por defecto van bien en la mayoría de móviles; las pestañas Gráficos y Rendimiento cubren los cambios habituales.
+settings_help_strip	Cada cambio se guarda en el momento y se aplica al empezar el siguiente partido. Pulsa Atrás para volver al menú.
+preset_label	Ajuste: %1$s
+preset_low	Bajo
+preset_medium	Medio
+preset_high	Alto
+preset_custom	Personalizado
+preset_detected	Este teléfono parece un %1$s (%2$s; %3$s, %4$d núcleos rápidos a %5$d MHz, %6$.1f GB). Un ajuste fija la calidad de renderizado, las reglas de calor y carga de la GPU, el multisampling, el FSR, el límite de fotogramas y el modo de poca memoria; si luego cambias alguno, el ajuste pasa a leerse Personalizado.
+preset_gpu_unknown	GPU desconocida
+section_sound	Sonido
+section_controls	Controles
+section_files	Archivos del juego
+resolution	Resolución de pantalla: %1$d %%
+resolution_hint	Cuántos píxeles se dibujan en pantalla, como parte de ella. La pantalla escala el resultado. PES dibuja a 1280×720 fijos, así que esto cambia sobre todo nitidez por batería.
+render_scale	Multiplicador de renderizado interno: %1$dx
+render_scale_hint	Dibuja el partido a 2x o 3x el 1280×720 de la consola (PES17_SCALE). Necesita mucha GPU; déjalo en 1x salvo que el móvil vaya sobrado.
+msaa	Bordes suaves (multisampling)
+msaa_hint	Evita que las líneas finas del campo se rompan en guiones. Barato en la mayoría de móviles; desactívalo si el partido da tirones.
+prefer_60	Bloquear la pantalla a 60 Hz
+prefer_60_hint	El fotograma de la consola es de 60 Hz. Bloquearlo evita un ritmo irregular y ahorra batería en pantallas de 90/120 Hz.
+scene_scale	Calidad de renderizado del partido: %1$d %%
+ball_scale	Tamaño del balón: %1$d %%
+ball_scale_hint	Dibuja el balón del partido a este tamaño para seguirlo mejor en una pantalla pequeña (PES17_BALL_SCALE). El 100 % es el tamaño original.
+scene_scale_hint	Tamaño al que se dibuja la escena 3D antes de estirarla al fotograma (PES17_SCENE_SCALE). El 75 % es lo normal: un 44 % menos de píxeles para una imagen que la mayoría de jugadores no distingue. Ponlo al 100 % en un móvil potente.
+heat_scale	Bajar la calidad con el calor
+heat_scale_hint	La calidad de renderizado de arriba pasa a ser el máximo al que se dibuja la imagen. Cuando Android avisa de que el móvil se calienta (moderado, grave, crítico), la imagen baja hasta el 50 % antes de que se limite la GPU, y sube otra vez al enfriarse (PES17_HEAT_SCALE). Los pasos duran unos segundos; uno se ve como la escena redibujándose un momento.
+load_scale	Bajar la calidad cuando la GPU va lenta
+load_scale_hint	Baja la imagen cuando los pasos de renderizado tardan demasiado para el fotograma y la sube cuando hay margen (PES17_LOAD_SCALE). Solo ve el tiempo de los pasos de GPU, que en un Snapdragon 865 no era lo que hacía lento un partido, así que allí rara vez actúa. Experimental.
+perf_hint	Sugerencia de rendimiento del sistema
+perf_hint_hint	Dice a Android cuánto tardó cada fotograma para que suba o baje la frecuencia de CPU y GPU (PES17_HINT). No hace nada en un móvil que la rechaza, como el Snapdragon 865 con Android 13; desactívala si un móvil se calienta más con ella.
+crowd	Público del estadio
+crowd_hint	Desactivado deja las gradas vacías y ahorra al motor y a la GPU el dibujo del público, lo que mantiene el móvil algo más fresco en un partido. El juego lo sigue animando. Se aplica la próxima vez que arranca el juego.
+fsr	Escalado más nítido (FSR)
+black_guard	Protección contra fotogramas negros (experimental)
+black_guard_hint	Para móviles en los que la imagen parpadea en negro cada tres fotogramas: un fotograma negro suelto se sustituye por el anterior. Lee cada fotograma de vuelta, así que cuesta velocidad. Se aplica en el siguiente arranque del juego.
+fsr_hint	Usa un paso de escalado y nitidez AMD FSR en lugar de un estiramiento simple. Cuesta unos fotogramas en un móvil caliente.
+frame_gen	Generación de fotogramas (de 30 a 60)
+frame_gen_hint	El juego dibuja 30 fotogramas por segundo y un fotograma creado entre cada dos tapa los huecos, así que la pantalla de 60 Hz sigue fluida por la mitad de trabajo y calor. El movimiento rápido puede verse borroso. Mientras está activo fija el límite en 30 fps.
+fsr_sharp	Nítidez: %1$.1f
+widescreen	Pantalla completa (llenar la pantalla)
+widescreen_hint	Ensancha la cámara del juego a la forma del móvil y llena toda la pantalla en lugar de mostrar franjas negras a los lados (PES17_ASPECT). Los menús y la barra del marcador se estiran de lado. Se aplica en el siguiente arranque.
+fps_limit	Límite de fotogramas: %1$d FPS
+fps_limit_off	Límite de fotogramas: desactivado (60 FPS)
+fps_limit_hint	Saca el partido del ritmo de 60 Hz y lo limita a estos fotogramas por segundo (PES17_FPS_LIMIT). Más bajo es más fresco y dura más. En una pantalla de 60 Hz, 30 da el movimiento más uniforme; de 35 a 55 puede dar tirones.
+low_memory	Modo de poca memoria
+low_memory_hint	Se salta el gran búfer de sombras de vértices (PES17_NO_SHADOW). Úsalo en móviles de 6 GB o menos, o si el partido muere en segundo plano.
+texture_budget_auto	Memoria de texturas: elegida para este móvil
+texture_budget	Memoria de texturas: %1$d MB
+texture_hint	Cuánto puede guardar la caché de texturas antes de soltar lo que no se ha dibujado últimamente. Si no se toca, el motor elige una cifra según la memoria del móvil.
+prewarm_all	Compilar todos los shaders al arrancar
+prewarm_all_hint	Compila cada tubería registrada antes de la pantalla de título en lugar de durante el juego. El arranque tarda minutos con la caché fría, pero después el saque inicial no tiene tirones de shaders.
+show_stats	Mostrar el contador de FPS
+hide_stats	Ocultar los fotogramas por segundo
+audio_on	Sonido
+touch_controls	Controles en pantalla
+use_gamepad	Usar un mando físico
+gamepad_p2	El mando físico es el jugador 2 (prueba)
+gamepad_p2_hint	Los controles táctiles siguen siendo el jugador 1; el primer mando físico lleva al jugador 2. Se aplica al empezar un partido.
+gamepad_hint	Desactívalo para ignorar los mandos por completo. Algunos móviles informan de un accesorio como mando con un stick descentrado, lo que hace que un jugador corra solo.
+vibration	Respuesta háptica (toda la vibración)
+dpad_auto_hide	Ocultar la cruceta automáticamente
+dpad_auto_hide_hint	Durante un partido la cruceta se desvanece tras cuatro segundos sin tocarla y vuelve en cuanto tocas donde está. En los menús del juego siempre queda visible. Desactívalo para mantenerla en pantalla siempre.
+control_fx	Efectos táctiles
+control_fx_hint	Brillo suave y una breve animación al pulsar el mando en pantalla. Desactívalo si el mando se siente pesado o el móvil se calienta.
+flick_skill_stick	Inclinación del stick de recursos
+flick_skill_stick_hint	Lee los regates del movimiento del pulgar en lugar de su posición en el stick. Ocho direcciones, con un instante de nada entre ellas, así que «izquierda y luego derecha» son dos gestos y no un círculo. Desactívalo para el stick antiguo que sigue el pulgar exactamente.
+stick_mode	Stick de movimiento
+stick_mode_move	Móvil
+stick_mode_fixed	Fijo
+stick_mode_hint	Móvil pone el stick donde cae el pulgar a la izquierda de la pantalla y lo sigue, como eFootball; Fijo lo deja donde lo puso el diseño. En ambos casos la bola que ves es el recorrido.
+defending_pad	Mando defensivo
+defending_pad_hint	Saca los controles colocados para defender en lugar de los de ataque. El juego no indica quién tiene el balón, así que este interruptor es tuyo.
+switch_to_defending_pad	Sacar el mando defensivo
+switch_to_attacking_pad	Sacar el mando de ataque
+arrangement	Disposición
+arrangement_always	Ambos mandos
+arrangement_menus	Solo menús
+arrangement_match	Ambos mandos de partido
+arrangement_attack	Solo mando de ataque
+arrangement_defend	Solo mando defensivo
+edit_controls_where	El mando en pantalla se edita durante el partido: pausa y elige «Editar controles».
+forget_install	Olvidar la carpeta del juego
+forget_explained	Los archivos se quedan en el teléfono; la aplicación simplemente deja de usarlos y se puede elegir otra carpeta. Si los archivos siguen en un lugar que la aplicación busca, los encontrará sola.
+paths_line	Carpeta del juego:¶%1$s
+paths_none	Aún no has elegido ninguna carpeta de juego.
+macro_record	Grabar una macro del mando
+macro_stop_record	Detener la grabación
+macro_play	Reproducir la macro
+macro_stop_play	Detener la macro
+macro_recording	Grabando el mando… pulsa STOP REC para terminar.
+macro_saved	%1$d eventos guardados como «%2$s».
+macro_nothing	No se grabó nada: pulsa algo en el mando primero.
+macro_none	Aún no hay macros grabadas.
+macro_done	Macro: %1$s
+macro_name_title	Ponle nombre a esta macro
+macro_name_hint	Nombre de la macro
+macro_existing	Ya guardada: %1$s
+macro_save	Guardar
+capture_started	Captura iniciada: juega y pulsa STOP cuando haya pasado el problema.
+capture_stop_title	Guardar la captura
+capture_name_hint	Nombre (por ejemplo parpadeo-saque)
+capture_note_hint	¿Qué fue mal?
+capture_save	Guardar
+capture_discard	Descartar
+capture_saving	Guardando…
+captures_title	Capturas
+captures_open	Gestionar capturas
+captures_hint	Toca una captura para compartirla, guardarla en tu carpeta de Descargas o borrarla. Una pulsación larga borra. Cada una es una carpeta con registros, ajustes, informes del motor y de pantalla, y fotogramas.
+captures_none	Aún no hay capturas. Activa Ajustes > Avanzado > Herramientas de desarrollo y pulsa CAPTURE en un partido.
+captures_summary	%1$d capturas, %2$s
+captures_row	%1$s, %2$d archivos
+captures_save_folder	Guardar en Descargas
+captures_saved_to	Guardado en %1$s
+captures_save_failed	No se pudo crear ni guardar el zip.
+captures_delete	Borrar
+captures_delete_one	¿Borrar esta captura del teléfono?
+captures_clear_all	Borrar todas las capturas
+captures_clear_all_body	Se borrarán todas las capturas del teléfono. Las que hayas compartido o guardado en otro sitio no se tocan.
+capture_saved_title	Captura guardada
+capture_saved_body	Guardada como captures/%1$s. Compártela para enviar todo lo de la carpeta (registro, ajustes, informe del motor y de pantalla, fotogramas) en un solo zip.
+capture_share	Compartir
+capture_saved	Guardada: captures/%1$s. Dile su nombre a Claude.
+capture_failed	La captura falló: %1$s
+swipe_bindings	Direcciones de deslizamiento
+stance_toast_attack	Mando de ataque
+stance_toast_defend	Mando defensivo
+skill_wheel	Rueda de recursos
+skill_wheel_sector	%1$s: %2$s
+skill_wheel_sector_title	Recurso para esta dirección
+skill_wheel_exit	luego empuja el stick izquierdo
+skill_sector_up_right	Arriba a la derecha
+skill_sector_up_left	Arriba a la izquierda
+skill_sector_down_left	Abajo a la izquierda
+skill_sector_down_right	Abajo a la derecha
+swipe_direction	¿Qué debe enviar este deslizamiento?
+swipe_group_none	Nada
+swipe_group_buttons	Botones
+swipe_group_doubles	Doble pulsación
+swipe_group_modifiers	Modificador + botón
+swipe_group_sticks	Golpes de stick
+swipe_group_modifier_sticks	Modificador + stick
+swipe_up	Arriba
+swipe_center	Pulsación central
+swipe_down	Abajo
+swipe_left	Izquierda
+swipe_right	Derecha
+button_none	Nada
+edit_more	Más…
+clearance_clear	Recorridos de deslizamiento libres
+clearance_blocked	%1$s bloqueado por %2$s
+nothing_to_undo	No hay nada que deshacer
+nothing_to_redo	No hay nada que rehacer
+edit_bind	Cambiar asignación…
+edit_rename	Cambiar nombre…
+edit_label	Nombre del mando
+edit_caption	Leyenda con balón
+edit_defend_split	Distinto en el mando defensivo
+edit_defend_merge	Usar otra vez la posición de ataque
+edit_add	Añadir un control…
+edit_add_none	Todos los controles están ya en el mando
+edit_remove	Quitar este control
+edit_remove_required	El stick de movimiento es obligatorio
+edit_remove_confirm	¿Quitar %1$s del mando? «Restaurar controles predeterminados» lo devuelve.
+edit_undo	Deshacer
+edit_redo	Rehacer
+edit_profiles	Perfiles…
+profile_modern	Mando moderno (predeterminado)
+profile_classic	Espaciado clásico
+profile_save_as	Guardar la disposición actual como…
+profile_name	Nombre del perfil
+profile_saved	Perfil guardado
+profile_failed	No se pudo guardar ese perfil
+profile_load	Cargar
+profile_delete	Borrar
+profile_slot	%1$s · %2$s
+profile_rename	Cambiar nombre
+profile_duplicate	Duplicar
+profile_overwrite	Sobrescribir
+profile_overwrite_confirm	Ya existe una disposición llamada %1$s. ¿Reemplazarla?
+layout_save	Guardar disposición
+slot_taken_confirm	La ranura ya está ocupada. ¿Quieres sobrescribirla?
+yes	Sí
+no	No
+profile_full	Las cinco ranuras están usadas y ese nombre también está cogido.
+profile_copy_name	Copia de %1$s
+profile_renamed	Nombre cambiado
+profile_duplicated	Duplicado
+profile_delete_confirm	¿Borrar %1$s? Sus controles se pierden.
+layout_menu	Disposiciones…
+layout_title	Disposiciones
+layout_current	Disposición actual
+layout_export_current	Exportar la disposición actual…
+layout_switched	Disposición cambiada
+profile_slot_empty	%1$s · Ranura vacía
+profile_default_name	Ranura %1$s
+profile_overwrite_current	Guardar el mando actual aquí
+toggle_mapping	Asignación TG…
+toggle_mapping_title	%1$s cambia a
+layout_import	Importar disposición…
+layout_export	Exportar disposición…
+layout_exported	Disposición lista para compartir
+layout_export_failed	No se pudo exportar esa disposición
+layout_imported	Disposición importada
+layout_import_failed	No se pudo leer ese archivo
+restore_defaults	Restaurar controles predeterminados
+restore_defaults_hint	Devuelve cada control a donde lo pone el mando de fábrica. Tu mando actual se guarda antes como copia.
+restore_defaults_done	Controles restaurados
+restore_backup	Restaurar la última copia
+restore_backup_hint	Devuelve el mando de antes del último restablecimiento o cambio.
+restore_backup_done	Copia restaurada
+backup_missing	Todavía no hay ninguna copia
+restore_controls_confirm_title	¿Restaurar los controles predeterminados?
+restore_confirm_text	Cada control vuelve a su posición, tamaño y asignación de fábrica. El mando actual se guarda como copia, y «Restaurar la última copia» lo devuelve.
+controls_guide	Guía de controles
+guide_intro	Todo lo que puede hacer el mando, leído de los controles que usas ahora.
+guide_essentials	Lo esencial
+guide_essentials_text	Pulgar izquierdo: mover. El stick se coloca donde apoyas el pulgar en la mitad izquierda, o se queda en su sitio si lo prefieres fijo. Empújalo hasta el borde para esprintar: funciona con el stick normal y solo mientras hay un partido en pantalla, y la carrera se mantiene hasta que vuelves dentro del punto de suelta. El stick de dos etapas da más alcance y no esprinta, así que puede usarse en los menús del juego. Pulgar derecho: el rombo de acciones. La cruceta sobre el stick es para tácticas; se desvanece tras tres segundos sin tocarla y vuelve cuando tocas, o deslizas un pulgar, donde está.
+guide_dribbling	Regate
+guide_dribbling_text	Rueda el pulgar entre pase, centro, tiro y pase al hueco sin levantarlo: la dirección con la que sales se lee como un deslizamiento. Mantén RB y centra el stick para amagar. Pulsa RB dos veces para el arranque.
+guide_wheel	Rueda de recursos
+guide_wheel_text	Mantén SKILL un momento y se abre bajo el pulgar un anillo de ocho gestos. Desliza hacia un sector y levanta. Una pulsación rápida no hace nada, así que un pulgar en reposo no dispara un regate.
+guide_defending	Defensa
+guide_defending_text	Elige el mando defensivo en Ajustes, Controles. Los botones de acción mantienen su posición y ganan una segunda etiqueta: presión, equipo, entrada y portero. El LB cercano al pulgar cambia de jugador; el LB lejano es la copia de ataque.
+guide_swipes	Deslizamientos
+guide_swipes_text	Cada botón de acción, extra y táctico envía una orden distinta en cada una de sus cuatro direcciones. Selecciona uno y toca Direcciones de deslizamiento: cada dirección abre primero un grupo — nada, los botones del mando, dobles pulsaciones, un modificador mantenido con un botón de acción (L1 + pase, R2 + tiro), un golpe completo del stick izquierdo o derecho, o un modificador con un golpe de stick — y luego las entradas de ese grupo. Una dirección asignada se envía al levantar el pulgar: un botón simple como una pulsación, una combinación o un golpe de stick como una secuencia corta mantenida, una doble pulsación como dos pulsaciones. Las flechas del borde muestran lo asignado, y el editor avisa cuando un recorrido está bloqueado. L1 y R1 son modificadores, así que no llevan deslizamientos propios.
+guide_customization	Personalización
+guide_custom_buttons	Botones extra (C1–C10)
+guide_custom_buttons_text	Diez botones extra vienen ocultos: círculos tenues en la parte superior del editor, fuera del mando hasta que les des una tarea. Selecciona uno, asigna su pulsación central y sus cuatro deslizamientos, y se une al mando. La pareja táctica es SW1 y ADV (instrucciones avanzadas: mantén LT y usa los brazos de la cruceta). L1 y R1 siguen siendo modificadores — L1 + pase, R1 + tiro — en vez de destinos de deslizamiento, y una doble pulsación en pase juega el uno-dos.
+guide_custom_buttons_summary	%1$d de %2$d botones extra están asignados.
+guide_customization_text	Pausa y elige Editar controles, o abre Ajustes, Controles, Colocar los controles en pantalla. Arrastra el control seleccionado y usa la banda de abajo: los deslizadores cambian su tamaño y opacidad, el interruptor lo oculta, Guardar disposición y Disposiciones guardan, cargan o comparten el mando, y Direcciones de deslizamiento y Rueda de recursos asignan lo que envía. Con un control seleccionado, Más ofrece Asignar, Cambiar nombre, Quitar, Deshacer y Rehacer; sin nada seleccionado ofrece Añadir un control, Perfiles, Exportar, Importar, Deshacer y Rehacer. Restablecer este y Restablecer todo están junto a Listo, y Restaurar controles predeterminados siempre a un toque.
+guide_menus	Menús
+guide_menus_text	En un partido, Menú pausa el juego y abre Continuar, Editar controles, Guía de controles, los interruptores del mando táctil y del mando físico, Gráficos rápidos, el nivel del HUD y Salir; el partido sigue en pausa hasta que sales del menú o del editor. Antes de un partido, el menú ofrece Jugar, Instalar el juego, Controlador gráfico, Ajustes, Ver registro y Buscar actualizaciones. Ajustes contiene Controles, Gráficos y rendimiento y Avanzado; Sacar el mando defensivo, Colocar los controles y la restauración de controles predeterminados están en Controles.
+guide_security	Seguridad de entrada
+guide_security_text	Un toque pertenece al control donde cae hasta que ese dedo se levanta. El movimiento nunca se convierte en tiro, un deslizamiento pertenece al botón donde empezó, y ningún control retiene una tecla que no muestra.
+guide_close	Cerrar
+language	IDIOMA
+language_title	Idioma
+language_hint	Todas las pantallas se muestran en este idioma. La elección se conserva al cerrar la aplicación y se aplica al instante al cambiarla.
+on	Activado
+off	Desactivado
+qg_hint	El motor lee estos ajustes al empezar un partido. 1x = 1280x720; 2x y 3x son para GPU potentes.
+menu_confirm	CONFIRMAR
+menu_cancel	CANCELAR
+menu_prompt_confirm	A  %1$s     B  CANCELAR
+menu_prompt_adjust	A  CAMBIAR     B  ATRÁS     ◀ ▶  AJUSTAR
+menu_prompt_select	A  ELEGIR     B  ATRÁS     START  CERRAR
+cpu_missing_feature	A la CPU de este teléfono le falta %1$s (se necesita ARMv8.2-A)
+driver_needs_api	El controlador requiere Android API %1$d (el dispositivo tiene %2$d)
+battery_saver_warning	El ahorro de batería está activo: el juego va más lento y con menos fluidez. Desactívalo para 60 fps.
+enter_text	Introducir texto
+renderer_notice	Aviso del motor de renderizado
+renderer_notice_body	%1$s¶¶La GPU de tu dispositivo no ofrece Vulkan 1.3 ni VK_KHR_dynamic_rendering. El juego se ejecutará sin pantalla, sin salida de vídeo. Consulta el registro para más detalles.
+view_log_button	Ver registro
+continue_headless	Continuar sin pantalla

@@ -40,6 +40,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var installButton: Button
     private lateinit var selectFolderButton: Button
     private lateinit var updatesButton: Button
+    private lateinit var languageButton: Button
     private lateinit var quitButton: Button
     private lateinit var detailTitle: TextView
     private lateinit var detailText: TextView
@@ -90,6 +91,7 @@ class MainActivity : AppCompatActivity() {
         installButton = findViewById(R.id.install)
         selectFolderButton = findViewById(R.id.select_folder)
         updatesButton = findViewById(R.id.entry_updates)
+        languageButton = findViewById(R.id.entry_language)
         quitButton = findViewById(R.id.entry_quit)
         detailTitle = findViewById(R.id.detail_title)
         detailText = findViewById(R.id.detail_text)
@@ -166,6 +168,11 @@ class MainActivity : AppCompatActivity() {
             showDetail(getString(R.string.check_updates), "")
             checkForUpdates(manual = true)
         }
+        languageButton.setOnClickListener {
+            select(languageButton)
+            showDetail(getString(R.string.language), getString(R.string.language_hint))
+            LanguagePicker.show(this, prefs)
+        }
         quitButton.setOnClickListener {
             select(quitButton)
             finishAndRemoveTask()
@@ -184,7 +191,7 @@ class MainActivity : AppCompatActivity() {
         // is reported rather than fatal. The breadcrumb is what identifies a
         // native crash inside the load itself, which no handler can catch.
         Trail.note(this, "launcher: loading the runtime library")
-        nativeReady = NativeBridge.load()
+        nativeReady = NativeBridge.load(this)
         if (nativeReady) {
             Trail.note(this, "launcher: library loaded, initialising")
             try {

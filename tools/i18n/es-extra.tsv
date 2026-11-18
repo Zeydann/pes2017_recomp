@@ -1,0 +1,53 @@
+act_shot	Tiro
+act_cross	Centro
+act_pass	Pase
+act_through	Pase al hueco
+act_double_shot	Doble tiro
+act_low_cross	Centro raso
+act_double_pass	Doble pase
+act_double_through	Doble pase al hueco
+act_chip_shot	Tiro picado
+act_finesse_shot	Tiro con efecto
+act_manual_shot	Tiro manual
+act_driven_shot	Tiro potente
+act_early_cross	Centro temprano
+act_manual_cross	Centro manual
+act_controlled_cross	Centro controlado
+act_driven_cross	Centro potente
+act_one_two	Uno-dos
+act_manual_pass	Pase manual
+act_driven_pass	Pase potente
+act_controlled_pass	Pase controlado
+act_chipped_through	Pase al hueco picado
+act_manual_through	Pase al hueco manual
+act_lofted_through	Pase al hueco bombeado
+act_controlled_through	Pase al hueco controlado
+act_attack_1	Ataque 1
+act_attack_2	Ataque 2
+act_defense_2	Defensa 2
+act_defense_1	Defensa 1
+flick_ls_up	LS arriba
+flick_ls_down	LS abajo
+flick_ls_left	LS izquierda
+flick_ls_right	LS derecha
+flick_rs_up	RS arriba
+flick_rs_down	RS abajo
+flick_rs_left	RS izquierda
+flick_rs_right	RS derecha
+bit_start	Start
+bit_select	Select
+bit_dpad_up	Cruceta arriba
+bit_dpad_down	Cruceta abajo
+bit_dpad_left	Cruceta izquierda
+bit_dpad_right	Cruceta derecha
+bit_action	Acción
+toggle_nothing	Nada (sin asignar)
+toggle_sprint	Sprint: RT
+toggle_jockey	Marcaje: LT
+toggle_running_jockey	Marcaje en carrera: LT + RT
+toggle_teammate_pressure	Presión del compañero: RB
+toggle_pressure	Presión: A
+toggle_manual_gk	Movimiento manual del portero: R3
+toggle_super_cancel	Supercancelación: RB + RT
+toggle_shielding	Protección: LT
+toggle_player_movement	Movimiento del jugador: LS

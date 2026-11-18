@@ -244,17 +244,21 @@ class ControlGuideActivity : AppCompatActivity() {
 
     private fun actionName(action: SwipeAction): String = when {
         !action.bound -> getString(R.string.button_none)
-        action.flick != SwipeFlick.NONE && action.bit == 0 -> when (action.modifier) {
-            SwipeModifier.NONE -> SwipeLabels.flickName(action.flick)
-            else -> SwipeLabels.modifierName(action.modifier) + " + " +
-                SwipeLabels.flickName(action.flick)
-        }
+        action.flick != SwipeFlick.NONE && action.bit == 0 ->
+            ControlVocabulary.of(this, SwipeLabels.flickName(action.flick)).let { flick ->
+                when (action.modifier) {
+                    SwipeModifier.NONE -> flick
+                    else -> SwipeLabels.modifierName(action.modifier) + " + " + flick
+                }
+            }
         action.doubleTap -> bitName(action.bit) + " ×2"
         action.modifier != SwipeModifier.NONE -> SwipeLabels.modifierName(action.modifier) + " + " + bitName(action.bit)
         else -> bitName(action.bit)
     }
 
-    private fun bitName(bit: Int): String = when (bit) {
+    private fun bitName(bit: Int): String = ControlVocabulary.of(this, rawBitName(bit))
+
+    private fun rawBitName(bit: Int): String = when (bit) {
         0 -> getString(R.string.button_none)
         NativeBridge.A -> "A"
         NativeBridge.B -> "B"

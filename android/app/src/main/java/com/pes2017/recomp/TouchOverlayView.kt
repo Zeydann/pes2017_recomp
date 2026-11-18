@@ -3115,7 +3115,7 @@ class TouchOverlayView @JvmOverloads constructor(
         if (direction == Swipe.NONE) return
         val action = element.swipeAction(direction)
         if (!action.bound) return
-        val label = SwipeLabels.describe(element, action)
+        val label = SwipeLabels.describe(element, action) { ControlVocabulary.of(context, it) }
         if (label.isEmpty()) return
 
         val r = radius(element)

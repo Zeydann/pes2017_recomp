@@ -85,6 +85,14 @@ class PesMenu(
     )
 
     private val density = activity.resources.displayMetrics.density
+
+    /**
+     * Arabic is written joined: a letter-spaced run pulls the strokes apart
+     * and reads as disconnected letters, so the panel drops its tracking in
+     * right-to-left languages. The brand line keeps its own spacing because it
+     * is "PES 2017 | Typhon Lhoucine" in either language.
+     */
+    private val rtl = activity.resources.configuration.layoutDirection == View.LAYOUT_DIRECTION_RTL
     private fun dp(value: Int): Int = (value * density).roundToInt()
 
     private val headingType = Typeface.create("sans-serif-condensed", Typeface.BOLD_ITALIC)
@@ -182,7 +190,7 @@ class PesMenu(
         heading.setTextColor(Color.WHITE)
         heading.textSize = 21f
         heading.typeface = headingType
-        heading.letterSpacing = 0.05f
+        heading.letterSpacing = if (rtl) 0f else 0.05f
         heading.isAllCaps = true
         heading.maxLines = 2
         heading.ellipsize = android.text.TextUtils.TruncateAt.END
@@ -218,7 +226,7 @@ class PesMenu(
         promptStrip.setTextColor(0xFF7FD2F5.toInt())
         promptStrip.textSize = 10f
         promptStrip.typeface = bodyType
-        promptStrip.letterSpacing = 0.08f
+        promptStrip.letterSpacing = if (rtl) 0f else 0.08f
         promptStrip.setPadding(0, dp(10), 0, dp(2))
 
         hintLine.setTextColor(0xFF8FA9CC.toInt())
@@ -411,9 +419,12 @@ class PesMenu(
 
         val hasAdjust = rows.any { it.onAdjust != null }
         promptStrip.text = when {
-            current.fields.isNotEmpty() -> "A  ${current.submit.ifEmpty { "CONFIRM" }}     B  CANCEL"
-            hasAdjust -> "A  CHANGE     B  BACK     \u25C0 \u25B6  ADJUST"
-            else -> "A  SELECT     B  BACK     START  CLOSE"
+            current.fields.isNotEmpty() -> activity.getString(
+                R.string.menu_prompt_confirm,
+                current.submit.ifEmpty { activity.getString(R.string.menu_confirm) },
+            )
+            hasAdjust -> activity.getString(R.string.menu_prompt_adjust)
+            else -> activity.getString(R.string.menu_prompt_select)
         }
         hintLine.text = current.hint
         hintLine.visibility = if (current.hint.isEmpty()) View.GONE else View.VISIBLE
@@ -423,7 +434,7 @@ class PesMenu(
         this.text = text
         setTextColor(0xFF9FC4EA.toInt())
         textSize = 11f
-        letterSpacing = 0.08f
+        letterSpacing = if (rtl) 0f else 0.08f
         typeface = bodyType
         isAllCaps = true
         setPadding(0, dp(8), 0, dp(3))
@@ -570,7 +581,7 @@ class PesMenu(
             label.text = row.label
             label.typeface = headingType
             label.textSize = 14.5f
-            label.letterSpacing = 0.05f
+            label.letterSpacing = if (rtl) 0f else 0.05f
             label.isAllCaps = true
             label.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
 
