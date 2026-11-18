@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The pad editor's buttons: blue glass rather than the stock grey.
+
+     The editor's strip sits over a bright pitch, so the fill is kept
+     see-through (about a third opaque) and it is the outline and the light
+     label that make it a button. A pressed button fills in a little and the
+     ripple is the same blue, so the whole strip stays one colour instead of
+     grey stock controls in the middle of the game's dark panel. -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="#553B82F6">
+    <item>
+        <selector>
+            <item android:state_enabled="false">
+                <shape android:shape="rectangle">
+                    <solid android:color="#2E4A6A8F" />
+                    <stroke android:width="1dp" android:color="#4D93C5FD" />
+                    <corners android:radius="3dp" />
+                </shape>
+            </item>
+            <item android:state_pressed="true">
+                <shape android:shape="rectangle">
+                    <solid android:color="#7A1D4ED8" />
+                    <stroke android:width="1dp" android:color="#CC93C5FD" />
+                    <corners android:radius="3dp" />
+                </shape>
+            </item>
+            <item>
+                <shape android:shape="rectangle">
+                    <solid android:color="#4D1D4ED8" />
+                    <stroke android:width="1dp" android:color="#B33B82F6" />
+                    <corners android:radius="3dp" />
+                </shape>
+            </item>
+        </selector>
+    </item>
+</ripple>

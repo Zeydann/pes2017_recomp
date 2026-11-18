@@ -73,6 +73,11 @@ object QuickGraphics {
                 }
             }
 
+            // The label names the setting and the right-hand column carries its
+            // value. The label is not a format string: a row handed the raw
+            // resource prints "%1$d" at the player, and the row's capitals turn
+            // that into "%1$D"; a value inside a long label is also the first
+            // thing a narrow panel truncates.
             rows += PesMenu.Row(
                 activity.getString(R.string.qg_scale),
                 detail = "${v.scale}x",
@@ -94,7 +99,7 @@ object QuickGraphics {
             )
             rows += PesMenu.Row(
                 activity.getString(R.string.qg_fps),
-                detail = "${v.fps}",
+                detail = "${v.fps} FPS",
                 onAdjust = { m, d ->
                     v.fps = (v.fps + d * 5).coerceIn(30, 60)
                     touched()
@@ -124,7 +129,8 @@ object QuickGraphics {
                 activity.getString(R.string.qg_title),
                 message = activity.getString(R.string.qg_note),
                 rows = rows,
-                hint = "Renderer reads these as a match starts.",
+                hint = "Renderer reads these as a match starts. 1x = 1280x720; " +
+                    "2x and 3x are for powerful GPUs.",
             )
         }
 

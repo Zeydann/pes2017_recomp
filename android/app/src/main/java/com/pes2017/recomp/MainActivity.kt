@@ -18,11 +18,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import java.io.File
-import java.net.HttpURLConnection
-import java.net.URL
 import kotlin.concurrent.thread
-import org.json.JSONArray
-import org.json.JSONObject
 
 /**
  * The launcher: is the game installed, which driver will be used, and the
@@ -615,69 +611,72 @@ class MainActivity : AppCompatActivity() {
         entry.setTextColor(getColor(R.color.pes_gold))
     }
 
-    /** A newer published APK, if there is one: silent when offline. */
+    /**
+     * Asks the release feed what the newest published release is.
+     *
+     * The check on start-up only speaks when there is something newer than this
+     * install and it is not a version the player has skipped. The one the player
+     * asks for always answers: the newer release, the newest version, or what
+     * stopped the check -- never "up to date" because a request failed.
+     */
     private fun checkForUpdates(manual: Boolean = false) {
         thread(name = "update-check", isDaemon = true) {
-            var offered = false
-            try {
-                if (RELEASES_API.isEmpty()) throw IllegalStateException("no release feed")
-                val connection = (URL(RELEASES_API)
-                    .openConnection() as HttpURLConnection).apply {
-                    connectTimeout = 15000
-                    readTimeout = 15000
-                    setRequestProperty("Accept", "application/vnd.github+json")
-                }
-                if (connection.responseCode == 200) {
-                    val release = JSONObject(connection.inputStream.bufferedReader().readText())
-                    val assets = release.optJSONArray("assets")
-                    val apk = assets?.let { list ->
-                        (0 until list.length()).map { list.getJSONObject(it) }
-                            .firstOrNull { it.optString("name").endsWith(".apk", ignoreCase = true) }
-                    }
-                    val tag = release.optString("tag_name")
-                    val code = Regex("APK versionCode:\\s*(\\d+)")
-                        .find(release.optString("body"))?.groupValues?.get(1)?.toIntOrNull() ?: 0
-                    val installed = packageManager.getPackageInfo(packageName, 0).let {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) it.longVersionCode.toInt()
-                        else it.versionCode
-                    }
-                    // The latest published release only: older ones stay buried.
-                    if (apk != null && code > installed && tag.isNotEmpty() && tag != prefs.seenUpdateTag) {
-                        val page = release.optString("html_url")
-                        val apkUrl = apk.optString("browser_download_url")
-                        val notes = release.optString("body").take(1500)
-                        offered = true
-                        runOnUiThread { showUpdateDialog(tag, page, apkUrl, notes, installed, code) }
-                    }
-                }
+            val info = try {
+                packageManager.getPackageInfo(packageName, 0)
             } catch (_: Throwable) {
+                null
             }
-            if (manual && !offered) {
-                runOnUiThread {
-                    AlertDialog.Builder(this)
-                        .setMessage(R.string.up_to_date)
-                        .setPositiveButton(R.string.close, null)
-                        .show()
+            val installedCode = when {
+                info == null -> 0
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.P -> info.longVersionCode.toInt()
+                else -> info.versionCode
+            }
+            val installedName = info?.versionName.orEmpty()
+            val result = UpdateCheck.check(installedCode, installedName)
+            runOnUiThread {
+                when (result) {
+                    is UpdateResult.Newer ->
+                        // A version the player skipped stays skipped for the
+                        // start-up check; a check they asked for offers it again.
+                        if (manual || result.tag != prefs.seenUpdateTag) {
+                            showUpdateDialog(result, installedName, installedCode)
+                        }
+                    is UpdateResult.Current ->
+                        if (manual) message(getString(R.string.up_to_date, result.installed))
+                    UpdateResult.NoReleases ->
+                        if (manual) message(getString(R.string.update_check_none))
+                    UpdateResult.RateLimited ->
+                        if (manual) message(getString(R.string.update_check_rate_limited))
+                    is UpdateResult.Unreachable ->
+                        if (manual) message(getString(R.string.update_check_offline))
+                    is UpdateResult.Unreadable ->
+                        if (manual) message(getString(R.string.update_check_failed, result.detail))
                 }
             }
         }
     }
 
-    private fun showUpdateDialog(tag: String, page: String, apkUrl: String, notes: String, installed: Int, code: Int) {
+    private fun showUpdateDialog(update: UpdateResult.Newer, installedName: String, installedCode: Int) {
         val body = TextView(this)
         body.setPadding(32, 8, 32, 8)
         body.textSize = 12f
-        body.text = getString(R.string.update_message, installed, code) + "\n\n" + notes
+        val installedText = getString(R.string.build_label, installedName, installedCode)
+        val releaseText = if (update.releaseCode > 0) {
+            getString(R.string.build_label, update.versionName, update.releaseCode)
+        } else {
+            update.versionName
+        }
+        body.text = getString(R.string.update_message, installedText, releaseText) + "\n\n" + update.notes
         val scroll = ScrollView(this)
         scroll.addView(body)
         AlertDialog.Builder(this)
-            .setTitle(getString(R.string.update_title, tag))
+            .setTitle(getString(R.string.update_title, update.versionName))
             .setView(scroll)
             .setPositiveButton(R.string.update_download) { _, _ ->
-                if (apkUrl.isNotEmpty()) downloadAndInstall(apkUrl)
-                else openPage(page)
+                if (update.apkUrl.isNotEmpty()) downloadAndInstall(update.apkUrl)
+                else openPage(update.page)
             }
-            .setNeutralButton(R.string.skip_version) { _, _ -> prefs.seenUpdateTag = tag }
+            .setNeutralButton(R.string.skip_version) { _, _ -> prefs.seenUpdateTag = update.tag }
             .setNegativeButton(R.string.cancel, null)
             .show()
     }
@@ -721,7 +720,7 @@ class MainActivity : AppCompatActivity() {
             pendingInstallId = manager.enqueue(request)
             Toast.makeText(this, R.string.update_downloading, Toast.LENGTH_SHORT).show()
         } catch (_: Throwable) {
-            if (RELEASES_PAGE.isNotEmpty()) openPage(RELEASES_PAGE)
+            openPage(UpdateCheck.PAGE)
         }
     }
 
@@ -737,16 +736,10 @@ class MainActivity : AppCompatActivity() {
         } catch (_: Throwable) {
             AlertDialog.Builder(this)
                 .setMessage(R.string.update_failed)
-                .setPositiveButton(R.string.open_page) { _, _ -> openPage(RELEASES_PAGE) }
+                .setPositiveButton(R.string.open_page) { _, _ -> openPage(UpdateCheck.PAGE) }
                 .setNegativeButton(R.string.cancel, null)
                 .show()
         }
-    }
-
-    companion object {
-        // Where this port publishes releases; the check reads the latest one.
-        private const val RELEASES_PAGE = "https://github.com/typhon-op/pes2017-recomp/releases/latest"
-        private const val RELEASES_API = "https://api.github.com/repos/typhon-op/pes2017-recomp/releases/latest"
     }
 
     private fun showLastCrash(crash: String) {

@@ -104,14 +104,14 @@
 
         <Button
             android:id="@+id/edit_reset_one"
-            style="?android:attr/buttonStyleSmall"
+            style="@style/EditorButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/reset_one" />
 
         <Button
             android:id="@+id/edit_reset_all"
-            style="?android:attr/buttonStyleSmall"
+            style="@style/EditorButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="6dp"
@@ -119,7 +119,7 @@
 
         <Button
             android:id="@+id/edit_done"
-            style="?android:attr/buttonStyleSmall"
+            style="@style/EditorButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="6dp"

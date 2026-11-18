@@ -101,11 +101,22 @@ class ControlEditPanel(
         }
     }
 
+    /**
+     * A button of the editor's own strip.
+     *
+     * The style is given here rather than by the theme: the editor runs under
+     * the game's theme, which has no buttonStyle of its own, so a plain Button
+     * came out as AppCompat's stock grey slab. [R.style.EditorButton] is the
+     * strip's transparent blue, and every button of the strip asks for it --
+     * the ones built here and the three in edit_panel.xml.
+     */
+    private fun editorButton(): Button = Button(activity, null, 0, R.style.EditorButton)
+
     /** The upper row of [actions]: the buttons that act on the selection. */
     private fun toolRow(): LinearLayout =
         ((actions.getChildAt(0) as HorizontalScrollView).getChildAt(0) as LinearLayout)
     /** Shown while a swipe control or an action button is selected: what each direction sends. */
-    private val swipes: Button = Button(activity).apply {
+    private val swipes: Button = editorButton().apply {
         setText(R.string.swipe_bindings)
         textSize = 12f
         minWidth = 0
@@ -115,7 +126,7 @@ class ControlEditPanel(
     }
 
     /** Shown while the skill wheel is selected: what each of its eight sectors plays. */
-    private val wheel: Button = Button(activity).apply {
+    private val wheel: Button = editorButton().apply {
         setText(R.string.skill_wheel)
         textSize = 12f
         minWidth = 0
@@ -129,7 +140,7 @@ class ControlEditPanel(
      * a slot saves into it, and a slot that is already taken asks before it is
      * replaced, so a tap can never quietly lose a pad.
      */
-    private val saveLayout: Button = Button(activity).apply {
+    private val saveLayout: Button = editorButton().apply {
         setText(R.string.layout_save)
         textSize = 12f
         minWidth = 0
@@ -142,7 +153,7 @@ class ControlEditPanel(
      * dialog is under More, but a player who has just arranged a pad looks for
      * Save first; burying it two menus deep is the reason it read as missing.
      */
-    private val layouts: Button = Button(activity).apply {
+    private val layouts: Button = editorButton().apply {
         setText(R.string.layout_menu)
         textSize = 12f
         minWidth = 0
@@ -151,7 +162,7 @@ class ControlEditPanel(
     }
 
     /** TG1/TG2: which saved layout the toggle puts on screen. */
-    private val mapping: Button = Button(activity).apply {
+    private val mapping: Button = editorButton().apply {
         setText(R.string.toggle_mapping)
         textSize = 12f
         minWidth = 0
@@ -189,7 +200,7 @@ class ControlEditPanel(
         toolRow().addView(mapping, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
         ).apply { marginStart = (6 * dp).roundToInt() })
-        val more = Button(activity).apply {
+        val more = editorButton().apply {
             setText(R.string.edit_more)
             textSize = 12f
             minWidth = 0
@@ -355,6 +366,8 @@ class ControlEditPanel(
                         onYes()
                     },
                 ),
+                // Cancel is this page's way back, so the menu does not print a second one.
+                backRow = false,
             )
         }
     }

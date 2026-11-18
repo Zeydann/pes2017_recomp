@@ -9,6 +9,9 @@ import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.os.SystemClock
 import android.text.InputType
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.ForegroundColorSpan
 import android.view.Gravity
 import android.view.InputDevice
 import android.view.KeyEvent
@@ -73,6 +76,12 @@ class PesMenu(
         val submit: String = "",
         val onSubmit: (List<String>) -> Unit = {},
         val hint: String = "",
+        /**
+         * Whether the page wants the menu's own Back row. A page that already
+         * prints a way back of its own -- a prompt's Cancel, an empty list's
+         * Close -- sets this to false, so the way up is never offered twice.
+         */
+        val backRow: Boolean = true,
     )
 
     private val density = activity.resources.displayMetrics.density
@@ -92,6 +101,13 @@ class PesMenu(
     private val hintLine = TextView(activity)
 
     private val stack = ArrayList<(PesMenu) -> Screen>()
+
+    /**
+     * The heading of every page on [stack], kept as the pages are rendered so a
+     * submenu's Back row can name the page it returns to without building that
+     * page a second time.
+     */
+    private val titles = ArrayList<String>()
     private var screen: Screen? = null
     private var index = 0
     private val rows = ArrayList<Row>()
@@ -137,7 +153,26 @@ class PesMenu(
         panel.layoutParams = FrameLayout.LayoutParams(panelWidth, ViewGroup.LayoutParams.MATCH_PARENT)
         panel.setPadding(dp(16), dp(18), dp(14), dp(12))
 
-        brand.text = "PES 2017"
+        // "PES 2017 | Typhon Lhoucine": the title keeps the size, typeface,
+        // letter spacing and colour it always had, the name sits beside it on
+        // the same condensed line, and the bar between them is the dimmer cyan,
+        // so the pair reads as one header rather than two labels. The line wraps
+        // rather than ellipsizing: the whole name has to be readable even on the
+        // narrowest panel.
+        brand.text = SpannableStringBuilder("PES 2017").apply {
+            val barAt = length
+            append(" | ")
+            setSpan(
+                ForegroundColorSpan(COLOR_HEADER_BAR), barAt, length,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+            )
+            val nameAt = length
+            append(OWNER)
+            setSpan(
+                ForegroundColorSpan(COLOR_HEADER_NAME), nameAt, length,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+            )
+        }
         brand.setTextColor(0xFF57C7FF.toInt())
         brand.textSize = 10f
         brand.letterSpacing = 0.32f
@@ -208,7 +243,15 @@ class PesMenu(
     /** Opens the dialog on [build], replacing whatever stack was there. */
     fun open(build: (PesMenu) -> Screen) {
         stack.clear()
+        titles.clear()
         stack.add(build)
+        // A fresh visit: whatever ended the previous one (dismissNow, a close)
+        // must not leave this page unable to push or to go back. An instance is
+        // normally used once, but a menu that silently refused to navigate
+        // because of a flag from an earlier life is exactly the stuck submenu
+        // this class is supposed to make impossible.
+        closing = false
+        closedOnce = false
         if (!isShowing) {
             panel.alpha = 0f
             panel.translationX = -dp(28).toFloat()
@@ -221,6 +264,12 @@ class PesMenu(
     /** Opens [build] on top of the current screen, as a submenu. */
     fun push(build: (PesMenu) -> Screen) {
         if (closing) return
+        // A push on a menu that is not on screen would be a page nobody can
+        // see or leave: open it as the root instead.
+        if (!isShowing) {
+            open(build)
+            return
+        }
         stack.add(build)
         showScreen(build, keepSelection = false)
         rebrand()
@@ -276,6 +325,9 @@ class PesMenu(
         val next = build(this)
         val previous = index
         screen = next
+        while (titles.size > stack.size) titles.removeAt(titles.size - 1)
+        if (titles.size == stack.size) titles[stack.size - 1] = next.title
+        else titles.add(next.title)
         rows.clear()
         rows.addAll(next.rows)
         val selection = MenuSelection(rows.map { it.enabled }, if (keepSelection) previous else 0)
@@ -285,6 +337,12 @@ class PesMenu(
             scroll.post { scroll.scrollTo(0, 0) }
         }
     }
+
+    /** The row that leaves this page for the one under it, named for its parent. */
+    private fun backRow(): Row = Row(
+        activity.getString(R.string.back),
+        detail = titles.getOrNull(stack.size - 2).orEmpty(),
+    ) { it.back() }
 
     private fun rebrand() {
         // A submenu is a new page: the panel eases in from the left, the same
@@ -303,6 +361,20 @@ class PesMenu(
         body.removeAllViews()
         rowViews.clear()
         fieldViews.clear()
+
+        // Every page above the root prints its way back to the page under it,
+        // first in the panel, where a long list cannot push it out of sight.
+        // B and the system's back gesture do the same thing, so a player on a
+        // pad loses nothing and a player on glass never has to know a key to
+        // leave a submenu. It names the parent, so it can only lead one level
+        // up, and it is not one of the page's rows: the band and the pickers'
+        // indices are exactly what they were.
+        if (stack.size > 1 && current.backRow) {
+            body.addView(
+                RowView(backRow(), BACK_ROW),
+                LinearLayout.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            )
+        }
 
         for (field in current.fields) {
             body.addView(fieldLabel(field.label))
@@ -463,8 +535,11 @@ class PesMenu(
         private val bandPaint = Paint(Paint.ANTI_ALIAS_FLAG)
         private val edgePaint = Paint(Paint.ANTI_ALIAS_FLAG)
         private val linePaint = Paint(Paint.ANTI_ALIAS_FLAG)
-        private val label = TextView(activity)
-        private val detail = TextView(activity)
+        // Both scroll when they do not fit, and sit still when they do: a row
+        // that cuts a saved pad's name or a bound command into "LB + LS U..."
+        // is the menu failing to say what it means.
+        private val label = MarqueeText(activity)
+        private val detail = MarqueeText(activity)
         private val tick = TextView(activity)
         private val chevron = TextView(activity)
         private val chosenBackground = GradientDrawable(
@@ -497,14 +572,11 @@ class PesMenu(
             label.textSize = 14.5f
             label.letterSpacing = 0.05f
             label.isAllCaps = true
-            label.maxLines = 1
-            label.ellipsize = android.text.TextUtils.TruncateAt.END
             label.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
 
             detail.typeface = bodyType
             detail.textSize = 11.5f
             detail.gravity = Gravity.END
-            detail.maxLines = 1
             detail.setPadding(dp(8), 0, dp(4), 0)
 
             tick.typeface = bodyType
@@ -532,6 +604,12 @@ class PesMenu(
 
             setOnClickListener {
                 if (!row.enabled) return@setOnClickListener
+                // The Back row is not a page row: a tap leaves the page rather
+                // than moving the band onto something that is not a choice.
+                if (rowIndex == BACK_ROW) {
+                    row.activate?.invoke(this@PesMenu)
+                    return@setOnClickListener
+                }
                 if (index != rowIndex) {
                     index = rowIndex
                     paintSelection(scrollTo = true)
@@ -543,6 +621,15 @@ class PesMenu(
                 adjust(row, -1)
                 true
             }
+        }
+
+        override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+            super.onSizeChanged(w, h, oldw, oldh)
+            // The value column is capped, never the name: a long value would
+            // otherwise claim the row's whole width and squeeze the name out of
+            // sight, which is the same cut-off in another form. It is set from
+            // the measured row, so it follows a rotation or a different screen.
+            detail.maxWidth = (w * DETAIL_SHARE).toInt()
         }
 
         private fun restyle() {
@@ -583,6 +670,12 @@ class PesMenu(
         private const val PANEL_FRACTION = 0.46f
         private const val PANEL_MAX_DP = 380f
 
+        /** The Back row's place in a page: not one of its own rows, so never lit. */
+        private const val BACK_ROW = -1
+
+        /** The most of a row's width its value may take; the name keeps the rest. */
+        private const val DETAIL_SHARE = 0.45f
+
         private const val STICK_DEADZONE = 0.6f
         private const val STICK_REPEAT_MS = 170L
 
@@ -591,6 +684,11 @@ class PesMenu(
         private const val CLOSE_MS = 160L
 
         private const val DIM = 0.45f
+
+        /** Whose build this is, printed beside the title in the panel's header. */
+        private const val OWNER = "Typhon Lhoucine"
+        private const val COLOR_HEADER_NAME = 0xFFEAF4FF.toInt()
+        private const val COLOR_HEADER_BAR = 0x9957C7FF.toInt()
 
         private const val PANEL_TOP = 0xF2071B3D.toInt()
         private const val PANEL_BOTTOM = 0xF20A2F66.toInt()

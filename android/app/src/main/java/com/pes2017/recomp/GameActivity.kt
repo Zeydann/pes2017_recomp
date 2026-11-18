@@ -1052,6 +1052,8 @@ class GameActivity : AppCompatActivity(), NativeListener {
                 quit()
             },
         ),
+        // Cancel is this page's way back, so the menu does not print a second one.
+        backRow = false,
     )
 
     /** A physical pad took over: the touch pad is out of the way until the screen is touched. */
@@ -1433,6 +1435,8 @@ class GameActivity : AppCompatActivity(), NativeListener {
                 getString(R.string.macro_play),
                 message = getString(R.string.macro_none),
                 rows = listOf(PesMenu.Row(getString(R.string.close)) { it.back() }),
+                // Close is this page's way back, so the menu does not print a second one.
+                backRow = false,
             )
         }
         val rows = names.map { name ->

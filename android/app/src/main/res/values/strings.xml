@@ -3,7 +3,7 @@
     <!-- app_name is set in build.gradle.kts. -->
     <string name="check_updates">CHECK FOR UPDATES</string>
     <string name="quit_launcher">QUIT</string>
-    <string name="up_to_date">This is the newest version.</string>
+    <string name="up_to_date">This is the newest published version (%1$s).</string>
 
     <!-- launcher -->
     <string name="graphics_driver">Graphics driver</string>
@@ -15,9 +15,9 @@
     <string name="qg_menu">Graphics &amp; performance</string>
     <string name="qg_title">Graphics &amp; performance</string>
     <string name="qg_preset">Preset</string>
-    <string name="qg_scene">Scene resolution: %1$d%%</string>
-    <string name="qg_scale">Internal resolution: %1$dx (1x = 1280x720; 2x or 3x for powerful GPUs)</string>
-    <string name="qg_fps">Frame rate limit: %1$d</string>
+    <string name="qg_scene">Scene resolution</string>
+    <string name="qg_scale">Internal resolution</string>
+    <string name="qg_fps">Frame rate limit</string>
     <string name="qg_msaa">Anti-aliasing (MSAA)</string>
     <string name="qg_fsr">FSR upscaler</string>
     <string name="qg_heat">Lower the picture as the phone heats</string>
@@ -120,7 +120,12 @@
 
     <!-- self-update -->
     <string name="update_title">Update available: %1$s</string>
-    <string name="update_message">This install is build %1$d, the release carries build %2$d.\n\nOpen the release page and install the APK over this one — no uninstall, no data loss.</string>
+    <string name="update_message">This install is %1$s. The release is %2$s.\n\nOpen the release page and install the APK over this one — no uninstall, no data loss.</string>
+    <string name="build_label">%1$s (build %2$d)</string>
+    <string name="update_check_none">No releases have been published yet.</string>
+    <string name="update_check_offline">Could not check for updates: no internet connection.</string>
+    <string name="update_check_failed">Could not check for updates: %1$s.</string>
+    <string name="update_check_rate_limited">Could not check for updates: GitHub is rate-limiting this network. Try again later.</string>
     <string name="update_download">Download &amp; install</string>
     <string name="update_downloading">Downloading update…</string>
     <string name="update_failed">The download failed. Open the release page instead.</string>
