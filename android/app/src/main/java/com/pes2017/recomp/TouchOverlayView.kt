@@ -134,6 +134,9 @@ class TouchOverlayView @JvmOverloads constructor(
     private var twoStagePointer = -1
     private var twoStageSprint = false
 
+    /** Whether the movement stick is out far enough to run (see SprintLatch). */
+    private val sprintLatch = SprintLatch()
+
     /**
      * The team mentality pair's lock: one tap, one double press of the d-pad, and
      * a second tap inside it is dropped rather than queued (PadGestures.kt).
@@ -701,7 +704,6 @@ class TouchOverlayView @JvmOverloads constructor(
                 ControlKind.SWIPE -> Unit   // sent when the finger lifts, as a pulse
                 ControlKind.SKILL -> Unit   // fires once on the press, not as state
                 ControlKind.TRICK -> Unit   // fires once on the lift, not as state
-                ControlKind.STANCE -> Unit  // just swaps labels, never a bit
                 // The switch sends nothing and holds nothing: it changes which
                 // throw the left stick reads with, from the next sample on.
                 ControlKind.STICK_MODE -> Unit
@@ -747,11 +749,35 @@ class TouchOverlayView @JvmOverloads constructor(
             val right = StickShape.apply(rx, ry, prefs.rightStickDeadzone, prefs.rightStickCurve)
             rx = right[0]; ry = right[1]
         }
-        // The movement stick never sends RB: the rim and the two-stage ring are
-        // travel, and sprinting is the RB button's job (or a trigger's, through
-        // the editor's swipes). A stick that sprinted by itself turned every
-        // full-deflection run into an unintended R1 -- a menu key in the title's
-        // screens and a modifier everywhere else.
+        // A swiped stick throw: a synthetic full deflection, so it goes on after
+        // the shaping -- a deadzone in front of a command the player asked for
+        // by name would swallow it. It is a whole throw rather than an addition
+        // to the thumb's: the title reads the stick's angle, and two sources
+        // adding up would send a diagonal nobody asked for.
+        if (combo.flick != SwipeFlick.NONE) {
+            if (combo.flick.isLeft) {
+                lx = combo.flick.x
+                ly = combo.flick.y
+            } else {
+                rx = combo.flick.x
+                ry = combo.flick.y
+            }
+        }
+        // Sprint from the match stick's rim: a thumb all the way out runs until
+        // it comes back inside the latch's release point. Three guards keep it
+        // from becoming the old accidental R1 -- it is only the first stick
+        // (`"stick"`), only in the standard MATCH stage (the ring is gone from
+        // the MENU stage), and only while the title is on the pitch, so the
+        // stick can never press R1 in the title's own menus.
+        val sprintThrow = stickPositions[MOVE_STICK]
+        if (gamePhase == GamePhase.MATCH && prefs.stickStage == Prefs.STAGE_ONE &&
+            sprintThrow != null
+        ) {
+            sprintLatch.update(sprintThrow[0], sprintThrow[1])
+        } else {
+            sprintLatch.reset()
+        }
+        mixer.set(HoldSource.STICK_SPRINT, if (sprintLatch.active) NativeBridge.RB else 0)
 
         // Every source that wants a button down, merged rather than overwritten.
         // A source states the whole truth each frame, so nothing has to be
@@ -852,6 +878,7 @@ class TouchOverlayView @JvmOverloads constructor(
         swipeTrails.clear()
         skillReleaseUntil.clear()
         resetTwoStage()
+        sprintLatch.reset()
         cancelCombo()
         // Everything up is everything up, latches included. A pause, a reset or
         // the editor is exactly when a held bit would be invisible to the player
@@ -1225,16 +1252,6 @@ class TouchOverlayView @JvmOverloads constructor(
         // d-pad vanish the instant it is let go.
         if (released.element.kind == ControlKind.DPAD) wakeDpad()
         liveSwipes.remove(pointerId)
-        // The stance chip: one tap, one flip. A thumb that slid off it said
-        // something else and is not counted.
-        if (released.element.kind == ControlKind.STANCE) {
-            val start = pressedAt
-            val tapSlop = 18f * density
-            if (start == null || hypot(x - start[0], y - start[1]) <= tapSlop) {
-                triggerHaptic()
-                switchStance(if (stance == PadStance.DEFEND) PadStance.ATTACK else PadStance.DEFEND)
-            }
-        }
         // The two-stage switch: one tap, one flip, and a thumb that slid off it
         // said something else. Nothing is sent -- the mode changes what the left
         // stick reads on its next sample.
@@ -1390,7 +1407,12 @@ class TouchOverlayView @JvmOverloads constructor(
      */
     private fun emitSwipe(action: SwipeAction) {
         if (!action.bound) return
-        if (action.modifier == SwipeModifier.NONE && !action.doubleTap) {
+        // A plain tap-sized bit rides the press pulse. Anything with a shape to
+        // it -- a held modifier, a double tap, a stick throw, or a dwell the
+        // binding asked for -- is a sequence of held states.
+        if (action.modifier == SwipeModifier.NONE && !action.doubleTap &&
+            action.flick == SwipeFlick.NONE && action.holdMs == SwipeSequence.HOLD_MS
+        ) {
             pendingSwipes = pendingSwipes or action.bit
             return
         }
@@ -1957,7 +1979,6 @@ class TouchOverlayView @JvmOverloads constructor(
                 ControlKind.TACTICAL -> drawTactical(canvas, element, alpha, faded)
                 ControlKind.BUTTON, ControlKind.TRIGGER, ControlKind.SKILL, ControlKind.CUSTOM,
                 ControlKind.LATCH -> drawButton(canvas, element, alpha, faded)
-                ControlKind.STANCE -> drawStance(canvas, element, alpha, faded)
                 ControlKind.MENTALITY -> drawMentality(canvas, element, alpha, faded)
                 ControlKind.STICK_MODE -> drawStickMode(canvas, element, alpha, faded)
                 ControlKind.TRICK -> {
@@ -2100,8 +2121,6 @@ class TouchOverlayView @JvmOverloads constructor(
 
         // The stance chip: green on the attacking pad, steel blue on the
         // defending one, so which half the thumb is in is legible at a glance.
-        private const val COLOR_STANCE_ATTACK = 0xFF22C55E.toInt()
-        private const val COLOR_STANCE_DEFEND = 0xFF38BDF8.toInt()
 
         // The team mentality pair: green raises, blue lowers. Both are drawn as
         // low-opacity glass, so the pitch under them stays readable.
@@ -2150,35 +2169,6 @@ class TouchOverlayView @JvmOverloads constructor(
      */
     private fun caption(element: ControlElement): String =
         if (stance == PadStance.DEFEND && element.sub2.isNotEmpty()) element.sub2 else element.sub
-
-    /** The stance chip: ATK in green, DEF in blue, with the pressed halo. */
-    private fun drawStance(canvas: Canvas, element: ControlElement, alpha: Float, faded: Boolean) {
-        val r = radius(element)
-        val cx = centreX(element)
-        val cy = centreY(element)
-        val fade = if (faded) 0.45f else 1f
-        val defending = stance == PadStance.DEFEND
-        val colour = if (defending) COLOR_STANCE_DEFEND else COLOR_STANCE_ATTACK
-        if (isOn(element)) {
-            fill.color = Color.argb((alpha * fade * 90f).toInt().coerceIn(0, 255),
-                Color.red(colour), Color.green(colour), Color.blue(colour))
-            canvas.drawCircle(cx, cy, r * 1.10f, fill)
-        }
-        fill.color = Color.argb((alpha * fade * 205f).toInt().coerceIn(0, 255), 12, 16, 24)
-        canvas.drawCircle(cx, cy, r, fill)
-        stroke.color = Color.argb(
-            (alpha * fade * (if (isOn(element)) 255 else 210)).toInt().coerceIn(0, 255),
-            Color.red(colour), Color.green(colour), Color.blue(colour),
-        )
-        stroke.strokeWidth = max(1.5f, r * 0.09f)
-        canvas.drawCircle(cx, cy, r - stroke.strokeWidth * 0.5f, stroke)
-        text.textSize = r * 0.60f
-        text.color = Color.argb((alpha * fade * 255).toInt().coerceIn(0, 255), 248, 250, 252)
-        canvas.drawText(
-            if (defending) "DEF" else "ATK",
-            cx, cy - (text.descent() + text.ascent()) * 0.5f, text,
-        )
-    }
 
     /**
      * One of the two team mentality buttons: a glass pill with rounded corners, a
@@ -2867,30 +2857,9 @@ class TouchOverlayView @JvmOverloads constructor(
         stroke.strokeWidth = max(1.5f, r * 0.035f)
         canvas.drawCircle(cx, cy, r - stroke.strokeWidth * 0.5f, stroke)
 
-        if (twoStaged) {
-            // The ring is real travel, so it is drawn: the socket's own rim is
-            // the boundary, and the dashed edge is as far out as the stick reads.
-            val dash = max(3f, r * 0.09f)
-            notchPaint.pathEffect = DashPathEffect(floatArrayOf(dash, dash * 0.8f), 0f)
-            notchPaint.color = Color.argb(
-                (alpha * fadeFactor * 140).toInt().coerceIn(0, 255), 34, 197, 94,
-            )
-            notchPaint.strokeWidth = max(1.5f, r * 0.03f)
-            canvas.drawCircle(
-                cx, cy, r * StickStage.OUTER_RADIUS - notchPaint.strokeWidth * 0.5f, notchPaint,
-            )
-            notchPaint.pathEffect = null
-            // The rim lights while the thumb is out in the ring. The ring is
-            // travel and nothing else now -- it sends no bit -- so the light is
-            // feedback, not a held key.
-            if (twoStageSprint && !faded) {
-                stroke.color = Color.argb(
-                    (alpha * fadeFactor * 235).toInt().coerceIn(0, 255), 34, 197, 94,
-                )
-                stroke.strokeWidth = max(2f, r * 0.07f)
-                canvas.drawCircle(cx, cy, r - stroke.strokeWidth * 0.5f, stroke)
-            }
-        }
+        // No second rim is drawn: the MENU stage's ring was the outer circle,
+        // and the only sprint is the match stick's own rim being out at its
+        // edge, so an extra ring would mark travel that no longer exists.
 
         // 4 Cardinal Guide Notches on the outer socket perimeter (Xbox stick housing style)
         val notchLen = r * 0.10f
@@ -3204,25 +3173,72 @@ class TouchOverlayView @JvmOverloads constructor(
      *
      * A dimmed circle alone is ambiguous -- the editor already fades controls
      * that belong to another phase -- so the state gets a word as well as a
-     * colour. Sized from the text rather than the control, so it stays legible
-     * on the smallest button the editor allows.
+     * colour. One pill for every control: its size follows the word, not the
+     * control, within a narrow band of sizes, so an L3 and the movement stick
+     * carry the same tag instead of one twice the other's. The padding is a
+     * share of the text, the gap is the same, and the pill is kept inside the
+     * view -- under the control when it fits and over it when the control sits
+     * on the bottom edge, which is where the toggles and the thumb clicks live.
      */
     private fun drawOffBadge(canvas: Canvas, element: ControlElement) {
         val r = radius(element)
         val cx = centreX(element)
         val cy = centreY(element)
-        subText.textSize = max(8f * density, r * 0.30f)
-        val textWidth = subText.measureText(OFF_BADGE)
-        val padX = 6f * density
-        val height = max(14f * density, r * 0.44f)
-        val halfWidth = textWidth / 2f + padX
-        val top = cy + r + 4f * density
-        box.set(cx - halfWidth, top, cx + halfWidth, top + height)
+        // The shape the control actually draws. Three of them are not the
+        // circle a radius describes -- the look area is a flattened rectangle
+        // and the two pills (mentality, stick mode) are drawn at half the
+        // radius' height -- so anchoring at `cy + r` left their badge floating
+        // in empty space while a round button's sat snug under it.
+        val halfWidthOfControl: Float
+        val halfHeightOfControl: Float
+        when (element.kind) {
+            ControlKind.LOOK -> {
+                halfWidthOfControl = element.sizeOn(stance) * density * 0.5f
+                halfHeightOfControl = halfWidthOfControl * 0.62f
+            }
+            ControlKind.MENTALITY -> {
+                halfWidthOfControl = r
+                halfHeightOfControl = r * 0.48f
+            }
+            ControlKind.STICK_MODE -> {
+                halfWidthOfControl = r
+                halfHeightOfControl = r * 0.50f
+            }
+            else -> {
+                halfWidthOfControl = r
+                halfHeightOfControl = r
+            }
+        }
+
+        val textSize = (r * 0.28f).coerceIn(8f * density, 11f * density)
+        subText.textSize = textSize
+        val padX = textSize * 0.60f
+        val pillHeight = textSize * 1.65f
+        val gap = textSize * 0.30f
+        val halfWidth = subText.measureText(OFF_BADGE) / 2f + padX
+
+        // Below when there is room, above otherwise, so a control on the
+        // bottom row cannot push its badge off the screen.
+        val belowTop = cy + halfHeightOfControl + gap
+        val aboveTop = cy - halfHeightOfControl - gap - pillHeight
+        val top = when {
+            belowTop + pillHeight + 2f * density <= height.toFloat() -> belowTop
+            aboveTop >= 2f * density -> aboveTop
+            else -> (height.toFloat() - pillHeight - 2f * density).coerceAtLeast(2f * density)
+        }
+        // And kept horizontally inside: a control at the right edge (R3, the
+        // far toggles) had its pill run under the cutout.
+        val centre = cx.coerceIn(
+            halfWidth + 2f * density,
+            max(halfWidth + 2f * density, width - halfWidth - 2f * density),
+        )
+        box.set(centre - halfWidth, top, centre + halfWidth, top + pillHeight)
         fill.color = COLOR_OFF
-        canvas.drawRoundRect(box, height / 2f, height / 2f, fill)
+        canvas.drawRoundRect(box, pillHeight / 2f, pillHeight / 2f, fill)
         subText.color = Color.WHITE
         canvas.drawText(
-            OFF_BADGE, cx, top + height / 2f - (subText.descent() + subText.ascent()) / 2f, subText,
+            OFF_BADGE, box.centerX(),
+            top + pillHeight / 2f - (subText.descent() + subText.ascent()) / 2f, subText,
         )
     }
 

@@ -39,6 +39,12 @@ enum class HoldSource {
     MACRO_SEQUENCE,
 
     /**
+     * The match stick held out at its rim: a run, which the title reads as R1.
+     * Only the first movement stick in the standard stage ever uses it.
+     */
+    STICK_SPRINT,
+
+    /**
      * The modifier of a swipe on a button that is being held to charge. A
      * charged chip shot is the modifier arriving while the shoot bit is already
      * down, so this source rides alongside the thumb instead of being a timed

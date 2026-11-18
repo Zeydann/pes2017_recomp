@@ -8,14 +8,13 @@ import org.junit.Test
 import kotlin.math.hypot
 
 /**
- * The defensive half of the default pad (ControlLayout.defaults): the stance
- * chip, the near-thumb player switch, and the second line each action button
- * carries when the defending pad is out.
+ * The defensive half of the default pad (ControlLayout.defaults): the near-thumb
+ * player switch, and the second line each action button carries when the
+ * defending pad is out.
  *
- * The geometry checks are deliberate: the chip and the switch are the two
- * controls added beside a cluster that is already tight, so a future change that
- * moves one of them onto a neighbour fails here rather than being discovered by
- * a thumb.
+ * The geometry checks are deliberate: the switch sits beside a cluster that is
+ * already tight, so a future change that moves it onto a neighbour fails here
+ * rather than being discovered by a thumb.
  */
 class DefensiveLayoutTest {
 
@@ -32,13 +31,10 @@ class DefensiveLayoutTest {
     // ---- what ships ---------------------------------------------------------
 
     @Test
-    fun theStanceChipShipsOnTheMatchPad() {
-        val chip = layout().find("stance")
-        assertNotNull(chip)
-        chip!!
-        assertEquals(ControlKind.STANCE, chip.kind)
-        assertEquals(PhaseMask.MATCH, chip.shownWhen)
-        assertTrue(chip.visible)
+    fun thePadHasNoOnScreenStanceChip() {
+        // The stance is chosen in Settings now: a pad that still drew a chip
+        // would be a control nothing handles.
+        assertEquals(null, layout().find("stance"))
     }
 
     @Test
@@ -98,8 +94,8 @@ class DefensiveLayoutTest {
             if (other === near || other.kind == ControlKind.LOOK) continue
             if (!other.shownIn(GamePhase.MATCH, PadStance.DEFEND)) continue
             if (!other.visible) continue
-            // The attacking LB is not on the defending pad, but the chip is not
-            // either: compare only what actually coexists.
+            // The attacking LB is not on the defending pad: compare only what
+            // actually coexists.
             if (other.id == "lb") continue
             assertTrue(
                 "defending switch overlaps ${other.id}",
@@ -108,16 +104,4 @@ class DefensiveLayoutTest {
         }
     }
 
-    // ---- the chip holds nothing ---------------------------------------------
-
-    @Test
-    fun theStanceChipNeverHoldsABit() {
-        val claims = TouchClaims()
-        val chip = ControlElement("stance", ControlKind.STANCE, 0, "ATK", 0.5f, 0.5f, 40f)
-        claims.press(7, chip)
-        assertFalse("a stance flip is not a button", claims.isOn("stance"))
-        assertEquals("and nothing reaches the guest as a press", 0, claims.takeNewPresses())
-        claims.release(7)
-        assertFalse(claims.isOn("stance"))
-    }
 }

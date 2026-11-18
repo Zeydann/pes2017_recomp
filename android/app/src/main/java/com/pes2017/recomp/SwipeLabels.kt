@@ -19,6 +19,15 @@ object SwipeLabels {
      */
     fun describe(element: ControlElement, action: SwipeAction): String {
         if (!action.bound) return ""
+        // A stick throw is its own vocabulary: "LS Up", "LB + RS Left". It has
+        // no button to name and no PES command to resolve to, so it is read the
+        // same way on every control.
+        if (action.flick != SwipeFlick.NONE && action.bit == 0) {
+            return when (action.modifier) {
+                SwipeModifier.NONE -> flickName(action.flick)
+                else -> modifierName(action.modifier) + " + " + flickName(action.flick)
+            }
+        }
         // The role follows the command the gesture actually sends, not only the
         // control's own bit: a spare (C1..C10) holds nothing itself, and its
         // directions are bound to face buttons. A spare bound to LB + Y is
@@ -107,7 +116,21 @@ object SwipeLabels {
         }
     }
 
-    private fun modifierName(modifier: SwipeModifier): String = when (modifier) {
+    /** How a stick throw reads in the editor and in a floating label. */
+    fun flickName(flick: SwipeFlick): String = when (flick) {
+        SwipeFlick.NONE -> ""
+        SwipeFlick.LS_UP -> "LS Up"
+        SwipeFlick.LS_DOWN -> "LS Down"
+        SwipeFlick.LS_LEFT -> "LS Left"
+        SwipeFlick.LS_RIGHT -> "LS Right"
+        SwipeFlick.RS_UP -> "RS Up"
+        SwipeFlick.RS_DOWN -> "RS Down"
+        SwipeFlick.RS_LEFT -> "RS Left"
+        SwipeFlick.RS_RIGHT -> "RS Right"
+    }
+
+    /** How a held modifier reads: "LB", "RT". */
+    fun modifierName(modifier: SwipeModifier): String = when (modifier) {
         SwipeModifier.LB -> "LB"
         SwipeModifier.RB -> "RB"
         SwipeModifier.LT -> "LT"

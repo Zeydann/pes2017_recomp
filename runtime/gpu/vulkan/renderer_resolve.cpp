@@ -123,16 +123,31 @@ namespace vk::renderer::detail
             info.flags |= VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
             info.pNext = &list;
         }
-        if (vkCreateImage(g.device, &info, nullptr, &into.image) != VK_SUCCESS) return false;
+        if (vkCreateImage(g.device, &info, nullptr, &into.image) != VK_SUCCESS)
+        {
+            LOGW("renderer: vkCreateImage failed for a %ux%u resolve destination",
+                 HostOf(width, scale), HostOf(height, scale));
+            return false;
+        }
 
         VkMemoryRequirements needs{};
         vkGetImageMemoryRequirements(g.device, into.image, &needs);
         const uint32_t type = FindMemory(needs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-        if (type == UINT32_MAX) return false;
+        if (type == UINT32_MAX)
+        {
+            LOGW("renderer: no device-local memory type for a %ux%u resolve destination",
+                 HostOf(width, scale), HostOf(height, scale));
+            return false;
+        }
         VkMemoryAllocateInfo allocate{ VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO };
         allocate.allocationSize = needs.size;
         allocate.memoryTypeIndex = type;
-        if (vkAllocateMemory(g.device, &allocate, nullptr, &into.memory) != VK_SUCCESS) return false;
+        if (vkAllocateMemory(g.device, &allocate, nullptr, &into.memory) != VK_SUCCESS)
+        {
+            LOGW("renderer: %llu bytes for a %ux%u resolve destination could not be allocated",
+                 (unsigned long long)needs.size, HostOf(width, scale), HostOf(height, scale));
+            return false;
+        }
         vkBindImageMemory(g.device, into.image, into.memory, 0);
 
         VkImageViewCreateInfo view{ VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
@@ -143,7 +158,12 @@ namespace vk::renderer::detail
         view.subresourceRange = { VkImageAspectFlags(depth ? VK_IMAGE_ASPECT_DEPTH_BIT
                                                            : VK_IMAGE_ASPECT_COLOR_BIT),
                                   0, 1, 0, 1 };
-        if (vkCreateImageView(g.device, &view, nullptr, &into.view) != VK_SUCCESS) return false;
+        if (vkCreateImageView(g.device, &view, nullptr, &into.view) != VK_SUCCESS)
+        {
+            LOGW("renderer: no view for a %ux%u resolve destination",
+                 HostOf(width, scale), HostOf(height, scale));
+            return false;
+        }
         if (srgb != VK_FORMAT_UNDEFINED)
         {
             view.format = srgb;
@@ -345,6 +365,81 @@ namespace vk::renderer::detail
         g_pendingWriteBacks.clear();
     }
 
+    // A guest-sized copy of a scaled resolve's pixels, for a write-back.
+    //
+    // With PES17_SCALE at 2 or 3 every resolve image is drawn at that many times
+    // the title's size, while guest memory stays the title's. Copying the image
+    // straight out therefore read only its top-left quarter into the kit's
+    // memory -- which is why the write-back was switched off whenever the scale
+    // was above 1, and why the textures the title builds that way (kits, numbers,
+    // the crowd's atlas) came out missing or corrupted at 2x. The blit below is
+    // the missing step: the resolve image is scaled down into this image first,
+    // and the buffer copy then reads exactly the title's pixels.
+    //
+    // One scratch image is enough: the blit into it and the buffer copy out of it
+    // are recorded next to each other in the command stream, so a later
+    // write-back's blit cannot overtake an earlier one's copy.
+    struct WriteBackScratch
+    {
+        VkImage image = VK_NULL_HANDLE;
+        VkDeviceMemory memory = VK_NULL_HANDLE;
+        VkFormat format = VK_FORMAT_UNDEFINED;
+        uint32_t width = 0, height = 0;
+    };
+    WriteBackScratch g_writeBackScratch;
+
+    VkImage ScaledWriteBackImage(const Resolved& into)
+    {
+        if (!into.width || !into.height || into.format == VK_FORMAT_UNDEFINED) return VK_NULL_HANDLE;
+        if (g_writeBackScratch.image && g_writeBackScratch.format == into.format &&
+            g_writeBackScratch.width >= into.width && g_writeBackScratch.height >= into.height)
+            return g_writeBackScratch.image;
+
+        if (g_writeBackScratch.image) RetireBeforeDestroy();
+        if (g_writeBackScratch.image) vkDestroyImage(g.device, g_writeBackScratch.image, nullptr);
+        if (g_writeBackScratch.memory) vkFreeMemory(g.device, g_writeBackScratch.memory, nullptr);
+        g_writeBackScratch = WriteBackScratch{};
+
+        VkImageCreateInfo info{ VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
+        info.imageType = VK_IMAGE_TYPE_2D;
+        info.format = into.format;
+        info.extent = { into.width, into.height, 1 };
+        info.mipLevels = 1;
+        info.arrayLayers = 1;
+        info.samples = VK_SAMPLE_COUNT_1_BIT;
+        info.tiling = VK_IMAGE_TILING_OPTIMAL;
+        info.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        if (vkCreateImage(g.device, &info, nullptr, &g_writeBackScratch.image) != VK_SUCCESS)
+        {
+            g_writeBackScratch.image = VK_NULL_HANDLE;
+            LOGW("renderer: no %ux%u image to scale a write-back into; the memory keeps what it had",
+                 into.width, into.height);
+            return VK_NULL_HANDLE;
+        }
+        VkMemoryRequirements needs{};
+        vkGetImageMemoryRequirements(g.device, g_writeBackScratch.image, &needs);
+        const uint32_t type = FindMemory(needs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        VkMemoryAllocateInfo allocate{ VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO };
+        allocate.allocationSize = needs.size;
+        allocate.memoryTypeIndex = type;
+        if (type == UINT32_MAX ||
+            vkAllocateMemory(g.device, &allocate, nullptr, &g_writeBackScratch.memory) != VK_SUCCESS ||
+            vkBindImageMemory(g.device, g_writeBackScratch.image, g_writeBackScratch.memory, 0) != VK_SUCCESS)
+        {
+            LOGW("renderer: no memory for a %ux%u write-back scratch", into.width, into.height);
+            vkDestroyImage(g.device, g_writeBackScratch.image, nullptr);
+            if (g_writeBackScratch.memory) vkFreeMemory(g.device, g_writeBackScratch.memory, nullptr);
+            g_writeBackScratch = WriteBackScratch{};
+            return VK_NULL_HANDLE;
+        }
+        g_writeBackScratch.format = into.format;
+        g_writeBackScratch.width = into.width;
+        g_writeBackScratch.height = into.height;
+        return g_writeBackScratch.image;
+    }
+
     void QueueWriteBack(Resolved& into, uint32_t destination, uint32_t va, uint32_t destX, uint32_t destY,
                         uint32_t width, uint32_t height, uint32_t pitchBlocks, uint32_t pitch, bool swap,
                         uint32_t endian)
@@ -366,7 +461,51 @@ namespace vk::renderer::detail
         RecordBarrier(into.image, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                       VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, 0, VK_ACCESS_TRANSFER_READ_BIT, kShaderStages,
                       VK_PIPELINE_STAGE_TRANSFER_BIT);
-        const VkImage image = into.image;
+        // The image is at the host scale; guest memory is the title's. Scale it
+        // down first, or the copy lands a corner of the picture in the kit's
+        // memory.
+        const uint32_t hostWidth = HostOf(into.width, into.scale);
+        const uint32_t hostHeight = HostOf(into.height, into.scale);
+        VkImage source = into.image;
+        if (hostWidth != into.width || hostHeight != into.height)
+        {
+            const VkImage scratch = ScaledWriteBackImage(into);
+            if (!scratch)
+            {
+                // No guest-sized copy: leave the memory as it was and let the
+                // fetch keep reading the resolve's own image.
+                RecordBarrier(into.image, VK_IMAGE_ASPECT_COLOR_BIT,
+                              VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                              VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 0, VK_ACCESS_SHADER_READ_BIT,
+                              VK_PIPELINE_STAGE_TRANSFER_BIT, kShaderStages);
+                GiveBackStaging(p.staging);
+                return;
+            }
+            RecordBarrier(scratch, VK_IMAGE_ASPECT_COLOR_BIT,
+                          VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                          0, VK_ACCESS_TRANSFER_WRITE_BIT, kShaderStages,
+                          VK_PIPELINE_STAGE_TRANSFER_BIT);
+            const VkImage image = into.image;
+            const uint32_t guestWidth = into.width, guestHeight = into.height;
+            Record([=](VkCommandBuffer command) {
+                VkImageBlit blit{};
+                blit.srcSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
+                blit.dstSubresource = blit.srcSubresource;
+                blit.srcOffsets[0] = { 0, 0, 0 };
+                blit.srcOffsets[1] = { int32_t(hostWidth), int32_t(hostHeight), 1 };
+                blit.dstOffsets[0] = { 0, 0, 0 };
+                blit.dstOffsets[1] = { int32_t(guestWidth), int32_t(guestHeight), 1 };
+                vkCmdBlitImage(command, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                               scratch, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit,
+                               VK_FILTER_LINEAR);
+            });
+            RecordBarrier(scratch, VK_IMAGE_ASPECT_COLOR_BIT,
+                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                          VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
+                          VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+            source = scratch;
+        }
+        const VkImage image = source;
         const VkBuffer buffer = p.staging.buffer;
         const uint32_t w = into.width, h = into.height;
         Record([=](VkCommandBuffer command) {
@@ -806,7 +945,7 @@ void vk::renderer::Resolve(const gpu::RegisterFile& r)
     // (held to 1024 it read zeros and the whole crowd was black). Area, not each side, is what costs.
     if (destInfo.Format() == 6 && into.format == VK_FORMAT_R8G8B8A8_UNORM &&
         surfaceWidth <= 2048 && surfaceHeight <= 2048 &&
-        uint64_t(surfaceWidth) * surfaceHeight <= 1024u * 1024u && g.scale == 1 && into.scale == 1.0f)
+        uint64_t(surfaceWidth) * surfaceHeight <= 1024u * 1024u && into.scale == 1.0f)
     {
         // The first 64 resolves of a destination. The kits reuse their scratch
         // destinations player after player -- a few dozen times in a load, in

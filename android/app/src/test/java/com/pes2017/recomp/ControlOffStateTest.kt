@@ -89,12 +89,12 @@ class HapticsPolicyTest {
     @Test
     fun aMomentaryActionButtonNeverGlows() {
         // The whole point of the change: cross, through, pass, shoot, start,
-        // select, the skill palette, the spares, the trick wheel and the stance
-        // chip keep their own resting look. A light on every one of them was the
-        // pad turned red.
+        // select, the skill palette, the spares, the trick wheel and the
+        // mentality pair keep their own resting look. A light on every one of
+        // them was the pad turned red.
         for (kind in listOf(
             ControlKind.BUTTON, ControlKind.TRIGGER, ControlKind.SKILL, ControlKind.CUSTOM,
-            ControlKind.TRICK, ControlKind.STANCE, ControlKind.MENTALITY,
+            ControlKind.TRICK, ControlKind.MENTALITY,
         )) {
             assertFalse("$kind", ControlOffState.showsRestGlow(kind, engaged = false, editing = false))
         }

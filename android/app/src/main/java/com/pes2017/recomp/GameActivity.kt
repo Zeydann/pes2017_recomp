@@ -86,6 +86,13 @@ class GameActivity : AppCompatActivity(), NativeListener {
 
     private val statsValues = FloatArray(9)
     private var started = false
+
+    /**
+     * Set while the pause dialog is open. The dialog is the pause: the guest is
+     * stopped behind it, and its dismissal is what starts it again -- unless the
+     * player went from it into the editor, which pauses for itself.
+     */
+    private var menuOpen = false
     private var cachedRendererInfo = ""
 
     private var cpuUsagePercent = -1f
@@ -921,6 +928,15 @@ class GameActivity : AppCompatActivity(), NativeListener {
     // ---- the pause menu ----------------------------------------------------------
 
     private fun showMenu() {
+        // Opening the menu is pausing, as the title's own Start does: the match
+        // must not keep running (and keep taking damage) behind a dialog, and a
+        // thumb resting on the pad must not fire through it.
+        if (!menuOpen) {
+            menuOpen = true
+            overlay.releaseEverything()
+            NativeBridge.nativeSetPaused(true)
+            setGameState(playing = false)
+        }
         // Built as a list: the invite entry only exists in the multiplayer
         // app, so fixed indices would point at the wrong rows there.
         val labels = mutableListOf(
@@ -939,9 +955,6 @@ class GameActivity : AppCompatActivity(), NativeListener {
         }
         labels.add(getString(if (prefs.touchControls) R.string.hide_touch_controls else R.string.show_touch_controls) to { _: android.content.DialogInterface -> setTouchControls(!prefs.touchControls) })
         labels.add(getString(if (prefs.gamepadEnabled) R.string.disable_gamepad else R.string.enable_gamepad) to { _: android.content.DialogInterface -> setGamepad(!prefs.gamepadEnabled) })
-        // Which pad is out is the player's call: the title does not report
-        // possession, so the app cannot switch by itself.
-        labels.add(getString(if (prefs.defendingPad) R.string.switch_to_attacking_pad else R.string.switch_to_defending_pad) to { _: android.content.DialogInterface -> setDefendingPad(!prefs.defendingPad) })
         labels.add(getString(R.string.qg_menu) to { _: android.content.DialogInterface ->
             QuickGraphics.show(this, prefs, onApply = { quit() }, onClose = { goFullscreen() })
         })
@@ -953,7 +966,16 @@ class GameActivity : AppCompatActivity(), NativeListener {
                 dialog.dismiss()
                 labels[which].second(dialog)
             }
-            .setOnDismissListener { goFullscreen() }
+            .setOnDismissListener {
+                menuOpen = false
+                // The editor paused for itself and starts its own resume on the
+                // way out; quitting leaves nothing to resume.
+                if (started && !overlay.editing) {
+                    NativeBridge.nativeSetPaused(false)
+                    setGameState(playing = true)
+                }
+                goFullscreen()
+            }
             .show()
     }
 
@@ -1102,8 +1124,12 @@ class GameActivity : AppCompatActivity(), NativeListener {
         goFullscreen()
         warnIfPowerSaving()
         if (!started) return
-        NativeBridge.nativeSetPaused(false)
-        setGameState(playing = true)
+        // A menu still open across a trip out of the app stays a pause: its own
+        // dismissal is what starts the match again.
+        if (!menuOpen) {
+            NativeBridge.nativeSetPaused(false)
+            setGameState(playing = true)
+        }
         // A trim while the window was away may have cut the texture cache.
         // Without this it stays cut, and every texture is uploaded again on
         // every draw for the rest of the run.

@@ -72,15 +72,6 @@ enum class ControlKind {
     STICK_MODE,
 
     /**
-     * The stance chip: one tap swaps the attacking pad for the defending one and
-     * back, with the labels following. It holds no bit of its own, so a flip
-     * can never leave a button or a trigger down; the title decides what the
-     * action buttons mean from possession, and this only changes what the pad
-     * says and which controls are arranged for which half of the game.
-     */
-    STANCE,
-
-    /**
      * A team mentality button: one tap sends two presses of the d-pad arm in
      * `value` -- up raises the mentality, down lowers it -- a beat apart, which
      * is how the title reads the change. Nothing is held, so a thumb cannot
@@ -261,6 +252,11 @@ data class ControlElement(
     var swipeDownDouble: Boolean = false,
     var swipeLeftDouble: Boolean = false,
     var swipeRightDouble: Boolean = false,
+    /** A stick throw a direction sends instead of a button, or [SwipeFlick.NONE]. */
+    var swipeUpFlick: SwipeFlick = SwipeFlick.NONE,
+    var swipeDownFlick: SwipeFlick = SwipeFlick.NONE,
+    var swipeLeftFlick: SwipeFlick = SwipeFlick.NONE,
+    var swipeRightFlick: SwipeFlick = SwipeFlick.NONE,
     /**
      * What a TRICK wheel plays in each sector, as an index into
      * runtime/skill_moves.h, or -1 for a sector with no move. The order is the
@@ -391,10 +387,10 @@ data class ControlElement(
 
     /** Everything one swipe direction sends: its bit, its modifier, its tap count. */
     internal fun swipeAction(direction: Swipe): SwipeAction = when (direction) {
-        Swipe.UP -> SwipeAction(swipeUp, swipeUpMod, swipeUpDouble)
-        Swipe.DOWN -> SwipeAction(swipeDown, swipeDownMod, swipeDownDouble)
-        Swipe.LEFT -> SwipeAction(swipeLeft, swipeLeftMod, swipeLeftDouble)
-        Swipe.RIGHT -> SwipeAction(swipeRight, swipeRightMod, swipeRightDouble)
+        Swipe.UP -> SwipeAction(swipeUp, swipeUpMod, swipeUpDouble, swipeUpFlick)
+        Swipe.DOWN -> SwipeAction(swipeDown, swipeDownMod, swipeDownDouble, swipeDownFlick)
+        Swipe.LEFT -> SwipeAction(swipeLeft, swipeLeftMod, swipeLeftDouble, swipeLeftFlick)
+        Swipe.RIGHT -> SwipeAction(swipeRight, swipeRightMod, swipeRightDouble, swipeRightFlick)
         Swipe.NONE -> SwipeAction(swipeTap)
     }
 
@@ -402,16 +398,20 @@ data class ControlElement(
     internal fun setSwipeAction(direction: Swipe, action: SwipeAction) {
         when (direction) {
             Swipe.UP -> {
-                swipeUp = action.bit; swipeUpMod = action.modifier; swipeUpDouble = action.doubleTap
+                swipeUp = action.bit; swipeUpMod = action.modifier
+                swipeUpDouble = action.doubleTap; swipeUpFlick = action.flick
             }
             Swipe.DOWN -> {
-                swipeDown = action.bit; swipeDownMod = action.modifier; swipeDownDouble = action.doubleTap
+                swipeDown = action.bit; swipeDownMod = action.modifier
+                swipeDownDouble = action.doubleTap; swipeDownFlick = action.flick
             }
             Swipe.LEFT -> {
-                swipeLeft = action.bit; swipeLeftMod = action.modifier; swipeLeftDouble = action.doubleTap
+                swipeLeft = action.bit; swipeLeftMod = action.modifier
+                swipeLeftDouble = action.doubleTap; swipeLeftFlick = action.flick
             }
             Swipe.RIGHT -> {
-                swipeRight = action.bit; swipeRightMod = action.modifier; swipeRightDouble = action.doubleTap
+                swipeRight = action.bit; swipeRightMod = action.modifier
+                swipeRightDouble = action.doubleTap; swipeRightFlick = action.flick
             }
             Swipe.NONE -> swipeTap = action.bit
         }
@@ -536,7 +536,9 @@ class ControlLayout private constructor(
                 item.put("defend", defend)
             }
             if (element.swipeUp != 0 || element.swipeDown != 0 ||
-                element.swipeLeft != 0 || element.swipeRight != 0 || element.swipeTap != 0
+                element.swipeLeft != 0 || element.swipeRight != 0 || element.swipeTap != 0 ||
+                element.swipeUpFlick != SwipeFlick.NONE || element.swipeDownFlick != SwipeFlick.NONE ||
+                element.swipeLeftFlick != SwipeFlick.NONE || element.swipeRightFlick != SwipeFlick.NONE
             ) {
                 item.put("swipes", JSONArray(listOf(element.swipeUp, element.swipeDown,
                     element.swipeLeft, element.swipeRight, element.swipeTap)))
@@ -549,7 +551,9 @@ class ControlLayout private constructor(
                 element.swipeLeftMod != SwipeModifier.NONE ||
                 element.swipeRightMod != SwipeModifier.NONE ||
                 element.swipeUpDouble || element.swipeDownDouble ||
-                element.swipeLeftDouble || element.swipeRightDouble
+                element.swipeLeftDouble || element.swipeRightDouble ||
+                element.swipeUpFlick != SwipeFlick.NONE || element.swipeDownFlick != SwipeFlick.NONE ||
+                element.swipeLeftFlick != SwipeFlick.NONE || element.swipeRightFlick != SwipeFlick.NONE
             ) {
                 val actions = JSONArray()
                 for (direction in DIRECTIONS) {
@@ -558,6 +562,7 @@ class ControlLayout private constructor(
                     entry.put("b", action.bit)
                     if (action.modifier != SwipeModifier.NONE) entry.put("m", action.modifier.name)
                     if (action.doubleTap) entry.put("d", true)
+                    if (action.flick != SwipeFlick.NONE) entry.put("s", action.flick.name)
                     actions.put(entry)
                 }
                 item.put("swipeActions", actions)
@@ -629,9 +634,10 @@ class ControlLayout private constructor(
          * The layout file's version. 8 folds the separate defending-pad copies
          * back onto the one canonical map (see [foldDefendOverrides]), so a
          * layout written by an older build cannot leave two controls in the
-         * same place.
+         * same place. 9 adds the stick throws a swipe can send; a file from
+         * before it simply has none, which is what its plain bits meant.
          */
-        private const val FORMAT_VERSION = 8
+        private const val FORMAT_VERSION = 9
 
         /** The four directions, in the order the file and the editor list them. */
         private val DIRECTIONS = arrayOf(Swipe.UP, Swipe.DOWN, Swipe.LEFT, Swipe.RIGHT)
@@ -770,6 +776,10 @@ class ControlLayout private constructor(
                     element.swipeDownDouble = false
                     element.swipeLeftDouble = false
                     element.swipeRightDouble = false
+                    element.swipeUpFlick = SwipeFlick.NONE
+                    element.swipeDownFlick = SwipeFlick.NONE
+                    element.swipeLeftFlick = SwipeFlick.NONE
+                    element.swipeRightFlick = SwipeFlick.NONE
                 }
                 // Optional and additive: a player's saved layout keeps its
                 // plain bits, and the compound half is read over the top when
@@ -797,10 +807,13 @@ class ControlLayout private constructor(
                         val modifier = runCatching {
                             SwipeModifier.valueOf(entry.optString("m", SwipeModifier.NONE.name))
                         }.getOrDefault(SwipeModifier.NONE)
+                        val flick = runCatching {
+                            SwipeFlick.valueOf(entry.optString("s", SwipeFlick.NONE.name))
+                        }.getOrDefault(SwipeFlick.NONE)
                         element.setSwipeAction(
                             DIRECTIONS[index],
                             SwipeAction(entry.optInt("b", element.swipeBit(DIRECTIONS[index])),
-                                modifier, entry.optBoolean("d", false)),
+                                modifier, entry.optBoolean("d", false), flick),
                         )
                     }
                 }
@@ -847,6 +860,37 @@ class ControlLayout private constructor(
             // Only an empty pad is certainly broken: a player may deliberately
             // hide all but one control, and wiping that would be a bug.
             if (layout.elements.isEmpty()) layout.resetAll()
+            for (element in layout.elements) {
+                // SW2 is the advanced-instructions button, and its factory word
+                // is ADV now. A pad saved under the old word keeps that word as
+                // if the player had typed it, so the rename would never show.
+                if (element.id == "sw2" && element.label == "SW2") element.label = "ADV"
+                // The shoulders are modifiers, not swipe targets (see offersSwipes
+                // in the editor). A layout saved before that rule can still carry
+                // directions on L1/R1, and the pad would fire them; they are
+                // dropped on load, which is the one place every saved pad passes.
+                if (element.kind == ControlKind.BUTTON &&
+                    (element.value == NativeBridge.LB || element.value == NativeBridge.RB)
+                ) {
+                    element.swipeUp = 0
+                    element.swipeDown = 0
+                    element.swipeLeft = 0
+                    element.swipeRight = 0
+                    element.swipeTap = 0
+                    element.swipeUpMod = SwipeModifier.NONE
+                    element.swipeDownMod = SwipeModifier.NONE
+                    element.swipeLeftMod = SwipeModifier.NONE
+                    element.swipeRightMod = SwipeModifier.NONE
+                    element.swipeUpDouble = false
+                    element.swipeDownDouble = false
+                    element.swipeLeftDouble = false
+                    element.swipeRightDouble = false
+                    element.swipeUpFlick = SwipeFlick.NONE
+                    element.swipeDownFlick = SwipeFlick.NONE
+                    element.swipeLeftFlick = SwipeFlick.NONE
+                    element.swipeRightFlick = SwipeFlick.NONE
+                }
+            }
         }
 
         // ---- saved layouts (slots) ------------------------------------------
@@ -1028,11 +1072,6 @@ class ControlLayout private constructor(
                     place("switch", ControlKind.BUTTON, NativeBridge.LB, "LB", -212f, -45f, 56f,
                         shownWhen = PhaseMask.DEFEND, sub2 = "SWITCH"),
 
-                    // The stance chip: one tap flips the pad, the labels follow,
-                    // and nothing is held. Above the diamond, clear of the
-                    // shoot-to-pass drag, of Y, of RB and of the skill wheel.
-                    place("stance", ControlKind.STANCE, 0, "ATK", -150f, -232f, 40f, 0.55f,
-                        shownWhen = PhaseMask.MATCH),
                     place("rb", ControlKind.BUTTON, NativeBridge.RB, "RB", -110f, 76f, 56f),
                     place("rt", ControlKind.TRIGGER, 1, "RT", -44f, 76f, 56f),
 
@@ -1145,7 +1184,7 @@ class ControlLayout private constructor(
                     // reach nothing -- and move wherever the player wants them
                     // once they are on.
                     place("sw1", ControlKind.TACTICAL, 0, "SW1", 230f, 300f, 88f, 0.40f, visible = false),
-                    place("sw2", ControlKind.TACTICAL, 0, "SW2", 340f, 300f, 88f, 0.40f, visible = false),
+                    place("sw2", ControlKind.TACTICAL, 0, "ADV", 340f, 300f, 88f, 0.40f, visible = false),
 
                     // Stick 2: the movement socket again, without the sprint.
                     // Same throw, same grab, same shaping -- but no rim latch and
@@ -1339,7 +1378,7 @@ class ControlLayout private constructor(
                 "tg5" -> "TG5"
                 "tg6" -> "TG6"
                 "sw1" -> "SW1"
-                "sw2" -> "SW2"
+                "sw2" -> "ADV"
                 "start" -> "START"
                 "back" -> "SELECT"
                 else -> element.label
@@ -1360,7 +1399,7 @@ class ControlLayout private constructor(
             "start" -> "START"
             "back" -> "SELECT"
             "sw1" -> "SW1"
-            "sw2" -> "SW2"
+            "sw2" -> "ADV"
             else -> id.uppercase()
         }
     }

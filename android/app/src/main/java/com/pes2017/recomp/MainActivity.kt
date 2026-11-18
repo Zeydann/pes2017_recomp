@@ -745,8 +745,8 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         // Where this port publishes releases; the check reads the latest one.
-        private const val RELEASES_PAGE = "https://github.com/dzakyraf/pes2017-recomp/releases/latest"
-        private const val RELEASES_API = "https://api.github.com/repos/dzakyraf/pes2017-recomp/releases/latest"
+        private const val RELEASES_PAGE = "https://github.com/typhon-op/pes2017-recomp/releases/latest"
+        private const val RELEASES_API = "https://api.github.com/repos/typhon-op/pes2017-recomp/releases/latest"
     }
 
     private fun showLastCrash(crash: String) {

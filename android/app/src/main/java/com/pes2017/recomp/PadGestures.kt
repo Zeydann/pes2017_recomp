@@ -1,5 +1,7 @@
 package com.pes2017.recomp
 
+import kotlin.math.hypot
+
 
 /**
  * The gestures the pad has to remember between touch samples: the sprint
@@ -34,20 +36,55 @@ enum class SwipeModifier {
 }
 
 /**
+ * A stick a swipe can throw instead of pressing a button.
+ *
+ * Part of PES 2017's vocabulary is stick travel rather than a button: the
+ * manual pass flick, a knock-on, the right stick's skill moves. The pad can
+ * send one as a full deflection of that stick, held for the action's dwell and
+ * then returned to neutral, which is what the title reads as a single flick.
+ * Y is the guest's, so up is positive.
+ */
+enum class SwipeFlick(val x: Float, val y: Float) {
+    NONE(0f, 0f),
+    LS_UP(0f, 1f),
+    LS_DOWN(0f, -1f),
+    LS_LEFT(-1f, 0f),
+    LS_RIGHT(1f, 0f),
+    RS_UP(0f, 1f),
+    RS_DOWN(0f, -1f),
+    RS_LEFT(-1f, 0f),
+    RS_RIGHT(1f, 0f),
+    ;
+
+    /** The left stick rather than the right one. */
+    val isLeft: Boolean
+        get() = this == LS_UP || this == LS_DOWN || this == LS_LEFT || this == LS_RIGHT
+
+    val bound: Boolean get() = this != NONE
+}
+
+/**
  * What one swipe direction sends.
  *
  * A plain bit is the original binding. A modifier is held slightly before the
  * primary bit and released with it, which is how PES 2017's combinations are
  * performed (LB + pass, R2 during the shot gauge, and so on). A double tap is
  * two quick presses of the primary bit, for the commands the title reads as a
- * repeated tap (the low cross, the knock-on).
+ * repeated tap (the low cross, the knock-on). A flick is a full throw of one
+ * stick, or of one stick while a modifier is held.
+ *
+ * [holdMs] is how long the action is held before it is let go: the default is
+ * the poll-safe beat the sequences have always used, and a binding may ask for
+ * a longer one where the title needs the input to stay down.
  */
 data class SwipeAction(
     val bit: Int = 0,
     val modifier: SwipeModifier = SwipeModifier.NONE,
     val doubleTap: Boolean = false,
+    val flick: SwipeFlick = SwipeFlick.NONE,
+    val holdMs: Long = SwipeSequence.HOLD_MS,
 ) {
-    val bound: Boolean get() = bit != 0
+    val bound: Boolean get() = bit != 0 || flick != SwipeFlick.NONE
 
     companion object {
         val NONE = SwipeAction()
@@ -58,6 +95,13 @@ data class SwipeAction(
             SwipeAction(bit = bit, modifier = modifier)
 
         fun double(bit: Int): SwipeAction = SwipeAction(bit = bit, doubleTap = true)
+
+        /** A full throw of one stick. */
+        fun flick(target: SwipeFlick): SwipeAction = SwipeAction(flick = target)
+
+        /** A full throw of one stick while [modifier] is held. */
+        fun heldFlick(modifier: SwipeModifier, target: SwipeFlick): SwipeAction =
+            SwipeAction(modifier = modifier, flick = target)
     }
 }
 
@@ -67,6 +111,8 @@ data class SwipeStep(
     val buttons: Int,
     val leftTrigger: Boolean = false,
     val rightTrigger: Boolean = false,
+    /** A stick this step holds at full deflection, or [SwipeFlick.NONE]. */
+    val flick: SwipeFlick = SwipeFlick.NONE,
 )
 
 /**
@@ -97,8 +143,33 @@ object SwipeSequence {
     /** The gap between a double tap's two presses. */
     const val DOUBLE_TAP_GAP_MS = 50L
 
+    /** The shortest and longest dwell a binding may ask for, in milliseconds. */
+    const val MIN_HOLD_MS = 30L
+    const val MAX_HOLD_MS = 600L
+
     fun steps(action: SwipeAction): List<SwipeStep> {
         if (!action.bound) return emptyList()
+
+        val hold = action.holdMs.coerceIn(MIN_HOLD_MS, MAX_HOLD_MS)
+
+        // A flick of a stick: the modifier (if any) leads it, the throw is held
+        // for the action's dwell, and the last step puts the stick back to
+        // neutral. Nothing else is pressed unless the binding says so.
+        if (action.flick != SwipeFlick.NONE && action.bit == 0) {
+            if (action.modifier == SwipeModifier.NONE) {
+                return listOf(
+                    SwipeStep(0L, 0, flick = action.flick),
+                    SwipeStep(hold, 0),
+                )
+            }
+            val left = action.modifier == SwipeModifier.LT
+            val right = action.modifier == SwipeModifier.RT
+            return listOf(
+                SwipeStep(0L, action.modifier.bit, left, right),
+                SwipeStep(MODIFIER_LEAD_MS, action.modifier.bit, left, right, action.flick),
+                SwipeStep(MODIFIER_LEAD_MS + hold, 0),
+            )
+        }
 
         if (action.doubleTap) {
             return listOf(
@@ -112,22 +183,22 @@ object SwipeSequence {
         return when (action.modifier) {
             SwipeModifier.NONE -> listOf(
                 SwipeStep(0L, action.bit),
-                SwipeStep(HOLD_MS, 0),
+                SwipeStep(hold, 0),
             )
             SwipeModifier.LB, SwipeModifier.RB -> listOf(
                 SwipeStep(0L, action.modifier.bit),
                 SwipeStep(MODIFIER_LEAD_MS, action.modifier.bit or action.bit),
-                SwipeStep(MODIFIER_LEAD_MS + HOLD_MS, 0),
+                SwipeStep(MODIFIER_LEAD_MS + hold, 0),
             )
             SwipeModifier.LT -> listOf(
                 SwipeStep(0L, 0, leftTrigger = true),
                 SwipeStep(MODIFIER_LEAD_MS, action.bit, leftTrigger = true),
-                SwipeStep(MODIFIER_LEAD_MS + HOLD_MS, 0),
+                SwipeStep(MODIFIER_LEAD_MS + hold, 0),
             )
             SwipeModifier.RT -> listOf(
                 SwipeStep(0L, 0, rightTrigger = true),
                 SwipeStep(MODIFIER_LEAD_MS, action.bit, rightTrigger = true),
-                SwipeStep(MODIFIER_LEAD_MS + HOLD_MS, 0),
+                SwipeStep(MODIFIER_LEAD_MS + hold, 0),
             )
         }
     }
@@ -145,19 +216,24 @@ class ComboHold {
         private set
     var rightTrigger = false
         private set
+    /** The stick a flick step is holding at full deflection, or NONE. */
+    var flick = SwipeFlick.NONE
+        private set
 
-    val any: Boolean get() = buttons != 0 || leftTrigger || rightTrigger
+    val any: Boolean get() = buttons != 0 || leftTrigger || rightTrigger || flick != SwipeFlick.NONE
 
     fun apply(step: SwipeStep) {
         buttons = step.buttons
         leftTrigger = step.leftTrigger
         rightTrigger = step.rightTrigger
+        flick = step.flick
     }
 
     fun clear() {
         buttons = 0
         leftTrigger = false
         rightTrigger = false
+        flick = SwipeFlick.NONE
     }
 }
 
@@ -256,6 +332,40 @@ class DoubleTap(private val windowMs: Long = WINDOW_MS) {
     companion object {
         /** A fifth of a second: the gap a thumb makes when it means to tap twice. */
         const val WINDOW_MS = 220L
+    }
+}
+
+/**
+ * The movement stick's sprint latch: pushing the stick past [pressAt] of its
+ * throw starts a run, and it stays running until the thumb comes back inside
+ * [releaseAt]. The two points are apart on purpose -- one threshold with a
+ * thumb balanced on it chatters, and a run that flickers is worse than none.
+ *
+ * Only the match stick reads this: the MENU stage, Stick 2 and the skill stick
+ * never sprint, and the pad only asks while a match is on screen, so a run can
+ * never press R1 at the title's menus. Free of Android types, so
+ * [PadGesturesTest] can walk it without a phone.
+ */
+class SprintLatch(
+    private val pressAt: Float = 0.92f,
+    private val releaseAt: Float = 0.82f,
+) {
+    /** Whether the movement stick is running right now. */
+    var active = false
+        private set
+
+    private val press = pressAt.coerceIn(0.1f, 1f)
+    private val release = releaseAt.coerceIn(0f, press - 0.01f)
+
+    /** One sample of the stick's throw, from -1..1 on each axis. Returns [active]. */
+    fun update(x: Float, y: Float): Boolean {
+        val magnitude = hypot(x, y)
+        active = if (active) magnitude >= release else magnitude >= press
+        return active
+    }
+
+    fun reset() {
+        active = false
     }
 }
 

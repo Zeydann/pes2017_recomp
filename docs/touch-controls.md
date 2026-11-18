@@ -34,10 +34,12 @@ and controlled variants) and the project's own layout notes in `ControlLayout.kt
 ## Swipe bindings
 
 A swipe slot is a `SwipeAction` (`PadGestures.kt`): a **primary bit**, an
-optional **held modifier** (LB, RB, LT or RT), and an optional **double tap**.
-Plain single bits are the original binding and are unchanged; the compound half
-is optional in `controls.json`, so a layout written before this keeps its plain
-bits and an older build still reads the file.
+optional **held modifier** (LB, RB, LT or RT), an optional **double tap**, an
+optional **stick flick** (`SwipeFlick`: LS/RS up, down, left or right), and a
+**hold duration**. Plain single bits are the original binding and are
+unchanged; the compound half is optional in `controls.json`, so a layout
+written before this keeps its plain bits and an older build still reads the
+file (`FORMAT_VERSION` 9).
 
 How a compound swipe is emitted (`SwipeSequence`, scheduled by the overlay):
 
@@ -47,6 +49,8 @@ How a compound swipe is emitted (`SwipeSequence`, scheduled by the overlay):
 | `LB + A` | LB down; 50 ms later LB+A; 50 ms later everything up |
 | `RT + X` | right trigger 255; 50 ms later RT + X; 50 ms later both up |
 | `B ×2` | B; 50 ms gap; B; clear |
+| `LS Up` | left stick at full up; held for the dwell; stick back to neutral |
+| `LB + RS Left` | LB down; 50 ms later LB + left stick full left; both released |
 
 The modifier leads the button by one step so the title reads it the way it
 reads a hand, the pair is held for several polls, and **every sequence ends
@@ -71,8 +75,20 @@ gesture read from the last `ACTION_MOVE` alone looked like a tap), and the
 ring sends no bit of its own, so leaving it cannot lift the bit a swipe needs in
 the same frame.
 
-The editor lists every option: none, the plain bits, all four modifiers on each
-of the four face buttons, and a double tap of each face button.
+A stick flick is injected after the stick's deadzone and curve: it is a
+synthetic full deflection the player asked for by name, so a shaping deadzone in
+front of it would swallow it. It replaces that axis for the step rather than
+adding to a thumb's, because the title reads the stick's angle and two sources
+adding up would send a diagonal nobody asked for. `holdMs` is the dwell the
+action is held before the clearing step; the default is the poll-safe 50 ms and
+the sequence clamps it to 30–600 ms.
+
+The editor offers the whole vocabulary in two levels (`SwipeCatalogue`): a group
+first — Nothing, Buttons, Double taps, Modifier + button, Stick flicks,
+Modifier + stick — then that group's entries. The catalogue is 65 bindings
+(none, 16 plain bits, 8 double taps, 16 modifier + face, 8 stick flicks, 16
+modifier + stick), and the editor, `SwipeLabels` and the control guide all read
+it, so a command the pad can perform is always one the player can bind.
 
 ## Default sixteen slots
 
@@ -175,14 +191,15 @@ skill move is a short flick to a sector rather than a pace to hold. The absolute
 skill stick's last sample is held for 90 ms after the lift so the title's poll
 can see a flick that began and ended between two frames.
 
-## No sprint from the stick
+## Sprint from the match stick's rim
 
-The movement stick sends no RB in either mode. Pushing it past its rim is travel
-and nothing else: the title's R1 is a menu key in its own screens and a sprint
-modifier everywhere else, so a stick that pressed it at full deflection pressed
-R1 by accident every time a thumb went all the way out. Sprinting is the RB
-button's job, or a swipe bound to RB in the editor; the old "Sprint at the
-stick's rim" setting is gone with the gesture.
+Only the first movement stick (`id: "stick"`), only in the standard **MATCH**
+stage, and only while the title is on the pitch, sends RB when the thumb is out
+at the rim. `SprintLatch` starts the run at 0.92 of the throw and keeps it until
+the thumb comes back inside 0.82, so a thumb balanced on the edge cannot chatter.
+The three guards are what keep it from being the old accidental R1: the MENU
+stage does not sprint, Stick 2 and the skill stick never do, and no menu phase
+can reach the latch, where R1 is a menu key rather than a run.
 
 ## The two-stage stick
 
@@ -199,7 +216,7 @@ two-stage one with the ring outside the socket.
 | Mode | What the stick does |
 |---|---|
 | `MATCH` — normal (mode 1) | the whole socket is the throw; its rim is full pace |
-| `MENU` — two-stage (mode 2) | the socket is the movement circle; a wider ring outside it, held as travel |
+| `MENU` — two-stage (mode 2) | the socket is the movement circle; a wider throw outside it, held as travel, with no ring drawn |
 
 Mode 2's geometry (`TouchMath.StickStage`), in socket radii, on the default
 150 dp stick (75 dp radius):
@@ -219,8 +236,8 @@ ring adds.
 Entering the ring needs `d ≥ 1.06` held for 70 ms; it is left at `d ≤ 0.94`, at
 once, so a thumb balanced on the rim does not chatter in and out of it. What the
 ring changes is the deflection — the tenth the inside holds back is what the
-ring adds — and the socket lights its rim while the thumb is out there. It sends
-no bit at all, so no ring can press the title's R1. A lift, a phase change,
+ring adds — and nothing is drawn beyond the socket. It sends no bit at all, so
+no ring can press the title's R1. A lift, a phase change,
 `ACTION_CANCEL`, pause, the editor, or a macro clears the stage.
 
 Both stages grab the socket at 1.35 R. A grab that could only start inside the
@@ -356,22 +373,16 @@ build not even that -- see the note below), and **not possession**. There is
 therefore **no automatic** attack/defence switching. Each control is arranged
 for both pads, the menus, or one stance.
 
-### The stance chip
+### Choosing the pad
 
-The pad now carries one **stance chip** (`id: "stance"`, 40 dp, above the action
-diamond, match only, movable and hideable in the editor). **One tap** flips the
-attacking pad to the defending one and back, with a haptic tick and a short toast
-("Attacking pad" / "Defending pad") so an accidental flip is noticed and one tap
-undoes it. It writes the same `Prefs.defendingPad` the Settings switch and the
-pause menu write, so the three can never disagree. A thumb that lands and slides
-more than 18 dp off the chip is not counted as a tap.
+There is no stance control on the pitch any more: the pad is chosen by the
+**Settings > Controls > Bring out the defending pad** switch, which writes
+`Prefs.defendingPad`. The pause menu no longer offers the flip either. The stored
+value is read when a run starts and when the activity resumes, so the chosen pad
+survives a restart.
 
-The chip holds **no pad bit**: a flip changes what the labels say and which
-controls are arranged for which half, never which bits a held finger is sending.
-It deliberately does not call `releaseEverything`, so another thumb holding pass
-keeps holding pass; a control that belongs to the other stance stops being sent
-(the state push skips what is not on screen) and its claim goes when the finger
-lifts.
+The flip has always held **no pad bit**: it changes what the labels say and which
+controls are drawn and sent, never which bits a held finger is sending.
 
 ### Dual labels, and the near-thumb switch
 
@@ -461,7 +472,7 @@ Two rules keep it honest:
    stick can never produce a swipe.
 4. **The pass double tap is local.** Only a button whose **role** is `PASS` is
    read for it. Roles survive renaming, so a cosmetic label cannot move it.
-5. **The stance chip holds nothing** and does not release another thumb's
+5. **Choosing the pad sends nothing** and does not release another thumb's
    button; controls that leave the pad simply stop being sent.
 6. **Nothing survives a cancel.** Pause, hide, focus loss and `ACTION_CANCEL`
    cancel the wheel timer, combos, trigger grace, pulses and held arms.
@@ -561,10 +572,10 @@ unchanged; this only changes when the control is drawn and hit-testable.
   R3 clicks with a release between them, and the button sequencer clears.
 - `SwipeBindingsTest`: all 16 default combinations, the primary bits behind
   them, independence and unbound cases.
-- `DefensiveLayoutTest`: the stance chip and near-thumb switch ship on the right
-  pads, the four defensive names, that the chip holds no bit, and that neither
-  new control overlaps any other control on its own pad (a numeric clearance
-  test, so a later default move fails loudly).
+- `DefensiveLayoutTest`: the near-thumb switch ships on the right
+  pads, the four defensive names, and that the near-thumb switch does not
+  overlap any other control on its own pad (a numeric clearance test, so a later
+  default move fails loudly).
 - `TouchGeometryTest`: the retuned diamond keeps at least 6 dp between every
   pair, every default swipe's corridor is clear, the skill ring clears every
   control on the attacking pad, the d-pad clears every control on its pad, and
@@ -683,12 +694,12 @@ saw themselves ask for. The lock is `SEQUENCE_MS + 120 ms`, and every cancellati
 path -- a pause, the editor, a phase change -- resets it. `MentalityTapsTest` pins
 all of it without a clock.
 
-## The two tactical five-way buttons (SW1, SW2)
+## The two tactical five-way buttons (SW1, ADV)
 
 Same five actions as a spare -- four swipes and a centre tap -- on a control
 sized for a thumb, with the title's tactical commands already bound:
 
-| | SW1 (tactics) | SW2 (instructions) |
+| | SW1 (tactics) | ADV (advanced instructions) |
 |---|---|---|
 | Up | D-pad up: next preset tactic | LT + D-pad up: attack 1 |
 | Down | LB + D-pad down: quick tactics | LT + D-pad down: attack 2 |

@@ -124,15 +124,6 @@ class ControlEditPanel(
         setOnClickListener { showSkillWheel() }
     }
 
-    /** Which pad the selected control belongs to: both, the menus, or one stance. */
-    private val arrangement: Button = Button(activity).apply {
-        setText(R.string.arrangement)
-        textSize = 12f
-        minWidth = 0
-        minimumWidth = 0
-        setOnClickListener { pickArrangement() }
-    }
-
     /**
      * "Save Layout": the five numbered places, one tap from the editor. Choosing
      * a slot saves into it, and a slot that is already taken asks before it is
@@ -183,9 +174,6 @@ class ControlEditPanel(
 
     init {
         val dp = activity.resources.displayMetrics.density
-        toolRow().addView(arrangement, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-        ).apply { marginStart = (6 * dp).roundToInt() })
         toolRow().addView(saveLayout, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
         ).apply { marginStart = (6 * dp).roundToInt() })
@@ -317,42 +305,6 @@ class ControlEditPanel(
         else -> false
     }
 
-    // ---- which pad a control belongs to --------------------------------------
-
-    /**
-     * Both pads, the menus, or one of the two match layouts. The title does not
-     * report possession, so the attacking and defending pads are the player's
-     * own switch (Prefs.defendingPad, Settings and the pause menu), and this is
-     * how a control is put on one of them.
-     */
-    private fun pickArrangement() {
-        // The selection is mirrored on the overlay; fall back to it so a panel
-        // that has not been told about a tap yet still has a control to act on.
-        val element = current ?: overlay.selected
-        if (element == null) return
-        val masks = arrayOf(PhaseMask.ALWAYS, PhaseMask.MENUS, PhaseMask.MATCH,
-            PhaseMask.ATTACK, PhaseMask.DEFEND)
-        val labels = arrayOf(
-            activity.getString(R.string.arrangement_always),
-            activity.getString(R.string.arrangement_menus),
-            activity.getString(R.string.arrangement_match),
-            activity.getString(R.string.arrangement_attack),
-            activity.getString(R.string.arrangement_defend),
-        )
-        AlertDialog.Builder(activity)
-            .setTitle(R.string.arrangement)
-            .setSingleChoiceItems(labels, masks.indexOf(element.shownWhen)) { dialog, which ->
-                remember()
-                element.shownWhen = masks[which]
-                overlay.refresh()
-                show(element)
-                save()
-                dialog.dismiss()
-            }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
-    }
-
     // ---- what a swipe sends -------------------------------------------------
 
     private fun showSwipeBindings() {
@@ -370,37 +322,42 @@ class ControlEditPanel(
     }
 
     /**
-     * One list of everything a direction can be: a plain bit, a modifier held
-     * before a face button (PES's L1/L2/R1/R2 combinations), or a double tap
-     * of a face button. The four starting swipes are just the first entries a
-     * player will see already chosen.
+     * The whole vocabulary a direction can send, in two levels.
+     *
+     * One flat list of every combination was longer than a phone's screen and
+     * made the face buttons hard to find among the stick throws. The first
+     * dialog picks a group -- nothing, the pad's buttons, double taps, a
+     * modifier with a button, a stick throw, or a modifier with a stick throw --
+     * and the second lists that group's entries. The catalogue itself lives in
+     * [SwipeCatalogue], so the editor, the labels and the guide all name the
+     * same set.
      */
     private fun pickSwipeAction(element: ControlElement, direction: Int) {
-        val primary = intArrayOf(NativeBridge.A, NativeBridge.B, NativeBridge.X, NativeBridge.Y)
-        val options = mutableListOf(SwipeAction.NONE)
-        // L1/R1 are deliberately absent as plain targets: they are the pad's
-        // modifiers (LB + pass, RB + shoot), and a swipe bound to one only ever
-        // pressed the shoulder on its own. As a modifier they are still one tap
-        // away in the list below.
-        for (bit in intArrayOf(NativeBridge.A, NativeBridge.B, NativeBridge.X, NativeBridge.Y,
-            NativeBridge.START, NativeBridge.BACK,
-            NativeBridge.L3, NativeBridge.R3, NativeBridge.UP, NativeBridge.DOWN,
-            NativeBridge.LEFT, NativeBridge.RIGHT)
-        ) options.add(SwipeAction.of(bit))
-        for (modifier in arrayOf(SwipeModifier.LB, SwipeModifier.LT,
-            SwipeModifier.RB, SwipeModifier.RT)
-        ) for (bit in primary) options.add(SwipeAction.held(modifier, bit))
-        for (bit in primary) options.add(SwipeAction.double(bit))
-
-        val labels = Array(options.size) { actionName(options[it]) }
+        val groups = SwipeCatalogue.groups
+        val titles = Array(groups.size) { activity.getString(groups[it].titleRes) }
         AlertDialog.Builder(activity)
             .setTitle(R.string.swipe_direction)
+            .setItems(titles) { _, which -> pickSwipeEntry(element, direction, groups[which]) }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    /** One group of [SwipeCatalogue], as the second half of the picker. */
+    private fun pickSwipeEntry(
+        element: ControlElement,
+        direction: Int,
+        group: SwipeCatalogue.Group,
+    ) {
+        val labels = Array(group.entries.size) { actionName(group.entries[it]) }
+        AlertDialog.Builder(activity)
+            .setTitle(group.titleRes)
             .setItems(labels) { _, which ->
+                val action = group.entries[which]
                 remember()
-                setSwipeBinding(element, direction, options[which])
+                setSwipeBinding(element, direction, action)
                 // Shown straight away: an unbound swipe stays hidden, and a
                 // player who has just bound one expects to see it.
-                if (options[which].bound && !element.visibleIn(overlay.stance)) {
+                if (action.bound && !element.visibleIn(overlay.stance)) {
                     element.setVisible(true, overlay.stance)
                 }
                 overlay.refresh()
@@ -500,21 +457,18 @@ class ControlEditPanel(
         },
     )
 
-    /** How one swipe binding reads in the editor: "LB + A", "B ×2", "A". */
+    /** How one swipe binding reads in the editor: "LB + A", "B ×2", "A", "LB + LS Up". */
     private fun actionName(action: SwipeAction): String = when {
         !action.bound -> activity.getString(R.string.button_none)
+        action.flick != SwipeFlick.NONE && action.bit == 0 -> when (action.modifier) {
+            SwipeModifier.NONE -> SwipeLabels.flickName(action.flick)
+            else -> SwipeLabels.modifierName(action.modifier) + " + " +
+                SwipeLabels.flickName(action.flick)
+        }
         action.doubleTap -> bitName(action.bit) + " ×2"
         action.modifier != SwipeModifier.NONE ->
-            modifierName(action.modifier) + " + " + bitName(action.bit)
+            SwipeLabels.modifierName(action.modifier) + " + " + bitName(action.bit)
         else -> bitName(action.bit)
-    }
-
-    private fun modifierName(modifier: SwipeModifier): String = when (modifier) {
-        SwipeModifier.LB -> "LB"
-        SwipeModifier.RB -> "RB"
-        SwipeModifier.LT -> "LT"
-        SwipeModifier.RT -> "RT"
-        SwipeModifier.NONE -> ""
     }
 
     /** The name printed for a pad bit, as the console's own face names mark them. */
@@ -600,40 +554,49 @@ class ControlEditPanel(
         }
     }
 
+    /**
+     * More has two lists. With nothing selected it is the pad's own menu -- the
+     * one place Add a Control can be found without first picking a control, as
+     * a player who has removed something looks for it before choosing anything
+     * -- and with a control selected it offers only what acts on that control.
+     * Saving, loading, importing and exporting the whole pad live in the global
+     * list and the strip's own Layouts button, never on one control.
+     */
     private fun showMore() {
-        val element = current ?: return
+        val element = current ?: overlay.selected
         val labels = ArrayList<String>(8)
         val actions = ArrayList<() -> Unit>(8)
-        if (element.kind == ControlKind.BUTTON || element.kind == ControlKind.LATCH) {
-            labels.add(activity.getString(R.string.edit_bind))
-            actions.add { pickBinding(element) }
+        if (element == null) {
+            labels.add(activity.getString(R.string.edit_add))
+            actions.add { addControl() }
+            labels.add(activity.getString(R.string.edit_profiles))
+            actions.add { showProfiles() }
+            labels.add(activity.getString(R.string.layout_export))
+            actions.add { shareLayout(overlay.layout, activity.getString(R.string.layout_current)) }
+            labels.add(activity.getString(R.string.layout_import))
+            actions.add { importLayout() }
+            labels.add(activity.getString(R.string.edit_undo))
+            actions.add { undo() }
+            labels.add(activity.getString(R.string.edit_redo))
+            actions.add { redo() }
+        } else {
+            if (element.kind == ControlKind.BUTTON || element.kind == ControlKind.LATCH) {
+                labels.add(activity.getString(R.string.edit_bind))
+                actions.add { pickBinding(element) }
+            }
+            if (element.kind == ControlKind.LATCH) {
+                labels.add(activity.getString(R.string.toggle_mapping))
+                actions.add { pickToggleMapping() }
+            }
+            labels.add(activity.getString(R.string.edit_rename))
+            actions.add { rename(element) }
+            labels.add(activity.getString(R.string.edit_remove))
+            actions.add { removeControl(element) }
+            labels.add(activity.getString(R.string.edit_undo))
+            actions.add { undo() }
+            labels.add(activity.getString(R.string.edit_redo))
+            actions.add { redo() }
         }
-        if (element.kind == ControlKind.LATCH) {
-            labels.add(activity.getString(R.string.toggle_mapping))
-            actions.add { pickToggleMapping() }
-        }
-        labels.add(activity.getString(R.string.edit_rename))
-        actions.add { rename(element) }
-        labels.add(
-            activity.getString(
-                if (element.hasDefendOverride()) R.string.edit_defend_merge else R.string.edit_defend_split,
-            ),
-        )
-        actions.add { toggleDefendCopy(element) }
-        labels.add(activity.getString(R.string.edit_add))
-        actions.add { addControl() }
-        labels.add(activity.getString(R.string.edit_remove))
-        actions.add { removeControl(element) }
-        labels.add(activity.getString(R.string.edit_undo))
-        actions.add { undo() }
-        labels.add(activity.getString(R.string.edit_redo))
-        actions.add { redo() }
-        labels.add(activity.getString(R.string.edit_profiles))
-        actions.add { showProfiles() }
-        labels.add(activity.getString(R.string.layout_export))
-        actions.add { shareLayout(overlay.layout, activity.getString(R.string.layout_current)) }
-        labels.add(activity.getString(R.string.layout_import))
-        actions.add { importLayout() }
         AlertDialog.Builder(activity)
             .setTitle(R.string.edit_more)
             .setItems(labels.toTypedArray()) { _, which -> actions[which].invoke() }
@@ -1156,7 +1119,6 @@ class ControlEditPanel(
         view.visibility = if (element == null) View.GONE else View.VISIBLE
         idle.visibility = if (element == null) View.VISIBLE else View.GONE
         resetOne.isEnabled = element != null
-        arrangement.isEnabled = element != null
         if (element == null) {
             swipes.visibility = View.GONE
             wheel.visibility = View.GONE

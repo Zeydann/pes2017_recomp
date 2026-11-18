@@ -592,7 +592,11 @@ class Prefs(context: Context) {
         /** The normal movement stick: one circle, its rim is full pace. */
         const val STAGE_ONE = 1
 
-        /** The two-stage stick: a movement circle, and the sprint ring outside it. */
+        /**
+         * The two-stage stick: a movement circle and a longer outer throw.
+         * It no longer sprints -- the rim is gone -- so it is safe at the
+         * title's menus, where the normal stick's rim would press R1.
+         */
         const val STAGE_TWO = 2
         private const val KEY_DRIVER_DIR = "driverDirectory"
         private const val KEY_DRIVER_LIB = "driverLibrary"
