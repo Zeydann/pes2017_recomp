@@ -2,17 +2,6 @@ package com.pes2017.recomp
 
 import android.app.Activity
 import android.content.Intent
-import android.view.View
-import android.widget.CompoundButton
-import android.widget.LinearLayout
-import android.widget.RadioButton
-import android.widget.RadioGroup
-import android.widget.ScrollView
-import android.widget.SeekBar
-import android.widget.TextView
-import androidx.appcompat.app.AlertDialog
-import androidx.appcompat.widget.SwitchCompat
-import kotlin.math.roundToInt
 
 /**
  * The graphics and performance settings that matter most, reachable from the
@@ -20,6 +9,9 @@ import kotlin.math.roundToInt
  * means a new run: "Apply & restart" hands the values to the launcher (the one
  * process that writes the settings) and starts the match again, with no trip
  * through the launcher's screens.
+ *
+ * Presented on the game's own menu ([PesMenu]) rather than an Android dialog:
+ * it is the pause menu's Graphics & performance page and has to look like one.
  */
 object QuickGraphics {
 
@@ -39,129 +31,118 @@ object QuickGraphics {
         var heat: Boolean, var crowd: Boolean, var lowMemory: Boolean, var preset: String,
     )
 
-    /** Shows the dialog; `onApply` runs after the relaunch has been requested. */
-    fun show(activity: Activity, prefs: Prefs, onApply: () -> Unit, onClose: () -> Unit) {
-        val v = Values(
+    /**
+     * One visit to the screen. The values live here, not in the screen it
+     * builds, so re-rendering a row after an adjustment keeps every other
+     * change the player already made.
+     */
+    class Session internal constructor(
+        private val activity: Activity,
+        private val prefs: Prefs,
+        /** Runs after the relaunch has been requested: the old run ends here. */
+        private val onApply: () -> Unit,
+    ) {
+
+        private val v = Values(
             prefs.sceneScalePercent, prefs.renderScale, prefs.multisampling, prefs.fsr, prefs.fpsLimit,
             prefs.heatScale, prefs.crowd, prefs.lowMemory, prefs.preset,
         )
-        val dp = activity.resources.displayMetrics.density
-        fun px(value: Int) = (value * dp).roundToInt()
+        private val tiers = DeviceProfile.Tier.values()
 
-        val column = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(px(20), px(8), px(20), px(8))
-        }
-        fun label(text: String) = TextView(activity).apply { this.text = text; textSize = 13f; setPadding(0, px(10), 0, 0) }
+        /** Chosen tier when the values still match it, for the checked dot. */
+        private fun tierName(tier: DeviceProfile.Tier): String =
+            tier.name.lowercase().replaceFirstChar { it.uppercase() }
 
-        // Preset first: one tap sets everything below it, which can then be nudged.
-        val presetGroup = RadioGroup(activity).apply { orientation = RadioGroup.HORIZONTAL }
-        val tiers = DeviceProfile.Tier.values()
-        val tierButtons = tiers.map { tier ->
-            RadioButton(activity).apply { text = tier.name.lowercase().replaceFirstChar { it.uppercase() }; id = View.generateViewId() }
-        }
-        tierButtons.forEach { presetGroup.addView(it) }
-        column.addView(label(activity.getString(R.string.qg_preset)))
-        column.addView(presetGroup)
-
-        val sceneText = label("")
-        val scene = SeekBar(activity).apply { max = 10 }
-        val scaleText = label("")
-        val scale = SeekBar(activity).apply { max = 2 }
-        val fpsText = label("")
-        val fps = SeekBar(activity).apply { max = 6 }
-        fun switch(text: String) = SwitchCompat(activity).apply { this.text = text; setPadding(0, px(6), 0, px(6)) }
-        val msaa = switch(activity.getString(R.string.qg_msaa))
-        val fsr = switch(activity.getString(R.string.qg_fsr))
-        val heat = switch(activity.getString(R.string.qg_heat))
-        val crowd = switch(activity.getString(R.string.qg_crowd))
-        val lowMem = switch(activity.getString(R.string.qg_lowmem))
-
-        fun refresh() {
-            sceneText.text = activity.getString(R.string.qg_scene, v.scene)
-            fpsText.text = activity.getString(R.string.qg_fps, v.fps)
-            scaleText.text = activity.getString(R.string.qg_scale, v.scale)
-            scale.progress = v.scale - 1
-            scene.isEnabled = v.scale == 1
-            scene.progress = (v.scene - 50) / 5
-            fps.progress = (v.fps - 30) / 5
-            msaa.isChecked = v.msaa; fsr.isChecked = v.fsr; heat.isChecked = v.heat
-            crowd.isChecked = v.crowd; lowMem.isChecked = v.lowMemory
-            tiers.forEachIndexed { i, tier -> tierButtons[i].isChecked = v.preset == tier.name }
+        private fun touched() {
+            v.preset = DeviceProfile.PRESET_CUSTOM
         }
 
-        var quiet = false
-        tierButtons.forEachIndexed { i, button ->
-            button.setOnClickListener {
-                val p = DeviceProfile.preset(tiers[i])
-                v.scene = p.sceneScalePercent; v.scale = 1; v.msaa = p.multisampling; v.fsr = p.fsr; v.fps = p.fpsLimit
-                v.heat = p.heatScale; v.lowMemory = p.lowMemory; v.preset = tiers[i].name
-                quiet = true; refresh(); quiet = false
-            }
+        private fun setTier(tier: DeviceProfile.Tier) {
+            val p = DeviceProfile.preset(tier)
+            v.scene = p.sceneScalePercent; v.scale = 1; v.msaa = p.multisampling; v.fsr = p.fsr
+            v.fps = p.fpsLimit; v.heat = p.heatScale; v.lowMemory = p.lowMemory; v.preset = tier.name
         }
-        fun touched() { if (!quiet) { v.preset = DeviceProfile.PRESET_CUSTOM; tierButtons.forEach { it.isChecked = false } } }
-        scene.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(bar: SeekBar, value: Int, fromUser: Boolean) {
-                if (!fromUser) return
-                v.scene = 50 + value * 5; sceneText.text = activity.getString(R.string.qg_scene, v.scene); touched()
-            }
-            override fun onStartTrackingTouch(bar: SeekBar) = Unit
-            override fun onStopTrackingTouch(bar: SeekBar) = Unit
-        })
-        scale.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(bar: SeekBar, value: Int, fromUser: Boolean) {
-                if (!fromUser) return
-                v.scale = value + 1
-                scaleText.text = activity.getString(R.string.qg_scale, v.scale)
-                scene.isEnabled = v.scale == 1
-                touched()
-            }
-            override fun onStartTrackingTouch(bar: SeekBar) = Unit
-            override fun onStopTrackingTouch(bar: SeekBar) = Unit
-        })
-        fps.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(bar: SeekBar, value: Int, fromUser: Boolean) {
-                if (!fromUser) return
-                v.fps = 30 + value * 5; fpsText.text = activity.getString(R.string.qg_fps, v.fps); touched()
-            }
-            override fun onStartTrackingTouch(bar: SeekBar) = Unit
-            override fun onStopTrackingTouch(bar: SeekBar) = Unit
-        })
-        fun bind(button: CompoundButton, set: (Boolean) -> Unit) =
-            button.setOnCheckedChangeListener { _, on -> if (!quiet) { set(on); touched() } }
-        bind(msaa) { v.msaa = it }; bind(fsr) { v.fsr = it }; bind(heat) { v.heat = it }
-        bind(crowd) { v.crowd = it }; bind(lowMem) { v.lowMemory = it }
 
-        column.addView(scaleText); column.addView(scale)
-        column.addView(sceneText); column.addView(scene)
-        column.addView(fpsText); column.addView(fps)
-        listOf(msaa, fsr, heat, crowd, lowMem).forEach { column.addView(it) }
-        column.addView(TextView(activity).apply {
-            setText(R.string.qg_note); textSize = 11f; alpha = 0.7f; setPadding(0, px(10), 0, 0)
-        })
-        quiet = true; refresh(); quiet = false
+        fun screen(menu: PesMenu): PesMenu.Screen {
+            val rows = ArrayList<PesMenu.Row>()
 
-        AlertDialog.Builder(activity)
-            .setTitle(R.string.qg_title)
-            .setView(ScrollView(activity).apply { addView(column) })
-            // Cancel and Back are the paths that close without relaunching, and
-            // they close once: a blanket dismiss listener also fired on the
-            // positive button, which would have resumed a run that Apply is
-            // already restarting.
-            .setNegativeButton(R.string.cancel) { _, _ -> onClose() }
-            .setPositiveButton(R.string.qg_apply) { _, _ ->
-                val intent = Intent(activity, MainActivity::class.java)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                    .putExtra(EXTRA_RELAUNCH, true)
-                    .putExtra(X_SCENE, v.scene).putExtra(X_SCALE, v.scale).putExtra(X_MSAA, v.msaa).putExtra(X_FSR, v.fsr)
-                    .putExtra(X_FPS, v.fps).putExtra(X_HEAT, v.heat).putExtra(X_CROWD, v.crowd)
-                    .putExtra(X_LOWMEM, v.lowMemory).putExtra(X_PRESET, v.preset)
-                activity.startActivity(intent)
-                onApply()
+            for (tier in tiers) {
+                rows += PesMenu.Row(tierName(tier), checked = v.preset == tier.name) { m ->
+                    setTier(tier)
+                    m.refresh()
+                }
             }
-            .setOnCancelListener { onClose() }
-            .show()
+
+            rows += PesMenu.Row(
+                activity.getString(R.string.qg_scale),
+                detail = "${v.scale}x",
+                onAdjust = { m, d ->
+                    v.scale = (v.scale + d).coerceIn(1, 3)
+                    touched()
+                    m.refresh()
+                },
+            )
+            rows += PesMenu.Row(
+                activity.getString(R.string.qg_scene),
+                detail = "${v.scene}%",
+                enabled = v.scale == 1,
+                onAdjust = { m, d ->
+                    v.scene = (v.scene + d * 5).coerceIn(50, 100)
+                    touched()
+                    m.refresh()
+                },
+            )
+            rows += PesMenu.Row(
+                activity.getString(R.string.qg_fps),
+                detail = "${v.fps}",
+                onAdjust = { m, d ->
+                    v.fps = (v.fps + d * 5).coerceIn(30, 60)
+                    touched()
+                    m.refresh()
+                },
+            )
+
+            fun toggle(label: String, get: () -> Boolean, set: (Boolean) -> Unit) {
+                rows += PesMenu.Row(
+                    label,
+                    detail = if (get()) "On" else "Off",
+                    onAdjust = { m, _ -> set(!get()); touched(); m.refresh() },
+                )
+            }
+            toggle(activity.getString(R.string.qg_msaa), { v.msaa }) { v.msaa = it }
+            toggle(activity.getString(R.string.qg_fsr), { v.fsr }) { v.fsr = it }
+            toggle(activity.getString(R.string.qg_heat), { v.heat }) { v.heat = it }
+            toggle(activity.getString(R.string.qg_crowd), { v.crowd }) { v.crowd = it }
+            toggle(activity.getString(R.string.qg_lowmem), { v.lowMemory }) { v.lowMemory = it }
+
+            rows += PesMenu.Row(activity.getString(R.string.qg_apply)) { m ->
+                m.dismissNow()
+                launch()
+            }
+
+            return PesMenu.Screen(
+                activity.getString(R.string.qg_title),
+                message = activity.getString(R.string.qg_note),
+                rows = rows,
+                hint = "Renderer reads these as a match starts.",
+            )
+        }
+
+        private fun launch() {
+            val intent = Intent(activity, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                .putExtra(EXTRA_RELAUNCH, true)
+                .putExtra(X_SCENE, v.scene).putExtra(X_SCALE, v.scale).putExtra(X_MSAA, v.msaa).putExtra(X_FSR, v.fsr)
+                .putExtra(X_FPS, v.fps).putExtra(X_HEAT, v.heat).putExtra(X_CROWD, v.crowd)
+                .putExtra(X_LOWMEM, v.lowMemory).putExtra(X_PRESET, v.preset)
+            activity.startActivity(intent)
+            onApply()
+        }
     }
+
+    /** A fresh visit to the graphics page; the caller opens it as a submenu. */
+    fun session(activity: Activity, prefs: Prefs, onApply: () -> Unit): Session =
+        Session(activity, prefs, onApply)
 
     /** In the launcher: store what the match sent. True when this intent asked for a relaunch. */
     fun takeRelaunch(intent: Intent?, prefs: Prefs): Boolean {

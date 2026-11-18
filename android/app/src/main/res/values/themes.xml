@@ -23,6 +23,23 @@
         <item name="android:textColorSecondary">#8FA0C2</item>
     </style>
 
+    <!--
+      The in-game menu (PesMenu): a left-hand panel drawn over the pitch, not a
+      floating Android card. No window frame, no title, no animation of its own:
+      the panel slides itself in and out so the opening reads as part of the
+      game rather than a system dialog appearing.
+    -->
+    <style name="Theme.PES17.Menu" parent="Theme.AppCompat.Dialog">
+        <item name="windowNoTitle">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsFloating">false</item>
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:backgroundDimEnabled">true</item>
+        <item name="android:backgroundDimAmount">0.45</item>
+        <item name="android:windowAnimationStyle">@null</item>
+        <item name="android:windowNoDisplay">false</item>
+    </style>
+
     <!-- A settings panel's header row: a solid bar, as the PES 6 menus' header strips. -->
     <style name="SectionHeading">
         <item name="android:layout_marginTop">14dp</item>

@@ -30,9 +30,12 @@ import androidx.core.view.WindowInsetsControllerCompat
  */
 class ControlGuideActivity : AppCompatActivity() {
 
-    private val accent = 0xFF38BDF8.toInt()
-    private val ink = 0xFFE2E8F0.toInt()
-    private val dim = 0xFF94A3B8.toInt()
+    // The menu's own palette, so the guide reads as a page of the title and not
+    // as a separate help app: cyan accent, cool ink, navy behind.
+    private val accent = 0xFF35D3FF.toInt()
+    private val ink = 0xFFE2ECFA.toInt()
+    private val dim = 0xFF9FB8D6.toInt()
+    private val heading = android.graphics.Typeface.create("sans-serif-condensed", android.graphics.Typeface.BOLD_ITALIC)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -48,7 +51,10 @@ class ControlGuideActivity : AppCompatActivity() {
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.rgb(8, 11, 16))
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(0xFF04122E.toInt(), 0xFF0A2A5E.toInt()),
+            )
         }
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
             val safe = insets.getInsets(
@@ -66,8 +72,9 @@ class ControlGuideActivity : AppCompatActivity() {
             setText(R.string.controls_guide)
             setTextColor(Color.WHITE)
             textSize = 20f
-            paint.isFakeBoldText = true
-            letterSpacing = 0.06f
+            typeface = heading
+            isAllCaps = true
+            letterSpacing = 0.05f
         }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         header.addView(Button(this).apply {
             setText(R.string.guide_close)
@@ -143,17 +150,23 @@ class ControlGuideActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(14), dp(10), dp(14), dp(12))
             background = GradientDrawable().apply {
-                cornerRadius = 14f * density
-                setColor(0xCC0B0F17.toInt())
-                setStroke(maxOf(1, dp(1)), 0x5538BDF8)
+                cornerRadius = 2f * density
+                setColor(0x99081830.toInt())
+                setStroke(maxOf(1, dp(1)), 0x3335D3FF)
             }
         }
+        // A cyan edge on the card, as the menu's selected band wears.
+        card.addView(View(this).apply { setBackgroundColor(accent) }, LinearLayout.LayoutParams(
+            dp(34), maxOf(1, dp(2)),
+        ))
         card.addView(TextView(this).apply {
             setText(title)
             setTextColor(accent)
             textSize = 14f
-            paint.isFakeBoldText = true
-            letterSpacing = 0.08f
+            typeface = heading
+            isAllCaps = true
+            letterSpacing = 0.06f
+            setPadding(0, dp(6), 0, 0)
         })
         card.addView(TextView(this).apply {
             text = body

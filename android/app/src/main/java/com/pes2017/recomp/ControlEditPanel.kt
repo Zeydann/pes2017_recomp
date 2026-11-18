@@ -271,24 +271,100 @@ class ControlEditPanel(
             save()
         }
         actions.findViewById<Button>(R.id.edit_reset_all).setOnClickListener {
-            AlertDialog.Builder(activity)
-                .setTitle(R.string.reset_all)
-                .setMessage(R.string.reset_all_explained)
-                .setNegativeButton(R.string.cancel, null)
-                .setPositiveButton(R.string.reset) { _, _ ->
-                    remember()
-                    overlay.releaseEverything()
-                    overlay.layout.resetAll()
-                    overlay.select(null)
-                    overlay.refresh()
-                    save()
-                }
-                .show()
+            confirmScreen(
+                activity.getString(R.string.reset_all),
+                activity.getString(R.string.reset_all_explained),
+                activity.getString(R.string.reset),
+            ) {
+                remember()
+                overlay.releaseEverything()
+                overlay.layout.resetAll()
+                overlay.select(null)
+                overlay.refresh()
+                save()
+            }
         }
         actions.findViewById<Button>(R.id.edit_done).setOnClickListener { onDone() }
     }
 
     private fun save() = overlay.layout.save(activity)
+
+    /**
+     * The menu the editor opens, one at a time. It is the same game menu the
+     * pause screen uses, so a picker here looks like a page of the title rather
+     * than an Android dialog sitting on the pitch.
+     */
+    private var menu: PesMenu? = null
+
+    /**
+     * Shows [build]. With a page already open it is pushed on top, so a pick
+     * inside a pick reads as a submenu and B walks back through both.
+     */
+    private fun screen(build: (PesMenu) -> PesMenu.Screen) {
+        val open = menu
+        if (open != null && open.isShowing) {
+            open.push(build)
+        } else {
+            val created = PesMenu(activity)
+            menu = created
+            created.open(build)
+        }
+    }
+
+    /**
+     * A page of rows. Choosing one runs [onPick]; if that opened a page of its
+     * own the menu stays, and otherwise it closes back to the editor.
+     */
+    private fun listScreen(title: String, labels: List<String>, checked: Int = -1, onPick: (Int) -> Unit) {
+        screen { menu ->
+            val depth = menu.depth
+            val rows = labels.mapIndexed { index, label ->
+                PesMenu.Row(label, checked = if (index == checked) true else null) {
+                    onPick(index)
+                    if (menu.depth == depth) menu.closeMenu()
+                }
+            }
+            PesMenu.Screen(title, rows = rows)
+        }
+    }
+
+    private fun askScreen(title: String, initial: String, label: String, onOk: (String) -> Unit) {
+        screen { menu ->
+            PesMenu.Screen(
+                title,
+                fields = listOf(PesMenu.Field(label, initial)),
+                submit = activity.getString(android.R.string.ok),
+                onSubmit = { values ->
+                    menu.dismissNow()
+                    onOk(values.firstOrNull().orEmpty().trim())
+                },
+            )
+        }
+    }
+
+    /** A yes/no page whose yes runs [onYes] once the page is gone. */
+    private fun confirmScreen(title: String, message: String, positive: String, onYes: () -> Unit) {
+        screen { menu ->
+            PesMenu.Screen(
+                title,
+                message = message,
+                rows = listOf(
+                    PesMenu.Row(activity.getString(R.string.cancel)) { menu.back() },
+                    PesMenu.Row(positive) {
+                        menu.dismissNow()
+                        onYes()
+                    },
+                ),
+            )
+        }
+    }
+
+    /** A newly saved or deleted pad shows up in a fresh layouts page. */
+    private fun reopenProfiles() {
+        menu?.dismissNow()
+        menu = null
+        showProfiles()
+    }
 
     /**
      * Whether this control has per-direction swipes worth binding. The two
@@ -311,16 +387,13 @@ class ControlEditPanel(
         val element = current ?: return
         val directions = intArrayOf(R.string.swipe_up, R.string.swipe_down,
             R.string.swipe_left, R.string.swipe_right, R.string.swipe_center)
-        val labels = Array(directions.size) { index ->
-            activity.getString(directions[index]) + ": " + actionName(swipeBinding(element, index))
+        val labels = directions.mapIndexed { index, id ->
+            activity.getString(id) + ": " + actionName(swipeBinding(element, index))
         }
-        AlertDialog.Builder(activity)
-            .setTitle(R.string.swipe_bindings)
-            .setItems(labels) { _, which -> pickSwipeAction(element, which) }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
+        listScreen(activity.getString(R.string.swipe_bindings), labels) { which ->
+            pickSwipeAction(element, which)
+        }
     }
-
     /**
      * The whole vocabulary a direction can send, in two levels.
      *
@@ -328,46 +401,36 @@ class ControlEditPanel(
      * made the face buttons hard to find among the stick throws. The first
      * dialog picks a group -- nothing, the pad's buttons, double taps, a
      * modifier with a button, a stick throw, or a modifier with a stick throw --
-     * and the second lists that group's entries. The catalogue itself lives in
+     * and the second page lists that group's entries. The catalogue itself lives in
      * [SwipeCatalogue], so the editor, the labels and the guide all name the
      * same set.
      */
     private fun pickSwipeAction(element: ControlElement, direction: Int) {
         val groups = SwipeCatalogue.groups
-        val titles = Array(groups.size) { activity.getString(groups[it].titleRes) }
-        AlertDialog.Builder(activity)
-            .setTitle(R.string.swipe_direction)
-            .setItems(titles) { _, which -> pickSwipeEntry(element, direction, groups[which]) }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
+        listScreen(activity.getString(R.string.swipe_direction), groups.map { activity.getString(it.titleRes) }) { which ->
+            pickSwipeEntry(element, direction, groups[which])
+        }
     }
-
     /** One group of [SwipeCatalogue], as the second half of the picker. */
     private fun pickSwipeEntry(
         element: ControlElement,
         direction: Int,
         group: SwipeCatalogue.Group,
     ) {
-        val labels = Array(group.entries.size) { actionName(group.entries[it]) }
-        AlertDialog.Builder(activity)
-            .setTitle(group.titleRes)
-            .setItems(labels) { _, which ->
-                val action = group.entries[which]
-                remember()
-                setSwipeBinding(element, direction, action)
-                // Shown straight away: an unbound swipe stays hidden, and a
-                // player who has just bound one expects to see it.
-                if (action.bound && !element.visibleIn(overlay.stance)) {
-                    element.setVisible(true, overlay.stance)
-                }
-                overlay.refresh()
-                show(element)
-                save()
+        listScreen(activity.getString(group.titleRes), group.entries.map { actionName(it) }) { which ->
+            val action = group.entries[which]
+            remember()
+            setSwipeBinding(element, direction, action)
+            // Shown straight away: an unbound swipe stays hidden, and a
+            // player who has just bound one expects to see it.
+            if (action.bound && !element.visibleIn(overlay.stance)) {
+                element.setVisible(true, overlay.stance)
             }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
+            overlay.refresh()
+            show(element)
+            save()
+        }
     }
-
     /**
      * 0 up, 1 down, 2 left, 3 right, 4 the centre tap: the order the dialog
      * lists them in. The centre is the fifth action -- a spare's or a tactical
@@ -398,7 +461,7 @@ class ControlEditPanel(
     /** The eight sectors, in the wheel's own order, so the list reads like the ring. */
     private fun showSkillWheel() {
         val element = current ?: return
-        val labels = Array(TrickWheel.SECTORS) { sector ->
+        val labels = (0 until TrickWheel.SECTORS).map { sector ->
             val move = element.trickMove(sector)
             activity.getString(
                 R.string.skill_wheel_sector,
@@ -406,20 +469,17 @@ class ControlEditPanel(
                 if (move < 0) activity.getString(R.string.button_none) else SkillMoves.name(move),
             )
         }
-        AlertDialog.Builder(activity)
-            .setTitle(R.string.skill_wheel)
-            .setItems(labels) { _, which -> pickSkillMove(element, which) }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
+        listScreen(activity.getString(R.string.skill_wheel), labels) { sector ->
+            pickSkillMove(element, sector)
+        }
     }
-
     /**
      * One sector's move: none, or any move the runtime's table carries. The
      * hint is part of the name because the wheel deliberately stops where the
      * player's left stick takes over.
      */
     private fun pickSkillMove(element: ControlElement, sector: Int) {
-        val labels = Array(SkillMoves.COUNT + 1) { index ->
+        val labels = (0..SkillMoves.COUNT).map { index ->
             if (index == 0) activity.getString(R.string.button_none)
             else {
                 val name = SkillMoves.name(index - 1)
@@ -430,19 +490,14 @@ class ControlEditPanel(
                 }
             }
         }
-        AlertDialog.Builder(activity)
-            .setTitle(R.string.skill_wheel_sector_title)
-            .setItems(labels) { _, which ->
-                remember()
-                element.setTrickMove(sector, if (which == 0) -1 else which - 1)
-                overlay.refresh()
-                show(element)
-                save()
-            }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
+        listScreen(activity.getString(R.string.skill_wheel_sector_title), labels) { which ->
+            remember()
+            element.setTrickMove(sector, if (which == 0) -1 else which - 1)
+            overlay.refresh()
+            show(element)
+            save()
+        }
     }
-
     /** 0 right, then anticlockwise, the way [TrickWheel] numbers them. */
     private fun sectorName(sector: Int): String = activity.getString(
         when (sector) {
@@ -590,11 +645,7 @@ class ControlEditPanel(
             labels.add(activity.getString(R.string.edit_redo))
             actions.add { redo() }
         }
-        AlertDialog.Builder(activity)
-            .setTitle(R.string.edit_more)
-            .setItems(labels.toTypedArray()) { _, which -> actions[which].invoke() }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
+        listScreen(activity.getString(R.string.edit_more), labels) { which -> actions[which].invoke() }
     }
 
     private fun pickBinding(element: ControlElement) {
@@ -604,52 +655,36 @@ class ControlEditPanel(
             NativeBridge.L3, NativeBridge.R3, NativeBridge.UP, NativeBridge.DOWN,
             NativeBridge.LEFT, NativeBridge.RIGHT,
         )
-        val labels = Array(bits.size) { bitName(bits[it]) }
-        AlertDialog.Builder(activity)
-            .setTitle(R.string.edit_bind)
-            .setItems(labels) { _, which ->
-                remember()
-                element.value = bits[which]
-                element.role = ControlRole.of(element.value)
-                overlay.refresh()
-                show(element)
-                save()
-            }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
+        listScreen(activity.getString(R.string.edit_bind), bits.map { bitName(it) }) { which ->
+            remember()
+            element.value = bits[which]
+            element.role = ControlRole.of(element.value)
+            overlay.refresh()
+            show(element)
+            save()
+        }
     }
-
     private fun rename(element: ControlElement) {
-        val dp = activity.resources.displayMetrics.density
-        val box = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding((20 * dp).roundToInt(), (8 * dp).roundToInt(), (20 * dp).roundToInt(), 0)
+        screen { menu ->
+            PesMenu.Screen(
+                activity.getString(R.string.edit_rename),
+                fields = listOf(
+                    PesMenu.Field(activity.getString(R.string.edit_label), element.label),
+                    PesMenu.Field(activity.getString(R.string.edit_caption), element.sub),
+                ),
+                submit = activity.getString(android.R.string.ok),
+                onSubmit = { values ->
+                    menu.dismissNow()
+                    remember()
+                    element.label = values.getOrElse(0) { "" }.trim().take(8).ifEmpty { element.label }
+                    element.sub = values.getOrElse(1) { "" }.trim().take(8)
+                    overlay.refresh()
+                    show(element)
+                    save()
+                },
+            )
         }
-        val name = EditText(activity).apply {
-            setText(element.label)
-            hint = activity.getString(R.string.edit_label)
-        }
-        val caption = EditText(activity).apply {
-            setText(element.sub)
-            hint = activity.getString(R.string.edit_caption)
-        }
-        box.addView(name)
-        box.addView(caption)
-        AlertDialog.Builder(activity)
-            .setTitle(R.string.edit_rename)
-            .setView(box)
-            .setNegativeButton(R.string.cancel, null)
-            .setPositiveButton(android.R.string.ok) { _, _ ->
-                remember()
-                element.label = name.text.toString().trim().take(8).ifEmpty { element.label }
-                element.sub = caption.text.toString().trim().take(8)
-                overlay.refresh()
-                show(element)
-                save()
-            }
-            .show()
     }
-
     private fun toggleDefendCopy(element: ControlElement) {
         remember()
         if (element.hasDefendOverride()) element.mergeStance() else element.splitStance()
@@ -664,50 +699,42 @@ class ControlEditPanel(
             Toast.makeText(activity, R.string.edit_add_none, Toast.LENGTH_SHORT).show()
             return
         }
-        val labels = Array(missing.size) { index ->
-            ControlLayout.labelFor(missing[index], overlay.playStation) + "  (" + missing[index].id + ")"
+        val labels = missing.map { missingControl ->
+            ControlLayout.labelFor(missingControl, overlay.playStation) + "  (" + missingControl.id + ")"
         }
-        AlertDialog.Builder(activity)
-            .setTitle(R.string.edit_add)
-            .setItems(labels) { _, which ->
-                remember()
-                val added = missing[which]
-                // A palette control that ships hidden (the d-pad, stick clicks)
-                // is being added to be used, not to stay out of sight.
-                added.visible = true
-                if (overlay.layout.add(added)) {
-                    overlay.keepApart(added)
-                    overlay.select(added)
-                    show(added)
-                    overlay.refresh()
-                    save()
-                }
+        listScreen(activity.getString(R.string.edit_add), labels) { which ->
+            remember()
+            val added = missing[which]
+            // A palette control that ships hidden (the d-pad, stick clicks)
+            // is being added to be used, not to stay out of sight.
+            added.visible = true
+            if (overlay.layout.add(added)) {
+                overlay.keepApart(added)
+                overlay.select(added)
+                show(added)
+                overlay.refresh()
+                save()
             }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
+        }
     }
-
     private fun removeControl(element: ControlElement) {
         if (element.id == "stick") {
             Toast.makeText(activity, R.string.edit_remove_required, Toast.LENGTH_SHORT).show()
             return
         }
-        AlertDialog.Builder(activity)
-            .setTitle(R.string.edit_remove)
-            .setMessage(activity.getString(R.string.edit_remove_confirm,
-                ControlLayout.labelFor(element, overlay.playStation)))
-            .setNegativeButton(R.string.cancel, null)
-            .setPositiveButton(R.string.edit_remove) { _, _ ->
-                remember()
-                overlay.layout.remove(element.id)
-                overlay.select(null)
-                show(null)
-                overlay.refresh()
-                save()
-            }
-            .show()
+        confirmScreen(
+            activity.getString(R.string.edit_remove),
+            activity.getString(R.string.edit_remove_confirm, ControlLayout.labelFor(element, overlay.playStation)),
+            activity.getString(R.string.edit_remove),
+        ) {
+            remember()
+            overlay.layout.remove(element.id)
+            overlay.select(null)
+            show(null)
+            overlay.refresh()
+            save()
+        }
     }
-
     // ---- saved layouts (slots) ----------------------------------------------
 
     /**
@@ -746,16 +773,12 @@ class ControlEditPanel(
         }
         labels.add(activity.getString(R.string.layout_import))
         actions.add { importLayout() }
-        AlertDialog.Builder(activity)
-            .setTitle(R.string.layout_title)
-            .setItems(labels.toTypedArray()) { _, which -> actions[which].invoke() }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
+        listScreen(activity.getString(R.string.layout_title), labels) { which -> actions[which].invoke() }
     }
 
     /** Load, overwrite, rename, duplicate, export or delete one saved pad. */
     private fun slotActions(slot: LayoutSlot) {
-        val labels = arrayOf(
+        val labels = listOf(
             activity.getString(R.string.profile_load),
             activity.getString(R.string.profile_overwrite_current),
             activity.getString(R.string.profile_rename),
@@ -763,22 +786,17 @@ class ControlEditPanel(
             activity.getString(R.string.layout_export),
             activity.getString(R.string.profile_delete),
         )
-        AlertDialog.Builder(activity)
-            .setTitle(slot.displayName)
-            .setItems(labels) { _, which ->
-                when (which) {
-                    0 -> loadSlot(slot)
-                    1 -> writeSlot(slot.id, slot.displayName)
-                    2 -> renameSlot(slot)
-                    3 -> duplicateSlot(slot)
-                    4 -> exportSlot(slot)
-                    else -> confirmDeleteSlot(slot)
-                }
+        listScreen(slot.displayName, labels) { which ->
+            when (which) {
+                0 -> loadSlot(slot)
+                1 -> writeSlot(slot.id, slot.displayName)
+                2 -> renameSlot(slot)
+                3 -> duplicateSlot(slot)
+                4 -> exportSlot(slot)
+                else -> confirmDeleteSlot(slot)
             }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
+        }
     }
-
     /**
      * The five numbered places as a picker, each taken one shown with the name
      * of the layout already in it. Every save path starts here: a layout only
@@ -786,21 +804,15 @@ class ControlEditPanel(
      */
     private fun showSlotPicker(titleRes: Int, onPick: (SaveSlotChoice) -> Unit) {
         val slots = ControlLayout.saveSlots(activity)
-        val labels = Array(slots.size) { index ->
-            val slot = slots[index]
+        val labels = slots.map { slot ->
             if (slot.occupied) {
                 activity.getString(R.string.profile_slot, slot.id, slot.displayName)
             } else {
                 activity.getString(R.string.profile_slot_empty, slot.id)
             }
         }
-        AlertDialog.Builder(activity)
-            .setTitle(titleRes)
-            .setItems(labels) { _, which -> onPick(slots[which]) }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
+        listScreen(activity.getString(titleRes), labels) { which -> onPick(slots[which]) }
     }
-
     /**
      * "Save Layout": the five numbered places, with the taken ones named, so the
      * player picks where the pad goes instead of typing a name first.
@@ -821,14 +833,14 @@ class ControlEditPanel(
             writeSlot(slot.id, name, reopen = false)
             return
         }
-        AlertDialog.Builder(activity)
-            .setTitle(R.string.layout_save)
-            .setMessage(R.string.slot_taken_confirm)
-            .setNegativeButton(R.string.no, null)
-            .setPositiveButton(R.string.yes) { _, _ -> writeSlot(slot.id, name, reopen = false) }
-            .show()
+        confirmScreen(
+            activity.getString(R.string.layout_save),
+            activity.getString(R.string.slot_taken_confirm),
+            activity.getString(R.string.yes),
+        ) {
+            writeSlot(slot.id, name, reopen = false)
+        }
     }
-
     /** Saves the current pad into an empty numbered place under a typed name. */
     private fun saveToSlot(id: String) {
         val suggested = activity.getString(R.string.profile_default_name, id)
@@ -851,30 +863,25 @@ class ControlEditPanel(
         val element = current ?: overlay.selected ?: return
         if (element.kind != ControlKind.LATCH) return
         val actions = ToggleAction.entries
-        val labels = Array(actions.size) { actions[it].label }
         val selected = actions.indexOf(element.toggleAction).coerceAtLeast(0)
-        AlertDialog.Builder(activity)
-            .setTitle(
-                activity.getString(
-                    R.string.toggle_mapping_title,
-                    ControlLayout.labelFor(element, overlay.playStation),
-                ),
-            )
-            .setSingleChoiceItems(labels, selected) { dialog, which ->
-                remember()
-                element.toggleAction = actions[which]
-                // A toggle that is already engaged keeps the hold it latched
-                // with until it is tapped off and on again: the hold is taken
-                // at the tap, not guessed from an action that changed under it.
-                show(element)
-                overlay.refresh()
-                save()
-                dialog.dismiss()
-            }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
+        listScreen(
+            activity.getString(
+                R.string.toggle_mapping_title,
+                ControlLayout.labelFor(element, overlay.playStation),
+            ),
+            actions.map { it.label },
+            checked = selected,
+        ) { which ->
+            remember()
+            element.toggleAction = actions[which]
+            // A toggle that is already engaged keeps the hold it latched
+            // with until it is tapped off and on again: the hold is taken
+            // at the tap, not guessed from an action that changed under it.
+            show(element)
+            overlay.refresh()
+            save()
+        }
     }
-
     /** Puts a factory pad back, without touching any saved slot. */
     private fun loadBuiltIn(profile: String) {
         remember()
@@ -914,17 +921,15 @@ class ControlEditPanel(
                 askSlotName(slot) { name -> writeSlot(slot.id, name, reopen = false) }
                 return@showSlotPicker
             }
-            AlertDialog.Builder(activity)
-                .setTitle(R.string.profile_save_as)
-                .setMessage(R.string.slot_taken_confirm)
-                .setNegativeButton(R.string.no, null)
-                .setPositiveButton(R.string.yes) { _, _ ->
-                    askSlotName(slot) { name -> writeSlot(slot.id, name, reopen = false) }
-                }
-                .show()
+            confirmScreen(
+                activity.getString(R.string.profile_save_as),
+                activity.getString(R.string.slot_taken_confirm),
+                activity.getString(R.string.yes),
+            ) {
+                askSlotName(slot) { name -> writeSlot(slot.id, name, reopen = false) }
+            }
         }
     }
-
     /** The name for the inside of [slot]: what it is called now, or "Slot N". */
     private fun askSlotName(slot: SaveSlotChoice, onOk: (String) -> Unit) {
         val suggested = slot.displayName.ifBlank {
@@ -940,7 +945,7 @@ class ControlEditPanel(
         ).show()
         // The slot picker closes on its own answer; only the layouts list wants
         // to come back so the player sees the slot it now holds.
-        if (ok && reopen) showProfiles()
+        if (ok && reopen) reopenProfiles()
     }
 
     private fun renameSlot(slot: LayoutSlot) {
@@ -950,7 +955,7 @@ class ControlEditPanel(
                 activity, if (ok) R.string.profile_renamed else R.string.profile_failed,
                 Toast.LENGTH_SHORT,
             ).show()
-            if (ok) showProfiles()
+            if (ok) reopenProfiles()
         }
     }
 
@@ -972,21 +977,19 @@ class ControlEditPanel(
             activity, if (ok) R.string.profile_duplicated else R.string.profile_failed,
             Toast.LENGTH_SHORT,
         ).show()
-        if (ok) showProfiles()
+        if (ok) reopenProfiles()
     }
 
     private fun confirmDeleteSlot(slot: LayoutSlot) {
-        AlertDialog.Builder(activity)
-            .setTitle(R.string.profile_delete)
-            .setMessage(activity.getString(R.string.profile_delete_confirm, slot.displayName))
-            .setNegativeButton(R.string.cancel, null)
-            .setPositiveButton(R.string.profile_delete) { _, _ ->
-                ControlLayout.deleteSlot(activity, slot.id)
-                showProfiles()
-            }
-            .show()
+        confirmScreen(
+            activity.getString(R.string.profile_delete),
+            activity.getString(R.string.profile_delete_confirm, slot.displayName),
+            activity.getString(R.string.profile_delete),
+        ) {
+            ControlLayout.deleteSlot(activity, slot.id)
+            reopenProfiles()
+        }
     }
-
     private fun exportSlot(slot: LayoutSlot) {
         val layout = ControlLayout.loadSlot(activity, slot.id) ?: return
         shareLayout(layout, slot.displayName)
@@ -1008,27 +1011,14 @@ class ControlEditPanel(
     }
 
     private fun nameDialog(title: String, initial: String, onOk: (String) -> Unit) {
-        val dp = activity.resources.displayMetrics.density
-        val input = EditText(activity).apply {
-            setText(initial)
-            hint = activity.getString(R.string.profile_name)
-            setPadding((20 * dp).roundToInt(), (8 * dp).roundToInt(), (20 * dp).roundToInt(), 0)
-        }
-        AlertDialog.Builder(activity)
-            .setTitle(title)
-            .setView(input)
-            .setNegativeButton(R.string.cancel, null)
-            .setPositiveButton(android.R.string.ok) { _, _ ->
-                val name = input.text.toString().trim()
-                if (name.isEmpty()) {
-                    Toast.makeText(activity, R.string.profile_failed, Toast.LENGTH_SHORT).show()
-                } else {
-                    onOk(name)
-                }
+        askScreen(title, initial, activity.getString(R.string.profile_name)) { name ->
+            if (name.isEmpty()) {
+                Toast.makeText(activity, R.string.profile_failed, Toast.LENGTH_SHORT).show()
+            } else {
+                onOk(name)
             }
-            .show()
+        }
     }
-
     // ---- import / export -----------------------------------------------------
 
     private fun importLayout() {

@@ -100,7 +100,6 @@ class GameActivity : AppCompatActivity(), NativeListener {
      * match from starting behind a settings dialog, and its close is what
      * resumes exactly once.
      */
-    private var quickGraphicsOpen = false
     private var cachedRendererInfo = ""
 
     private var cpuUsagePercent = -1f
@@ -935,9 +934,15 @@ class GameActivity : AppCompatActivity(), NativeListener {
 
     // ---- the pause menu ----------------------------------------------------------
 
+    /** The menu dialog, while one is open. */
+    private var menu: PesMenu? = null
+
+    /** Set when Edit Controls is chosen, so closing the menu does not resume first. */
+    private var editingFromMenu = false
+
     private fun showMenu() {
         // Opening the menu is pausing, as the title's own Start does: the match
-        // must not keep running (and keep taking damage) behind a dialog, and a
+        // must not keep running (and keep taking damage) behind a menu, and a
         // thumb resting on the pad must not fire through it.
         if (!menuOpen) {
             menuOpen = true
@@ -945,78 +950,109 @@ class GameActivity : AppCompatActivity(), NativeListener {
             NativeBridge.nativeSetPaused(true)
             setGameState(playing = false)
         }
-        // Built as a list: the invite entry only exists in the multiplayer
-        // app, so fixed indices would point at the wrong rows there.
-        val labels = mutableListOf(
-            getString(R.string.resume) to { _: android.content.DialogInterface -> },
-            getString(R.string.edit_controls) to { _: android.content.DialogInterface -> beginEditing() },
-            getString(R.string.controls_guide) to { _: android.content.DialogInterface ->
-                startActivity(Intent(this, ControlGuideActivity::class.java))
-            },
-        )
+        menu?.dismiss()
+        val opened = PesMenu(this) {
+            menu = null
+            menuOpen = false
+            // The editor pauses for itself and starts its own resume on the way
+            // out, and quitting leaves nothing to resume; everything else
+            // resumes here, once, when the menu closes.
+            if (started && !overlay.editing && !editingFromMenu) {
+                NativeBridge.nativeSetPaused(false)
+                setGameState(playing = true)
+            }
+            editingFromMenu = false
+            goFullscreen()
+        }
+        menu = opened
+        opened.open { pauseScreen() }
+    }
+
+    /**
+     * The pause menu's rows, rebuilt from the settings each time it is shown:
+     * the macro entry appears only in the builds that have it, and the two
+     * toggles name what tapping them will do.
+     */
+    private fun pauseScreen(): PesMenu.Screen {
+        val rows = ArrayList<PesMenu.Row>()
+        rows += PesMenu.Row(getString(R.string.resume)) { it.closeMenu() }
+        rows += PesMenu.Row(getString(R.string.edit_controls)) { editControls() }
+        rows += PesMenu.Row(getString(R.string.controls_guide)) { paused ->
+            // The guide is its own screen: close the menu first, as the old
+            // list did, so returning from it lands on the match.
+            paused.dismissNow()
+            startActivity(Intent(this, ControlGuideActivity::class.java))
+        }
         // Macros are a test tool: only with developer tools on (Settings > Advanced).
         // Recording has its own button beside Menu; playing is picked here.
         if (prefs.developerTools || Macro.recording || Macro.playing) {
-            labels.add(getString(if (Macro.playing) R.string.macro_stop_play else R.string.macro_play) to { _: android.content.DialogInterface ->
-                if (Macro.playing) Macro.stopPlayback() else pickMacro()
-            })
-        }
-        labels.add(getString(if (prefs.touchControls) R.string.hide_touch_controls else R.string.show_touch_controls) to { _: android.content.DialogInterface -> setTouchControls(!prefs.touchControls) })
-        labels.add(getString(if (prefs.gamepadEnabled) R.string.disable_gamepad else R.string.enable_gamepad) to { _: android.content.DialogInterface -> setGamepad(!prefs.gamepadEnabled) })
-        // Quick graphics keeps the pause while it is open, so the row that opens
-        // it is remembered rather than looked up by its words.
-        var quickGraphicsIndex = -1
-        labels.add(getString(R.string.qg_menu) to { _: android.content.DialogInterface ->
-            openQuickGraphics()
-        })
-        quickGraphicsIndex = labels.size - 1
-        labels.add(getString(R.string.hud_menu) to { _: android.content.DialogInterface -> pickHudLevel() })
-        labels.add(getString(R.string.quit) to { _: android.content.DialogInterface -> confirmQuit() })
-        AlertDialog.Builder(this)
-            .setTitle(R.string.paused)
-            .setItems(labels.map { it.first }.toTypedArray()) { dialog, which ->
-                // Marked before the dismiss, because that listener is where the
-                // match would otherwise be resumed: quick graphics stays a
-                // pause until its own dialog closes.
-                if (which == quickGraphicsIndex) quickGraphicsOpen = true
-                dialog.dismiss()
-                labels[which].second(dialog)
-            }
-            .setOnDismissListener {
-                menuOpen = false
-                // The editor paused for itself and starts its own resume on the
-                // way out; quitting leaves nothing to resume; quick graphics
-                // resumes when its own dialog closes. Everything else resumes
-                // here, once.
-                if (started && !overlay.editing && !quickGraphicsOpen) {
-                    NativeBridge.nativeSetPaused(false)
-                    setGameState(playing = true)
+            rows += if (Macro.playing) {
+                PesMenu.Row(getString(R.string.macro_stop_play)) { paused ->
+                    Macro.stopPlayback()
+                    paused.refresh()
                 }
-                goFullscreen()
+            } else {
+                PesMenu.Row(getString(R.string.macro_play)) { paused -> paused.push { macroScreen() } }
             }
-            .show()
+        }
+        rows += PesMenu.Row(
+            getString(if (prefs.touchControls) R.string.hide_touch_controls else R.string.show_touch_controls),
+        ) { paused ->
+            setTouchControls(!prefs.touchControls)
+            paused.refresh()
+        }
+        rows += PesMenu.Row(
+            getString(if (prefs.gamepadEnabled) R.string.disable_gamepad else R.string.enable_gamepad),
+        ) { paused ->
+            setGamepad(!prefs.gamepadEnabled)
+            paused.refresh()
+        }
+        rows += PesMenu.Row(getString(R.string.qg_menu)) { paused ->
+            // One session per visit: the values it holds outlive each render.
+            // Apply & restart ends this run the way the old dialog did.
+            val graphics = QuickGraphics.session(this, prefs) { quit() }
+            paused.push { graphics.screen(it) }
+        }
+        rows += PesMenu.Row(getString(R.string.hud_menu)) { paused -> paused.push { hudScreen() } }
+        rows += PesMenu.Row(getString(R.string.quit)) { paused -> paused.push { quitScreen() } }
+        return PesMenu.Screen(getString(R.string.paused), rows = rows)
     }
 
-    /** Menu → Graphics & performance: the match stays paused until the dialog closes. */
-    private fun openQuickGraphics() {
-        QuickGraphics.show(
-            this, prefs,
-            onApply = {
-                // Apply & restart leaves this run for the launcher's new one:
-                // resuming here would start the old match behind the relaunch.
-                quickGraphicsOpen = false
+    /** The editor takes the screen: close the menu without resuming under it. */
+    private fun editControls() {
+        editingFromMenu = true
+        menu?.dismissNow()
+        menu = null
+        beginEditing()
+    }
+
+    /** HUD: Off / Minimal / Normal / Complete, as in Settings > Performance. */
+    private fun hudScreen(): PesMenu.Screen {
+        val names = listOf(
+            getString(R.string.hud_off), getString(R.string.hud_minimal),
+            getString(R.string.hud_normal), getString(R.string.hud_complete),
+        )
+        val rows = names.mapIndexed { level, name ->
+            PesMenu.Row(name, checked = prefs.hudLevel == level) { paused ->
+                prefs.hudLevel = level
+                hudContainer.visibility = if (prefs.showStats) View.VISIBLE else View.GONE
+                paused.back()
+            }
+        }
+        return PesMenu.Screen(getString(R.string.hud_menu), rows = rows)
+    }
+
+    private fun quitScreen(): PesMenu.Screen = PesMenu.Screen(
+        getString(R.string.quit),
+        message = getString(R.string.quit_explained),
+        rows = listOf(
+            PesMenu.Row(getString(R.string.cancel)) { it.back() },
+            PesMenu.Row(getString(R.string.quit)) { menu ->
+                menu.dismissNow()
                 quit()
             },
-            onClose = {
-                quickGraphicsOpen = false
-                if (started && !overlay.editing) {
-                    NativeBridge.nativeSetPaused(false)
-                    setGameState(playing = true)
-                }
-                goFullscreen()
-            },
-        )
-    }
+        ),
+    )
 
     /** A physical pad took over: the touch pad is out of the way until the screen is touched. */
     private var touchHiddenByPad = false
@@ -1055,33 +1091,6 @@ class GameActivity : AppCompatActivity(), NativeListener {
         // One path for the pause menu and the on-pitch chip, so the two can
         // never disagree about which pad is out.
         overlay.switchStance(if (defending) PadStance.DEFEND else PadStance.ATTACK)
-    }
-
-    /** Off / Minimal / Normal / Complete, as in Settings > Performance. */
-    private fun pickHudLevel() {
-        val names = arrayOf(
-            getString(R.string.hud_off), getString(R.string.hud_minimal),
-            getString(R.string.hud_normal), getString(R.string.hud_complete),
-        )
-        AlertDialog.Builder(this)
-            .setTitle(R.string.hud_menu)
-            .setSingleChoiceItems(names, prefs.hudLevel) { dialog, which ->
-                prefs.hudLevel = which
-                hudContainer.visibility = if (prefs.showStats) View.VISIBLE else View.GONE
-                dialog.dismiss()
-            }
-            .setOnDismissListener { goFullscreen() }
-            .show()
-    }
-
-    private fun confirmQuit() {
-        AlertDialog.Builder(this)
-            .setTitle(R.string.quit)
-            .setMessage(R.string.quit_explained)
-            .setNegativeButton(R.string.cancel, null)
-            .setPositiveButton(R.string.quit) { _, _ -> quit() }
-            .setOnDismissListener { goFullscreen() }
-            .show()
     }
 
     private fun quit() {
@@ -1165,7 +1174,7 @@ class GameActivity : AppCompatActivity(), NativeListener {
         if (!started) return
         // A menu still open across a trip out of the app stays a pause: its own
         // dismissal is what starts the match again. So does quick graphics.
-        if (!menuOpen && !quickGraphicsOpen) {
+        if (!menuOpen) {
             NativeBridge.nativeSetPaused(false)
             setGameState(playing = true)
         }
@@ -1417,16 +1426,22 @@ class GameActivity : AppCompatActivity(), NativeListener {
         return generateSequence(1) { it + 1 }.map { "macro$it" }.first { it !in taken }
     }
 
-    private fun pickMacro() {
+    private fun macroScreen(): PesMenu.Screen {
         val names = Macro.names(this)
-        if (names.isEmpty()) { toast(getString(R.string.macro_none)); return }
-        AlertDialog.Builder(this)
-            .setTitle(R.string.macro_play)
-            .setItems(names.toTypedArray()) { _, which ->
-                Macro.play(this, names[which]) { handler.post { toast(getString(R.string.macro_done, it)) } }
+        if (names.isEmpty()) {
+            return PesMenu.Screen(
+                getString(R.string.macro_play),
+                message = getString(R.string.macro_none),
+                rows = listOf(PesMenu.Row(getString(R.string.close)) { it.back() }),
+            )
+        }
+        val rows = names.map { name ->
+            PesMenu.Row(name) { paused ->
+                Macro.play(this, name) { handler.post { toast(getString(R.string.macro_done, it)) } }
+                paused.closeMenu()
             }
-            .setOnDismissListener { goFullscreen() }
-            .show()
+        }
+        return PesMenu.Screen(getString(R.string.macro_play), rows = rows)
     }
 
     private fun toast(text: String) = android.widget.Toast.makeText(this, text, android.widget.Toast.LENGTH_SHORT).show()
