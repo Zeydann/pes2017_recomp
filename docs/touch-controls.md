@@ -201,6 +201,15 @@ authority, not a guess at what the title is doing: switching to MENU lets go of
 the run and of RB in the same frame, switching back to MATCH lets the rim start
 it again, and Stick 2 and the skill stick keep their own throws.
 
+While a run is on, that socket wears a **blue halo** just outside its rim. The
+light is the RB the pad is sending -- the rim's latch, the Sprint control, or a
+latch holding RB -- so it comes on and goes off with the run itself and cannot
+promise a sprint the title was never told about. It is drawn outside the rim and
+changes nothing else: position, size, opacity, throw and hit area are the same
+stick. It belongs to the MATCH half of the switch alone; the MENU half is the
+same control drawn with the two-stage throw and sends no RB, so it never lights,
+and neither Stick 2 nor the skill stick has one.
+
 ## The two-stage stick
 
 The switch above the socket (`stick_mode`) picks which throw the movement stick

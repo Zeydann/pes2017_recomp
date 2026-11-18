@@ -138,6 +138,15 @@ class TouchOverlayView @JvmOverloads constructor(
     private val sprintLatch = SprintLatch()
 
     /**
+     * Whether the state the pad last sent held RB, from any source: the Sprint
+     * control, one of the latches, a compound sequence or the MATCH stick's own
+     * rim. Drawing cannot see a bit no thumb is holding, and the MATCH stick's
+     * sprint halo reads this, so the light is exactly the run the title is
+     * being told about rather than a guess from the thumb's place.
+     */
+    private var sprintHeld = false
+
+    /**
      * The team mentality pair's lock: one tap, one double press of the d-pad, and
      * a second tap inside it is dropped rather than queued (PadGestures.kt).
      */
@@ -859,6 +868,11 @@ class TouchOverlayView @JvmOverloads constructor(
         }
         if (now < pulseUntil) buttons = buttons or pulseBits
 
+        // The run the title is being told about, for the MATCH stick's halo.
+        // Taken from the merged state, so a latched or commanded RB lights it
+        // the same way a thumb on the Sprint control does.
+        sprintHeld = (buttons and NativeBridge.RB) != 0
+
         trace.state(now, buttons, leftTrigger, rightTrigger, lx, ly, rx, ry)?.let {
             Log.i(TouchTraceGate.TAG, it)
         }
@@ -878,6 +892,7 @@ class TouchOverlayView @JvmOverloads constructor(
         skillReleaseUntil.clear()
         resetTwoStage()
         sprintLatch.reset()
+        sprintHeld = false
         cancelCombo()
         // Everything up is everything up, latches included. A pause, a reset or
         // the editor is exactly when a held bit would be invisible to the player
@@ -1692,6 +1707,19 @@ class TouchOverlayView @JvmOverloads constructor(
         element.kind == ControlKind.STICK && element.id == MOVE_STICK &&
             prefs.stickStage == Prefs.STAGE_TWO
 
+    /**
+     * Whether this is the movement stick with the switch left on MATCH -- the
+     * only stick a run belongs to. MENU is the same control drawn with the
+     * two-stage throw and sends no RB at all, and Stick 2 has no ring, so
+     * neither of them may light up for a sprint.
+     */
+    private fun isMatchStick(element: ControlElement): Boolean =
+        element.kind == ControlKind.STICK && element.id == MOVE_STICK &&
+            prefs.stickStage == Prefs.STAGE_ONE
+
+    /** Whether a run is on right now: the rim's latch, or the RB the pad sends. */
+    private fun sprintRunning(): Boolean = sprintLatch.active || sprintHeld
+
     /** Every stage let go: a lift, a cancel, a phase change, the editor, a pause. */
     private fun resetTwoStage() {
         twoStage.reset()
@@ -2154,6 +2182,9 @@ class TouchOverlayView @JvmOverloads constructor(
 
         /** The latch halo: the one colour that means "this is on and holding". */
         private const val COLOR_LATCH = 0xFF38BDF8.toInt()
+
+        /** The run's light: the blue ring the MATCH stick wears while sprinting. */
+        private const val COLOR_SPRINT_GLOW = 0xFF60A5FA.toInt()
 
         // The PlayStation symbol colours: blue cross, red circle, pink square, green triangle
         private const val PS_CROSS = 0xFF3B5BA9.toInt()
@@ -2880,6 +2911,28 @@ class TouchOverlayView @JvmOverloads constructor(
         stroke.color = Color.argb((alpha * fadeFactor * 130).toInt().coerceIn(0, 255), 45, 55, 70)
         stroke.strokeWidth = max(1.5f, r * 0.035f)
         canvas.drawCircle(cx, cy, r - stroke.strokeWidth * 0.5f, stroke)
+
+        // Sprint's halo: a blue glow just outside the socket while a run is on.
+        // It belongs to the MATCH half of the switch only -- the MENU stick is
+        // this same control drawn with a different throw and sends no RB, so
+        // nothing lights there. Drawn outside the rim, over the glass, so the
+        // socket, the knob and every touch area stay exactly as they were.
+        if (isMatchStick(element) && sprintRunning()) {
+            stroke.color = Color.argb(
+                (alpha * fadeFactor * 95).toInt().coerceIn(0, 255),
+                Color.red(COLOR_SPRINT_GLOW), Color.green(COLOR_SPRINT_GLOW),
+                Color.blue(COLOR_SPRINT_GLOW),
+            )
+            stroke.strokeWidth = max(3f, r * 0.13f)
+            canvas.drawCircle(cx, cy, r * 1.02f, stroke)
+            stroke.color = Color.argb(
+                (alpha * fadeFactor * 225).toInt().coerceIn(0, 255),
+                Color.red(COLOR_SPRINT_GLOW), Color.green(COLOR_SPRINT_GLOW),
+                Color.blue(COLOR_SPRINT_GLOW),
+            )
+            stroke.strokeWidth = max(2f, r * 0.05f)
+            canvas.drawCircle(cx, cy, r * 1.07f, stroke)
+        }
 
         // No second rim is drawn: the MENU stage's ring was the outer circle,
         // and the only sprint is the match stick's own rim being out at its
