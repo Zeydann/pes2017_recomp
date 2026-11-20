@@ -1,0 +1,927 @@
+"""Places in the game's main module that Savage Wind patches or reads, found by pattern for each game version.
+
+    game_sites.py find <exefs/main>      every site in that main module: what its pattern finds, against the
+                                         addresses known for that build (a new version: the table to add)
+    game_sites.py pattern <exefs/main> <address> [code|call|ref|got|imm]
+                                         a pattern that finds that one instruction (for a new site)
+    game_sites.py common <main A> <address in A> <main B> <address in B> [kind]
+                                         a pattern that finds the same instruction in two versions (for a site whose
+                                         pattern no longer finds it: the bits both versions share)
+
+tools/patches.py replaces single instructions at some of these sites while gen.py generates the code. The runtime
+reads or writes game data at the others (runtime/game_sites.h): gen.py puts every site into the game library (the
+generated layout.c), so the runtime takes the addresses of the version it runs.
+
+A site is found by a short pattern of instruction words, so a later build of the game (other addresses, the same
+code) needs no new numbers. Patterns mask the fields that change when code or data moves: branch and call offsets,
+ADRP pages, and the low 12 bits an ADD / LDR / STR adds to an ADRP page in the pattern. `at` picks the instruction
+(in words from the pattern's start), and the site is
+    code  that instruction's own address
+    call  the function a BL / B there goes to
+    ref   the address an ADD / LDR / STR there forms with its ADRP (the ADRP itself: its page)
+    got   the pointer stored at that `ref` address (a GOT entry; the module's relocations make it absolute)
+    imm   the instruction's immediate (an LDR / STR offset, an ADD / CMP / MOVZ value): a field offset in a game
+          object that a version moved (1.9.0's UI screens are 0x18 bytes bigger from about +0x290 on)
+and two have no pattern: data (where the module's .data starts) and end (where its image ends, .bss included).
+One pattern serves every version while the code around a site stays the same. Where a version changed it, the site
+takes a list of (pattern, at) instead: the first that finds exactly one place wins (each must find one place, or
+none, in every version).
+
+The versions Savage Wind can set up are VERSIONS (the same list as runtime/game_versions.h, which the configuration
+screen checks: tools/test_game_sites.py compares them). The builds in KNOWN also list every site's address: there a
+pattern has to find exactly that place (the self-check), and a pattern that no longer finds exactly one place falls
+back to the listed address with a warning. A build not in KNOWN needs every pattern to find exactly one place.
+docs/SAVAGE-WIND.md ("Versiones del juego") has the steps for a new version.
+"""
+import re
+import struct
+import sys
+from collections import namedtuple
+
+MAIN_BASE = 0x7000000000  # (tools/layout.py: main is the first module)
+
+# name, version, main module build id (the first 8 bytes; tools/sw_probe.py prints it), supported. One that isn't
+# supported yet is known but refused by the setup until its sites are checked.
+Version = namedtuple('Version', 'name build_id supported')
+VERSIONS = [
+    Version('1.9.0', 'cd57b23fa4bbad65', True),  # (2026-02-17: Thai text on Switch 2; SDK 21.4.1)
+]
+
+Site = namedtuple('Site', 'name kind pattern at')
+BLADE_BUFFERS = '910e0135 b85fc3a9 7103fd1f 52800f18 12001d36 52801fe9 1a893108'
+BLADE_LATERAL = ('bd4207e0 bd420be1 1e298821 1f0d0402 1f2d0400 1e202048 1e20cc40 bd000720 1e262000 bd4213e1 1e35d428 '
+                 '54000005/ff00001f bd4217e1 1e272000')
+TRAVERSE = ('b9400028 2f00e400 36600008/fff8001f d65f03c0 a9bf7bfd 910003fd 12000042 12000083 94000000/fc000000 '
+            '90000008/9f00001f 91000108/ffc003ff f9400108 b4000008/ff00001f bd431101 52a85908 1e202008 1e270102 1e22cc00 '
+            '1e210800 a8c17bfd 14000000/fc000000 1e2e1001')
+# The game's input queries: isHold(pad, action) / isTrig(pad, action). Both load the action's pad mask from a table of 41
+# (cmp w1, #0x29) and test it against the pad object's held word (+0x11c) or pressed word (+0x10)
+PAD_QUERY = ('a9be7bfd a9014ff4 910003fd 7100a43f 90000008/9f00001f 91000108/ffc003ff 1a9f3029 aa0003f3 b8695914 '
+             '7100229f 7a421a84 54000001/ff00001f 2a1f03e0 94000000/fc000000 71000a9f 52800048 52800109 1a880128 '
+             '7200001f 1a941114')
+OPT_TWO_SITES = ('opt_two_redraw', 'opt_two_select', 'opt_two_state', 'opt_two_decide', 'opt_two_after', 'opt_two_row_state', 'opt_two_update_control', 'opt_two_initial_control', 'opt_two_left', 'opt_two_right', 'opt_two_text', 'opt_two_help', 'opt_two_pane_calc')
+
+SITES = [
+    # Experimental dual binding cells. Every pattern must match; no KNOWN fallback.
+    Site('opt_two_redraw', 'code', 'd10103ff a9017bfd a90257f6 a9034ff4 910043fd 90000009/9f00001f 91000129/ffc003ff b9405008', 0),
+    Site('opt_two_select', 'code', 'b976b008 7100051f 5400000b/ff00001f a9be7bfd a9014ff4 910003fd 9000000b/9f00001f 9100016b/ffc003ff', 0),
+    Site('opt_two_state', 'code', 'b976b008 7100051f 5400000b/ff00001f 9000000b/9f00001f 9100016b/ffc003ff f95b5c09 b940016a 5280060c f940056b f940012d b400000d/ff00001f b94051ae 6b0e015f 1a9f81ce 9b2c2dce b94011ce 710009df 54000000/ff00001f 710005df 54000000/ff00001f 3500000e/ff00001f 910061ad 14000000/fc000000 9100a1ad 14000000/fc000000 910081ad f94001ad eb0101bf 54000000/ff00001f 91002129 f1000508 54000001/ff00001f 14000000/fc000000 aa1f03ed 14000000/fc000000 d65f03c0 f9400120 17ffff20', 0),
+    Site('opt_two_decide', 'code', 'b976b008 7100051f 5400000b/ff00001f 9000000b/9f00001f 9100016b/ffc003ff f95b5c09 b940016a 5280060c f940056b f940012d b400000d/ff00001f b94051ae 6b0e015f 1a9f81ce 9b2c2dce b94011ce 710009df 54000000/ff00001f 710005df 54000000/ff00001f 3500000e/ff00001f 910061ad 14000000/fc000000 9100a1ad 14000000/fc000000 910081ad f94001ad eb0101bf 54000000/ff00001f 91002129 f1000508 54000001/ff00001f 14000000/fc000000 aa1f03ed 14000000/fc000000 d65f03c0 f9400120 14000001', 0),
+    Site('opt_two_after', 'code', 'b976b008 7100051f 5400000b/ff00001f 90000009/9f00001f 91000129/ffc003ff f95b5c0a b940012b 5280060c', 0),
+    Site('opt_two_row_state', 'code', '90000008/9f00001f 91000108/ffc003ff b9405009 b940010a 6b09015f f9400508 5280060a 1a9f8129 9b2a2128', 0),
+    Site('opt_two_update_control', 'code', 'f9400129 eb09011f 54000000/ff00001f b976c268 71000d1f 54000001/ff00001f f9401e68 3940e108', 0),
+    Site('opt_two_initial_control', 'code', 'f9400161 b4000001/ff00001f aa1303e0 94000000/fc000000 aa0003e1 aa1303e0 94000000/fc000000 b9405288', 0),
+    Site('opt_two_left', 'code', 'b936c268 f95b6668 f940068b b9405109 6b09015f 5280060a 1a9f8129 9b2a2d29 b9401129 34000009/ff00001f 7100053f 54000001/ff00001f b9405909', 0),
+    Site('opt_two_right', 'code', 'b936c268 f95b6668 f940068b b9405109 6b09015f 5280060a 1a9f8129 9b2a2d29 b9401129 34000009/ff00001f 7100053f 54000001/ff00001f 294b250a', 0),
+    Site('opt_two_text', 'code', 'b4000000/ff00001f d10583ff a9137bfd a91457fc a9154ff4 9104c3fd 90000009/9f00001f 910063e8', 0),
+    Site('opt_two_help', 'code', 'd100c3ff a9017bfd f90013f3 910043fd aa0003f3 94000000/fc000000 90000009/9f00001f 91000129/ffc003ff', 0),
+    Site('opt_two_pane_calc', 'code', 'd10243ff fd0023e8 f9002ff9 a904fbfd a9065ff8 a90757f6 a9084ff4 910123fd 39416008', 0),
+    # The Options screen (tools/patches.py; runtime/ui/game_options.mm)
+    Site('opt_create_rows', 'code', 'd10303ff a9067bfd a9076ffc a90867fa a9095ff8 a90a57f6 a90b4ff4 910183fd '
+         '90000008/9f00001f b9400118/ffc003ff', 0),
+    Site('opt_row_init_flag_type', 'code', '94000000/fc000000 b9006a60 aa1303e0 94000000/fc000000 aa1303e0 '
+         '52800021 94000000/fc000000 a9424ff4', 0),
+    Site('gdt_flag_type', 'call', '94000000/fc000000 b9006a60 aa1303e0 94000000/fc000000 aa1303e0 52800021 '
+         '94000000/fc000000 a9424ff4', 0),
+    Site('opt_row_redraw', 'call', 'aa1303e0 52800021 94000000/fc000000 a9424ff4 a9417bfd 9100c3ff d65f03c0', 2),
+    Site('opt_read', 'code', 'a9bd7bfd f9000bf5 a9024ff4 910003fd 90000008/9f00001f 91000108/ffc003ff b9405009 '
+         'b940010a', 0),
+    Site('opt_store', 'code', '90000008/9f00001f 91000108/ffc003ff b9405009 b940010a 6b09015f f9400508 5280060a '
+         '1a9f8129 9b2a2121', 0),
+    Site('opt_table', 'ref', '90000008/9f00001f 91000108/ffc003ff b9405009 b940010a 6b09015f f9400508 5280060a '
+         '1a9f8129 9b2a2121', 1),
+    Site('opt_reset', 'code', 'b9406808 7100051f 54000000/ff00001f 35000008/ff00001f 90000008/9f00001f '
+         '90000009/9f00001f 91000129/ffc003ff f9400108/ffc003ff', 0),
+    Site('opt_msg_call', 'code', '94000000/fc000000 910023e2 aa1403e0 aa1303e1 94000000/fc000000 a9554ff4 a95457fc '
+         'a9537bfd', 0),
+    Site('msg_lookup', 'call', '94000000/fc000000 910023e2 aa1403e0 aa1303e1 94000000/fc000000 a9554ff4 a95457fc '
+         'a9537bfd', 0),
+    Site('opt_decide', 'code', 'd100c3ff a9017bfd a9024ff4 910043fd 90000009/9f00001f 91000129/ffc003ff b9405008 '
+         'b940012a 5280060b', 0),
+    Site('opt_update', 'code', 'd10103ff a9017bfd a90257f6 a9034ff4 910043fd 5286d288/fffff2ff aa0003f3 8b080015', 0),
+    Site('opt_back_call', 'code', '94000000/fc000000 f9401e68 b9403909 121e7929 b9003909 90000008/9f00001f '
+         '91000108/ffc003ff f9400108', 0),
+    Site('screen_back', 'call', '94000000/fc000000 f9401e68 b9403909 121e7929 b9003909 90000008/9f00001f '
+         '91000108/ffc003ff f9400108', 0),
+    Site('screen_open_request', 'call', '94000000/fc000000 90000008/9f00001f f9400108/ffc003ff f9400108 b9402909 '
+         'f9401908 7100d53f 52803509', 0),
+    Site('screen_open', 'code', 'a9be7bfd a9014ff4 910003fd aa0003f4 390a001f/ffff1fff b940c000 2a0103f3 '
+         '94000000/fc000000', 0),
+    Site('screen_close', 'call', '94000000/fc000000 52800028 0a330100 a9414ff4 a8c27bfd d65f03c0', 0),
+    Site('screen_mgr', 'ref', '90000008/9f00001f 91000108/ffc003ff f9400108 b9402909 f9401908 7100913f 52802409 '
+         '9a9f8129', 1),
+    Site('pause_options_update', 'code', 'a9be7bfd a9014ff4 910003fd 90000008/9f00001f aa0003f3 f9400108/ffc003ff '
+         'f9400108 b9402909 f9401908 7100d13f 52803409 9a9f8129 f8696914 94000000/fc000000 b4000014/ff00001f '
+         'f9400288 aa0003e1 aa1403e0 f9400908 d63f0100 36000000/fff8001f 394a0688/ffff1fff', 0),
+    Site('opt_screen_rows', 'imm', 'b9400008/ffc003ff 7100051f 5400000b/ff00001f f95b5009/fffff3ff f9400120 '
+         'b940500a 6b01015f 54000000/ff00001f 91002129 f1000508 54000001/ff00001f d65f03c0 52800021', 0),
+    # the game's two-button dialog (Quit asks with it)
+    Site('dialog_texts', 'code', 'd10143ff a9017bfd f90013f7 a90357f6 a9044ff4 910043fd d2800b49 5286d888/fffffcff', 0),
+    Site('dialog_back', 'code', 'f959c100/ffffc3ff b4000000/ff00001f a9414ff4 2a1f03e1 a8c27bfd 14000000/fc000000 '
+         'f9400268 aa1303e0', 0),
+    Site('dialog_answer', 'ref', '90000008/9f00001f 528001a9 aa0003f3 b9000109/ffc003ff 94000000/fc000000 aa0003e1 '
+         'aa1303e0 94000000/fc000000', 3),
+    # the title screen menu
+    Site('title_update', 'code', 'a9bb7bfd a90167fc 910003fd a9025ff8 a90357f6 a9044ff4 d107c3ff 5286c208/fffff2ff', 0),
+    Site('title_button', 'code', 'd10183ff a9037bfd f90023f5 a9054ff4 9100c3fd b9404434 aa0003f3 94000000/fc000000', 0),
+    Site('title_options_state', 'imm', 'b9400268/ffc003ff 5101a508 7100191f 54000008/ff00001f 90000009/9f00001f '
+         '91000129/ffc003ff 1000000a/9f00001f 3868692b', 0),
+    Site('title_msg_file', 'ref', 'f9000549 90000009/9f00001f 91000129/ffc003ff 9000000a/9f00001f '
+         'f900015f/ffc003ff a9002d28 a8c17bfd d65f03c0', 2),
+    Site('title_version_format', 'ref', '90000001/9f00001f 91000021/ffc003ff d103c3a0 94000000/fc000000 '
+         'f9400294/ffffffdf b940da88 35000008/ff00001f 90000001/9f00001f', 1),
+    # BOTW's streaming Yaz0 decoder: its entry and its return (tools/patches.py; runtime/hle/yaz0.c)
+    Site('yaz0_stream', 'code', 'a9bd7bfd f9000bf5 a9024ff4 910003fd 39406808 2a0203f4 aa0103f5 aa0003f3', 0),
+    Site('yaz0_stream_ret', 'code', 'd65f03c0 7100869f 54000003/ff00001f b9400e68 35000008/ff00001f 12800000 '
+         '14000000/fc000000 12800020', 0),
+    # frame rate (runtime/hle/framepace.c, runtime/nvn/objects.c)
+    Site('frame_wait', 'code', 'a9bd7bfd f9000bf5 a9024ff4 910003fd 91078014 aa0003f3 aa1403e0 94000000/fc000000', 0),
+    Site('frame_loop_interval_ret', 'code', 'f9400268 aa1303e0 f9409908 d63f0100 14000000/fc000000 1100052a '
+         '14000000/fc000000 2a0903e1', 4),
+    Site('vfr_ratio', 'code', 'b9407a68 7100051f 5400000b/ff00001f 2a1f03f4 f9404269 6b14011f 1a9f8288 bd403e60', 0),
+    # the menus' speed (tools/patches.py _gui_speed): the frame interval x 0.5 stored as the GUI speed
+    # perspective projections' matrix (tools/patches.py _persp_matrix): the load of tan(fovy / 2) and the aspect ratio
+    Site('persp_matrix', 'code', 'bd409800 1e2c1003 52b7f008 2d558801 1e202800 2d569404', 3),
+    Site('persp_matrix_offset', 'code', 'bd409800 1e2c1003 52b7f008 2d558801 1e202800 2d569404', 5),
+    # frustum projections' matrix (tools/patches.py _frustum_matrix): its four loads of left / right and top / bottom
+    Site('frustum_lr0', 'code', '2d550001 52b7f008 bd409802 b900043f 1e213800 1e2e1001 1e222842 1e201820', 0),
+    Site('frustum_lr1', 'code', '2d550001 52b7f008 bd409802 b900043f 1e213800 1e2e1001 1e222842 1e201820', 10),
+    Site('frustum_tb0', 'code', '2d550001 52b7f008 bd409802 b900043f 1e213800 1e2e1001 1e222842 1e201820', 15),
+    Site('frustum_tb1', 'code', '2d550001 52b7f008 bd409802 b900043f 1e213800 1e2e1001 1e222842 1e201820', 23),
+    # projections' update (tools/patches.py _proj_update): the load of the matrix's dirty flag
+    Site('proj_update', 'code', '39402008 aa0003f3 34000268 f9400268 91003261 aa1303e0 f9402d08 d63f0100', 0),
+    # perspective projections' screen position to camera position (tools/patches.py _persp_unproject): the loads of
+    # tan(fovy / 2) (y) and of it with the aspect ratio (x)
+    Site('persp_unproject_y', 'code', 'bd409800 f900003f 1e201004 1e214000 bd000820 bd409800 bd40ac01 bd400442', 6),
+    Site('persp_unproject_x', 'code', 'bd409800 f900003f 1e201004 1e214000 bd000820 bd409800 bd40ac01 bd400442', 18),
+    # arrows' fall (tools/patches.py _arrow_gravity): the load of the gravity added to an arrow's velocity per update
+    Site('arrow_fall_gravity', 'code', 'bd410a81 1e212849 bd410e81 1e21280a 94000000/fc000000 36000000/fff8001f f9404288 2d400500', 0),
+    # Experimental shield-surf takeoff grace (#305): contact update, boost removal and launch request.
+    Site('surf_contact', 'code', '3941d2a8 36080008/fff8001f bd4066a0 1e202008 5400000d/ff00001f bd403261 1e202028 5400000d/ff00001f', 0),
+    Site('surf_boost_remove', 'code', '1e203820 2f00e401 aa1403e1 1e216800 bd003260 0f016680 f94006a0 94000000/fc000000', 0),
+    Site('surf_jump_request', 'code', '36000000/fff8001f 52a82608 b9006668 b9008288 52800028 3900a288 2d488680 52800141', 0),
+    # a stale actor in the target manager (tools/patches.py _stale_actor_helper, _stale_actor_target; #391, #393): the
+    # helper that asks an actor for its link, and the camera target's inline copy of it
+    Site('stale_actor_helper', 'code', 'b4000000/ff00001f f942b808 f9404500 14000000/fc000000 d65f03c0', 0),
+    Site('stale_actor_kind', 'code', 'b4000000/ff00001f f942b808 aa0003f3 528ebfc1 72a499a1 f9404500 94000000/fc000000', 0),
+    Site('stale_actor_target', 'code', 'f942ba68 f9404500 94000000/fc000000 12000008 390006e8 37000000/fff8001f 394002e8 35000008/ff00001f', 0),
+    # the physics step's solver microsteps (tools/patches.py _solver_steps): the delta frame times 6
+    Site('phys_solver_steps', 'code', '1e231002 1e3c1004 f9401a68 1e2c1009 1e220822 f9400108 1e202048 f9400514', 4),
+    # Havok's deactivation at the console's pace (tools/patches.py _phys_tick, _phys_motion_tick): the world step's
+    # deactivation counter (+0x3ef; the single-threaded and the multithreaded simulation) and each body's (hkpMotion +0xd;
+    # the integration of islands without constraints and with them)
+    Site('phys_tick', 'code', '394fbd0a 11000549 1100154a 390fbd09 1200094a 3500000a/ff00001f 394fb50a 5200014a '
+         '390fb50a 1200092a 3500000a/ff00001f 394fb50a 521f014a 390fb50a 12000d29 35000009/ff00001f 394fb909 320003ea '
+         '4b090149 390fb909 390fbd1f d503201f', 0),
+    Site('phys_tick_mt', 'code', '394fbd0a 11000549 1100154a 390fbd09 1200094a 3500000a/ff00001f 394fb50a 5200014a '
+         '390fb50a 1200092a 3500000a/ff00001f 394fb50a 521f014a 390fb50a 12000d29 35000009/ff00001f 394fb909 320003ea '
+         '4b090149 390fb909 390fbd1f f9400a60', 0),
+    Site('phys_motion_tick', 'code', '39403688 11000508 39003688 12000509 35000009/ff00001f 12000d09 '
+         '34000009/ff00001f aa1f03e8', 0),
+    Site('phys_motion_tick_c', 'code', '39403748 11000508 39003748 12000509 35000009/ff00001f 12000d09 '
+         '34000009/ff00001f aa1f03e8', 0),
+    # a keyframed body's angular velocity toward its target (tools/patches.py _kf_angle): the call that takes the angle
+    # of the turn left (hkQuaternion::getAngle, 2 acos(|w|))
+    # a player demo move's arrival test (tools/patches.py _demo_move_arrive): the distance left against the body's speed
+    # in console frames, fcmp s8, s9
+    Site('demo_move_arrive', 'code', 'bd60bd09 94000000/fc000000 f9400668 5282fe09 38696908 34000008/ff00001f 1e292100 '
+         '54000004/ff00001f 90000008/9f00001f bd404261 bd425102 1e222821 1e282020 54000005/ff00001f 1e292921 1e200820', 6),
+    # the radius within which a player rail move's point goes on along the rail (tools/patches.py _rail_point_radius):
+    # its load from the player, ldr s0, [x8, #0x20f0]
+    Site('rail_point_radius', 'code', 'bd60f100 1e202020 54000005/ff00001f 1e2c1001 f9403668 aa1403e0 aa1f03e1 aa1f03e2', 0),
+    Site('kf_angle', 'code', '0e612800 0e0e3c08 0e040d00 0f3f5400 0ea0a800 6e180400 4e221c00 6e211c00 3c9983a0 '
+         '94000000/fc000000 3cd883a6 1e2008c0', 9),
+    # the sound system's frame (tools/patches.py _snd_frame_floor): the delta frame, at least 0.5, its timers' step
+    Site('snd_frame_floor', 'code', '1e2c1001 1e212000 1e204c28 94000000/fc000000 b4000000/ff00001f bd415660 '
+         'aa0003f4 7e21d800', 0),
+    Site('gui_speed', 'code', 'bd0b2100 94000000/fc000000 f9400260 94000000/fc000000 52800020 94000000/fc000000 '
+         'a9414ff4 a8c27bfd', 0),
+    # MainShortCut's HoldShortCutBg: repair P_Capture_00's alpha after a fractional opening frame (#173).
+    Site('quick_menu_capture_alpha', 'code', 'f9400268/ffc003ff bd405100 1e202008 54000000/ff00001f '
+         'bd402100 1e2e1001 1e212000 54000001/ff00001f 90000001/9f00001f 91000021/ffc003ff '
+         'aa1303e0 94000000/fc000000 52801fe8 39016408', 7),
+    # the wait for the ground (tools/patches.py _tp_gate): is the map around Link not loaded yet? (the world pauses for it)
+    Site('tp_gate', 'code', 'd10283ff fd002be8 f90037f9 a905fbfd a9075ff8 a90857f6 a9094ff4 910163fd '
+         '90000016/9f00001f', 0),
+    Site('pause_state', 'ref', '90000013/9f00001f b9400268/ffc003ff 35000008/ff00001f 90000008/9f00001f '
+         'b9400108/ffc003ff 35000008/ff00001f b9400268/ffc003ff 34000008/ff00001f', 1),
+    Site('event_mgr', 'ref', '9000000d/9f00001f 910001ad/ffc003ff f94001a0 aa1703e1 94000000/fc000000 aa1703e0 '
+         '2a1f03e1 94000000/fc000000', 1),
+    Site('controller_step', 'got', '90000008/9f00001f aa1f03f5 f9400108/ffc003ff 52800036 bd400108 b9411668 '
+         '1ad522d8 8b150a77', 2),
+    # (test tools only: the clock probe)
+    Site('player_info', 'ref', '90000008/9f00001f 91000108/ffc003ff f9400100 b4000000/ff00001f 94000000/fc000000 '
+         '7100001f 5400000c/ff00001f 91314260', 1),
+    Site('world_mgr', 'ref', '90000008/9f00001f 91000108/ffc003ff f9400108 b4000008/ff00001f b946b908 7100051f '
+         '54000001/ff00001f a9bf7bfd', 1),
+    # the mouse camera (tools/patches.py _cam_stick, _cam_pitch, _cam_pitch_aim; runtime/hle/input.c): the camera's
+    # stick input, which every camera action reads, and the square that the chase-like cameras apply to its vertical
+    # part
+    Site('cam_stick', 'code', 'd100c3ff fd000be8 f90017f3 a901fbfd 910063fd aa0003f3 f900001f 52800060', 0),
+    # (the end of the camera's stick input, with the stick's value written: tools/patches.py _cam_stick_end)
+    Site('cam_stick_end', 'code', 'f9409408 910023e0 f90007e8 94000000/fc000000 360000c0 fd400be8 f94017f3', 5),
+    # CameraHorse's return address after calling the camera stick input (rt_cam_stick's lr, runtime/hle/input.c)
+    Site('horse_cam_lr', 'code', 'bd401ba0 1e202008 39416a68 54000001/ff00001f bd401fa0 1e202008 54000001/ff00001f 37180008/fff8001f', 0),
+    Site('cam_pitch_chase', 'code', '1e208803 1e202008 bd41ce80 1e23cc2b bd41d281 1e212000 54000001/ff00001f '
+         '52800039', 0),
+    Site('cam_pitch_surf', 'code', '1e208803 1e202008 bd430260 1e23cc2d bd430661 1e212000 54000001/ff00001f '
+         '2f00e400', 0),
+    Site('cam_pitch_wakeboard', 'code', '1e208803 1e202008 bd433260 1e23cc2f bd433661 1e212000 54000001/ff00001f '
+         '2f00e400', 0),
+    # CameraAiming (the bow, its zoom, the scope): the load of its latStickScale for the vertical part
+    Site('cam_pitch_aim', 'code', 'f9400268/ffc003ff 1e200923 910083e0 910063a1 bd400101 1e210860 bd4057e1 1e210809',
+         4),
+    # ... and CameraAiming2's (the camera for a held item)
+    Site('cam_pitch_item', 'code', '94000000/fc000000 1e20400b 94000000/fc000000 f9400268/ffc003ff 1e200960 bd400101 '
+         '90000008/9f00001f 1e210800', 5),
+    # the cameras' controller turning its right stick around for the game's Camera X-axis / Y-axis options (Inverted:
+    # the flags CameraRLReverse, CameraUpDownReverse): the calls that read them
+    Site('cam_reverse_x', 'code', '94000000/fc000000 36000000/fff8001f bd413260 1e214000 bd013260 2a1f03e0 '
+         '94000000/fc000000 36000000/fff8001f', 0),
+    Site('cam_reverse_y', 'code', '94000000/fc000000 36000000/fff8001f bd413660 1e214000 bd013660 a9424ff4 a9417bfd '
+         '9100c3ff', 0),
+    Site('pc_button_group', 'code', 'd10183ff a9017bfd a90267fa a9035ff8 a90457f6 a9054ff4 910043fd '
+         'aa0003f3 f90003e0 f9401800 2a0403f8 2a0303f5 2a0203f6 aa0103f4 b9000bff', 0),
+    Site('pc_cursor_manager', 'code', 'd10143ff a9017bfd a9025ff8 a90357f6 a9044ff4 910043fd b9000be1 91006008', 0),
+    Site('pc_cursor_activate', 'code', 'a9bd7bfd f9000bf5 a9024ff4 910003fd f9402415 aa0103f3 aa0003f4 f9002401', 0),
+    Site('pc_pane_bounds', 'code', 'bd407020 2d4a0821 1e200824 bd408423 1e208825 1e230841 1e238842 1e2c1003', 0),
+    # Controls > Menus wrap around (runtime/menu_wrap.c): the UI focus search's result (`mov x0, x20` before its
+    # epilogue; x19 the control, w22 the direction), and the screen's input layer (the search's own first call)
+    Site('menu_wrap', 'code', 'aa1403e0 6d442beb 6d4333ed 6d423bef a94b4ff4 a94a57f6 a9495ff8 a94867fa', 0),
+    Site('ui_control_layer', 'code', 'f9401408 3943f001 f9402508 f9400109 aa0803e0 f9401522 d61f0040', 0),
+    # Map focus helpers: retain marker targeting without controller-style recentering on hover.
+    Site('beast_focus_axes', 'code', 'a9bd7bfd f9000bf5 a9024ff4 910003fd 91404408 2a0103f3 aa0003f4 91231115', 0),
+    Site('beast_focus_linear', 'code', 'a9bd7bfd a90157f6 a9024ff4 910003fd 91404408 2a0103f3 aa0003f4 911f2116', 0),
+    Site('beast_confirm_axes', 'code', 'a9ba7bfd a9016ffc a90267fa a9035ff8 a90457f6 a9054ff4 910003fd 52831888', 0),
+    Site('beast_confirm_linear', 'code', 'fc1b0fe8 a900fbfd f9000ff9 a9025ff8 a90357f6 a9044ff4 910023fd 90000018/9f00001f 91000318/ffc003ff', 0),
+    Site('beast_clamp_pitch', 'code', 'd101c3ff a9057bfd f90033f3 910143fd 52800409 39012fff 910023e8 b9002be9', 0),
+    Site('beast_wrap_yaw', 'code', 'b9762808 7100051f 54000000/ff00001f 35000008/ff00001f bd767400 90000008/9f00001f 1e202008 bd4aa101', 0),
+    Site('beast_world', 'got', '90000009/9f00001f 52898708 72a000c8 f9400129/ffc003ff aa0103f4 f9400129 aa0003f3 b8686928', 3),
+    Site('pc_map_focus', 'code', 'a9be7bfd f9000bf3 910003fd bd786800 aa0003f3 910063a1 bd786c01 91214000', 0),
+    Site('pc_map_focus_target', 'code', 'd100c3ff a9017bfd a9024ff4 910043fd aa0103f3 aa0003f4 97ffffdc aa1403e0', 0),
+    Site('pc_map_focus_now', 'code', 'd100c3ff a9017bfd a9024ff4 910043fd aa0103f3 aa0003f4 97ffffb3 aa1403e0', 0),
+    # placed actors' traverse distance (tools/patches.py _traverse_scale): the scale the game multiplies every one by,
+    # loaded from the actor debug manager, or 1 without it (Video > Draw distance)
+    Site('traverse_scale', 'code', TRAVERSE, 13),
+    Site('traverse_scale_default', 'code', TRAVERSE, 21),
+    # the grass's view context (tools/patches.py _grass_range): its entry, with the two screen-size limits in s1, s2
+    Site('grass_range', 'code', 'bd400024 bd000004 bd400425 bd000405 bd400825 2d011005 bd001005', 0),
+    # ... and each layer's store of the camera scale its distance fades are measured with (_grass_fade)
+    Site('grass_fade_blades', 'code', 'bd417349 aa1a03e0 94000000/fc000000 1e202120 a91ceffa 90000008/9f00001f '
+         '1e20cd20 bd024360', 7),
+    Site('grass_fade_quads', 'code', 'bd4172e9 aa1703e0 94000000/fc000000 1e202120 90000008/9f00001f 1e20cd20 '
+         'bd000700', 6),
+    # the blades' draw slots (tools/patches.py _grass_blade_slots): how many their manager makes, and the two passes
+    # that stop at the 256th cell
+    Site('grass_blade_slots', 'code', 'a9416ffc 52802001 52800103 aa1c03e0 aa1b03e2 94000000/fc000000', 1),
+    Site('grass_blade_cap_a', 'code', '7100013f 7a401940 54000000/ff00001f 7103fe7f 54000008/ff00001f 71001d9f', 3),
+    Site('grass_blade_cap_b', 'code', '79402509 34000009/ff00001f 79402908 34000008/ff00001f 7103ff7f 54000008/ff00001f '
+         '7d4032c0', 4),
+    # ... and the per-frame pass that points each slot at this frame's half of its shader block (count clamped to 256)
+    Site('grass_blade_cap_c', 'code', BLADE_BUFFERS, 2),
+    Site('grass_blade_cap_c_max', 'code', BLADE_BUFFERS, 5),
+    # the blades' region test for each cell, near and far parts (tools/patches.py _grass_blade_lateral)
+    Site('grass_blade_lateral_near', 'code', BLADE_LATERAL, 8),
+    Site('grass_blade_lateral_far', 'code', BLADE_LATERAL, 13),
+    # the terrain's distant trees (tools/patches.py _tree_ranges): the entry of their per-frame shader setup
+    Site('tree_ranges', 'code', '90000008/9f00001f 91000108/ffc003ff f9400108 b4000008/ff00001f f9452908 '
+         'b4000008/ff00001f 39406108 37280008/fff8001f 39402008 36000008/fff8001f d10143ff', 0),
+    # a shrine apparatus fetching its input (tools/patches.py _gyro_scene_actor; runtime/pc_gyro_scene.c)
+    Site('gyro_scene_actor', 'code', '2d59b28f 2d5ab689 94000000/fc000000 b5000000/ff00001f 9101d280 9101a281', 2),
+    # per-action bindings (tools/patches.py _act_query; runtime/hle/bindings.c): the two queries and the mask table
+    Site('act_hold', 'code', PAD_QUERY + ' b9411e68', 0),
+    Site('act_trig', 'code', PAD_QUERY + ' b9401268', 0),
+    Site('act_masks', 'ref', PAD_QUERY + ' b9401268', 5),
+    # the store of an equipped weapon's, bow's or shield's durability, x100 (tools/patches.py _no_wear; from #296: the
+    # setter 1.8.2 0x7000c809e8 finds the equipped item of a type w22 in the pouch and stores the new value w20)
+    Site('no_wear_store', 'code', 'b9002174 5288fb08 72a00088 38686aa8 35000008/ff00001f 2a1403e0 2a1f03e2 '
+         '94000000/fc000000', 0),
+    # the weapon actor's own durability, x100 (tools/patches.py _no_wear_hit): a hit takes its cost w9 off the value w8
+    Site('no_wear_hit', 'code', '4b090108 0aa87d08 1e220101 b9000268 1e212000 1a9f07e0 14000000/fc000000 f9400288', 0),
+    # where the weapon's update calls that (no_wear_hit's function, a virtual method that every damage goes through):
+    # the instruction after the call, the return address that tells a weapon's wear from damage to Link or an enemy
+    Site('no_wear_ret', 'code', 'f9400288 2a0003f5 aa1403e0 f9415d08 d63f0100 b5000000/ff00001f 52800036 '
+         '14000000/fc000000', 0),
+    # Link's damage handling storing his new life, in quarter hearts (tools/patches.py _link_life): at its end, and on
+    # the path that takes one quarter off
+    Site('link_life_store', 'code', 'b90002b9 f9400300 94000000/fc000000 6b00033f 5400000d/ff00001f f9400300 b9400ff5 '
+         '94000000/fc000000', 0),
+    Site('link_life_tick', 'code', 'b90002a8 1e212000 1a9f07e0 14000000/fc000000 2a1f03fa 39715288 36080008/fff8001f '
+         'bd42e660', 0),
+    # the stamina setter's store, PlayerInfo +0xa4 (tools/patches.py _stamina)
+    Site('stamina_store', 'code', '1e204008 94000000/fc000000 bd00a668 f9400ff3 a940fbfd fc4207e8 d65f03c0', 2),
+    # the pouch taking arrows off for the player's bow (tools/patches.py _remove_arrows; Accessibility > Infinite arrows)
+    Site('pouch_remove_arrows', 'code', 'd101c3ff a9017bfd a9026ffc a90367fa a9045ff8 a90557f6 a9064ff4 910043fd '
+         '90000008/9f00001f aa0003f3 f9400108/ffc003ff aa0103e0', 0),
+    # sead::LookAtCamera::doUpdateMatrix (tools/patches.py _lookat_update): its first load of the eye (+0x38); eye,
+    # at (+0x44) and up (+0x50) make the view matrix written to x1 (free camera, runtime/hle/freecam.c)
+    Site('lookat_update', 'code', '2d470801 2d480c00 1e232020 2d491404 1e240440 1e250400 54000000/ff00001f 1e233823', 0),
+    # Native quick-selector sorting (runtime/quick_inventory_sort.c), optional as a complete group.
+    Site('quick_sort_enter', 'code', 'fc1d0fe8 a900fbfd f9000ff5 a9024ff4 910023fd b978e014 aa0003f3 7100069f', 0),
+    Site('quick_sort_menu', 'code', 'a9be7bfd a9014ff4 910003fd 52871b08 aa0003f3 8b080014 f95bd400 b4000000/ff00001f', 0),
+    Site('pouch_page_count', 'code', '2a0103e9 7100c83f 5288460a 72a0008a 9a9f3129 8b090c09 f86a692c b9407809', 0),
+    Site('pouch_page_item', 'code', '7100c43f 5400000d/ff00001f aa1f03e0 d65f03c0 a9bd7bfd f9000bf5 a9024ff4 910003fd 2a0203f3 '
+         '2a0103f5 aa0003f4 94000000/fc000000 2a0003e8 2a1503e9 7100cabf aa1f03e0 9a9f3129 6b13011f '
+         '5400000d/ff00001f 8b090e88 52884609 72a00089 f869690b', 0),
+    Site('pouch_item_type', 'code', 'd101c3ff a9037bfd f90023f7 a90557f6 a9064ff4 9100c3fd 90000016/9f00001f 90000008/9f00001f', 0),
+    Site('quick_sort_modal', 'code', '90000008/9f00001f 91000108/ffc003ff f9400108 b9402909 f9401908 71002d3f 52800b09 9a9f8129 '
+         'f8696900 b4000000/ff00001f 14000000/fc000000 d65f03c0', 0),
+    Site('pouch_sort', 'code', 'd10103ff a9017bfd a90257f6 a9034ff4 910043fd 9100a013 aa0003f4 2a0203f5', 0),
+    Site('quick_sort_refill', 'code', 'a9be7bfd a9014ff4 910003fd aa0003f3 71000c3f 54000008/ff00001f 2a0103e8 90000009/9f00001f', 0),
+    Site('quick_sort_mapping', 'code', 'a9be7bfd a9014ff4 910003fd b9773814 aa0003f3 7100069f 54000000/ff00001f 35000014/ff00001f', 0),
+    Site('quick_sort_cursor', 'code', 'a9bd7bfd f9000bf5 a9024ff4 910003fd 2a0203f3 2a0103f4 2a0203e1 2a1f03e2', 0),
+    Site('quick_sort_labels', 'code', 'd10483ff a90e7bfd f9007bfc a91057f6 a9114ff4 910383fd aa0003f3 d10043a0', 0),
+    Site('pouch_lock', 'call', '94000000/fc000000 f9401be9 f9400fa0 14000000/fc000000 aa1403e0 aa0903f4 94000000/fc000000 '
+         'aa1403e9', 0),
+    Site('pouch_unlock', 'call', '94000000/fc000000 aa1403e9 14000000/fc000000 f9000fa0 aa0803e0 52800601 52800082 d63f0120', 0),
+    Site('quick_sort_event', 'call', '94000000/fc000000 37000000/fff8001f 2a1f03e0 94000000/fc000000 36000000/fff8001f 2a1f03e0 '
+         '2a1f03e1 94000000/fc000000 aa1303e0 aa1403e1', 0),
+    Site('quick_sort_player_busy', 'call', '94000000/fc000000 2a0003f4 d10183a0 94000000/fc000000 90000015/9f00001f 90000008/9f00001f '
+         '91000108/ffc003ff 14000000/fc000000', 0),
+    # Native quick-selector drop and asynchronous equipped-item completion.
+    Site('quick_drop_tick', 'code', 'd10183ff a9027bfd a9035ff8 a90457f6 a9054ff4 910083fd 91419008 aa0003f3', 0),
+    Site('quick_drop_actor_call', 'code', 'd63f0100 aa1503e0 94000000/fc000000 a9424ff4 52800020 f9400bf5 a8c37bfd d65f03c0', 0),
+    Site('player_drop_forbidden', 'code', 'a9be7bfd f9000bf3 910003fd aa0003f3 94000000/fc000000 36000000/fff8001f 2a1f03e0 '
+         '14000000/fc000000', 0),
+    Site('actor_info_lookup', 'code', 'd10103ff a9017bfd a90257f6 a9034ff4 910043fd aa0003f6 aa0203e0 2a0303f5', 0),
+    Site('actor_info_has_tag', 'code', 'd10203ff a9047bfd a9055ff8 a90657f6 a9074ff4 910103fd aa0103f4 f9400421', 0),
+    Site('pouch_discard', 'code', 'd10183ff a9027bfd a9035ff8 a90457f6 a9054ff4 910083fd 9100a013 aa0003f4', 0),
+    Site('player_equipment', 'code', 'a9be7bfd f9000bf3 910003fd f9400008 2a0103f3 f9418908 d63f0100 2a1303e1 94000000/fc000000', 0),
+    Site('pouch_default_name', 'code', '90000009/9f00001f 90000008/9f00001f 91000108/ffc003ff f9400129/ffc003ff 71001c3f 8b215108 '
+         '7a423824 9a891100', 0),
+    Site('player_schedule_equip', 'code', 'd100c3ff a9017bfd a9024ff4 910043fd 12800003 910023e4 f90007ff aa0003f3', 0),
+    Site('pouch_equipped_snapshot', 'code', 'a9bd7bfd f9000bf5 a9024ff4 910003fd 91411008 9100a013 aa0003f4 911f8115', 0),
+    Site('actor_index_assign', 'code', 'd10503ff a9127bfd a9134ffc 910483fd 39403008 aa0103f3 34000008/ff00001f f9400008', 0),
+    Site('actor_index_resolve', 'code', 'd10143ff a9017bfd a9025ff8 a90357f6 a9044ff4 910043fd b9400808 3100051f', 0),
+    Site('actor_index_release', 'code', '39403008 35000008/ff00001f 12800008 b9000808 d65f03c0 f9400008 3900301f b4000008/ff00001f', 0),
+    Site('actor_link_release', 'code', 'a9be7bfd f9000bf3 910003fd 39400008 aa0003f3 34000008/ff00001f f9400660 b4000000/ff00001f', 0),
+    Site('actor_link_alive', 'code', 'b9400809 3100053f 54000000/ff00001f f9400008 b940410a 6b09015f 54000001/ff00001f 39403009', 0),
+    Site('pouch_cleanup', 'code', 'a9bb7bfd a90167fa a9025ff8 a90357f6 a9044ff4 910003fd 9100a013 aa0003f4', 0),
+    Site('player_actor', 'call', '94000000/fc000000 b4000000/ff00001f 91316015 aa0003f4 aa1503e0 94000000/fc000000 b94c9a88 '
+         'aa1503e0 321b0108 b90c9a88 94000000/fc000000 aa1303e0', 0),
+    Site('quick_drop_trash_prohibited', 'call', '94000000/fc000000 36000000/fff8001f 52800037 14000000/fc000000 1e229000 d63f0100 d2800ba9 '
+         '5286db88', 0),
+    Site('quick_drop_actor_method', 'code', 'f942cc08 b4000008/ff00001f 79404d09 32000129 79004d09 14000000/fc000000 f942cc08 '
+         'b4000008/ff00001f', 0),
+    Site('actor_info', 'ref', '90000008/9f00001f 91000108/ffc003ff f9400117 b4000017/ff00001f f94006a8 3940011b '
+         '3400001b/ff00001f f94002a8', 1),
+    # Add items (tools/patches.py _item_tick; runtime/items.c): the entry of Link's damage handling (every frame in
+    # Adding items (tools/patches.py _item_tick; runtime/items.c): the entry of Link's damage handling (every frame in
+    # play: the game thread's place for the item get), the pause menu data's item get, and where the pause menu data's
+    # address is (its load in the pickup code)
+    Site('item_tick', 'code', 'd101c3ff fd000be8 a9027bfd a90367fa a9045ff8 a90557f6 a9064ff4 910083fd f9400c14', 0),
+    Site('pouch_item_get', 'code', 'd10243ff a9037bfd a9046ffc a90567fa a9065ff8 a90757f6 a9084ff4 9100c3fd f90003e3', 0),
+    Site('pouch_mgr', 'got', '90000017/9f00001f aa0003f5 f94002f7/ffc003ff 910003e0 f94002f6 94000000/fc000000 2a0003e2 '
+         'aa1603e0', 2),
+    # Generic layout draw thunk and its native eligibility checks (runtime/ui_layout.c).
+    Site('ui_layout_draw', 'code', '14000000/fc000000 f9013001 b4000001/ff00001f d10403ff a90a7bfd a90b6ffc a90c67fa a90d5ff8', 0),
+    Site('ui_layout_native', 'code', '39440008 7100011f 39440809 3943f80a 3943fc0b 7a401920 7a400944 7a421964', 0),
+    Site('ui_layout_pane', 'code', '39416008 52801029 6a28013f 54000001/ff00001f a9bd7bfd a90157f6 a9024ff4 910003fd', 0),
+    Site('main_data', 'data', '', 0),
+    Site('main_end', 'end', '', 0),
+]
+
+# Sites a version may lack, as a group: when one of them is neither found by its pattern nor listed in the version's
+# KNOWN table, the whole group is left out (with its patches) instead of refusing the version. The mouse camera's
+# sites go together: the stick input without the linear vertical part would square the mouse's (unclamped) motion.
+# Without them the mouse turns the camera through the right stick, as before (runtime/hle/input.c); without the
+# second group it turns it without the game's camera inversion options.
+OPTIONAL_GROUPS = [
+    ('ui_layout_draw', 'ui_layout_native', 'ui_layout_pane'),
+    ('quick_drop_tick', 'quick_drop_actor_call', 'player_drop_forbidden', 'actor_info_lookup',
+     'actor_info_has_tag', 'pouch_discard', 'player_equipment', 'pouch_default_name',
+     'player_schedule_equip', 'pouch_equipped_snapshot', 'actor_index_assign', 'actor_index_resolve',
+     'actor_index_release', 'actor_link_release', 'actor_link_alive', 'pouch_cleanup', 'player_actor',
+     'quick_drop_trash_prohibited', 'quick_drop_actor_method', 'actor_info'),
+    ('quick_sort_enter', 'quick_sort_menu', 'pouch_page_count', 'pouch_page_item', 'pouch_item_type',
+     'quick_sort_modal', 'pouch_sort', 'quick_sort_refill', 'quick_sort_mapping', 'quick_sort_cursor',
+     'quick_sort_labels', 'pouch_lock', 'pouch_unlock', 'quick_sort_event', 'quick_sort_player_busy'),
+    OPT_TWO_SITES,
+    ('lookat_update',),  # (the free camera: without it Home does nothing)
+    ('gyro_scene_actor',),
+    ('surf_contact', 'surf_boost_remove', 'surf_jump_request'),
+    ('stale_actor_helper', 'stale_actor_kind', 'stale_actor_target'),
+    ('quick_menu_capture_alpha',),
+    ('kf_angle',),
+    ('demo_move_arrive',),
+    ('rail_point_radius',),
+    ('phys_tick', 'phys_tick_mt', 'phys_motion_tick', 'phys_motion_tick_c'),
+    ('yaz0_stream', 'yaz0_stream_ret'),
+    ('pc_map_focus', 'pc_map_focus_target', 'pc_map_focus_now'),
+    ('beast_focus_axes', 'beast_focus_linear', 'beast_confirm_axes', 'beast_confirm_linear',
+     'beast_clamp_pitch', 'beast_wrap_yaw', 'beast_world'),
+    ('pc_button_group',),
+    ('pc_cursor_manager', 'pc_cursor_activate', 'pc_pane_bounds'),
+    ('menu_wrap', 'ui_control_layer'),  # (without them the menus stop at their ends, as in the game)
+    ('cam_stick', 'cam_pitch_chase', 'cam_pitch_surf', 'cam_pitch_wakeboard', 'cam_pitch_aim', 'cam_pitch_item'),
+    ('cam_reverse_x', 'cam_reverse_y'),
+    ('cam_stick_end',),  # (Controls > Controller camera speed: without it the setting does nothing)
+    ('traverse_scale', 'traverse_scale_default'),
+    ('grass_range', 'grass_fade_blades', 'grass_fade_quads'),
+    ('grass_blade_slots', 'grass_blade_cap_a', 'grass_blade_cap_b', 'grass_blade_cap_c', 'grass_blade_cap_c_max',
+     'grass_blade_lateral_near',
+     'grass_blade_lateral_far'),
+    ('tree_ranges',),
+    ('act_hold', 'act_trig', 'act_masks'),
+    ('pouch_remove_arrows',),
+    ('no_wear_store',),
+    ('no_wear_hit', 'no_wear_ret'),
+    ('link_life_store', 'link_life_tick'),
+    ('stamina_store',),
+    ('tp_gate',),  # (a far teleport of the control endpoint: without it a long jump freezes the world)
+    ('item_tick', 'pouch_item_get', 'pouch_mgr'),
+    ('horse_cam_lr',),
+]
+OPTIONAL = {n for g in OPTIONAL_GROUPS for n in g}
+
+KNOWN = {
+    '1.9.0': {
+        'ui_layout_draw': 0x70013ee084,
+        'ui_layout_native': 0x7000f6f690,
+        'ui_layout_pane': 0x7000027d30,
+        'quick_drop_tick': 0x7000e68168,
+        'quick_drop_actor_call': 0x7001223f50,
+        'player_drop_forbidden': 0x7000cc0334,
+        'actor_info_lookup': 0x700108dc0c,
+        'actor_info_has_tag': 0x700108e7a0,
+        'pouch_discard': 0x7000d9784c,
+        'player_equipment': 0x7000570128,
+        'pouch_default_name': 0x7000d940c4,
+        'player_schedule_equip': 0x7000cbe480,
+        'pouch_equipped_snapshot': 0x7000d9f4a8,
+        'actor_index_assign': 0x7001517e60,
+        'actor_index_resolve': 0x7001517abc,
+        'actor_index_release': 0x7001517f8c,
+        'actor_link_release': 0x7001126464,
+        'actor_link_alive': 0x7001517e0c,
+        'pouch_cleanup': 0x7000d97f68,
+        'player_actor': 0x7000cc6fd0,
+        'quick_drop_trash_prohibited': 0x7000d388b0,
+        'quick_drop_actor_method': 0x70007acaa0,
+        'actor_info': 0x7001e39450,
+        'quick_sort_enter': 0x7000e283fc,
+        'quick_sort_menu': 0x7000e28744,
+        'pouch_page_count': 0x7000d970a8,
+        'pouch_page_item': 0x7000d992ac,
+        'pouch_item_type': 0x7000d91414,
+        'quick_sort_modal': 0x7000e7e750,
+        'pouch_sort': 0x7000d980a0,
+        'quick_sort_refill': 0x7000e27c2c,
+        'quick_sort_mapping': 0x7000e28070,
+        'quick_sort_cursor': 0x7000d665a4,
+        'menu_wrap': 0x7000f586b8,
+        'ui_control_layer': 0x7000f6e2c8,
+        'quick_sort_labels': 0x7000e278c0,
+        'pouch_lock': 0x7000eaff08,
+        'pouch_unlock': 0x7000eaff18,
+        'quick_sort_event': 0x7000d1499c,
+        'quick_sort_player_busy': 0x7000d35b80,
+        'opt_two_redraw': 0x7000e2eed8,
+        'opt_two_select': 0x7000e3047c,
+        'opt_two_state': 0x7000e305d0,
+        'opt_two_decide': 0x7000e30668,
+        'opt_two_after': 0x7000e30a90,
+        'opt_two_row_state': 0x7000e302e4,
+        'opt_two_update_control': 0x7000e2f7c8,
+        'opt_two_initial_control': 0x7000e3019c,
+        'opt_two_left': 0x7000e2fa50,
+        'opt_two_right': 0x7000e2fae4,
+        'opt_two_text': 0x7000e30ee0,
+        'opt_two_help': 0x7000e30550,
+        'opt_two_pane_calc': 0x70000276a0,
+        'lookat_update': 0x7000eb2d5c,
+        'yaz0_stream': 0x700131d674,
+        'yaz0_stream_ret': 0x700131d7e8,
+        'opt_create_rows': 0x7000e2f0a8,
+        'opt_row_init_flag_type': 0x7000e2f538,
+        'gdt_flag_type': 0x7001136dc8,
+        'opt_row_redraw': 0x7000e2eed8,
+        'opt_read': 0x7000e2fde4,
+        'opt_store': 0x7000e2ee44,
+        'opt_table': 0x7001e2e610,
+        'opt_reset': 0x7000e31118,
+        'opt_msg_call': 0x7000e30f70,
+        'msg_lookup': 0x7000e84870,
+        'opt_decide': 0x7000e30700,
+        'opt_update': 0x7000e2f564,
+        'opt_back_call': 0x7000e2f834,
+        'screen_back': 0x70013eca68,
+        'screen_open_request': 0x7000e833f0,
+        'screen_open': 0x70013ed220,
+        'screen_close': 0x70013ed264,
+        'screen_mgr': 0x7001e374b8,
+        'beast_focus_axes': 0x7000df31bc,
+        'beast_focus_linear': 0x7000df3438,
+        'beast_confirm_axes': 0x7000df326c,
+        'beast_confirm_linear': 0x7000df3710,
+        'beast_clamp_pitch': 0x7000df38f4,
+        'beast_wrap_yaw': 0x7000df3988,
+        'beast_world': 0x7001e328d8,
+        'pause_options_update': 0x7000dd0384,
+        'opt_screen_rows': 0x36b0,
+        'dialog_texts': 0x7000e57af8,
+        'dialog_back': 0x7000e59714,
+        'dialog_answer': 0x7001dac9a8,
+        'title_update': 0x7000e5f070,
+        'title_button': 0x7000e5f9b0,
+        'title_options_state': 0x3654,
+        'title_msg_file': 0x7001e31f50,
+        'title_version_format': 0x70015cd092,
+        'frame_wait': 0x7000e9487c,
+        'frame_loop_interval_ret': 0x70011267c4,
+        'vfr_ratio': 0x700151d494,
+        'gui_speed': 0x7001280ee8,
+        'quick_menu_capture_alpha': 0x7000e26a38,
+        'arrow_fall_gravity': 0x70005ee734,
+        'surf_contact': 0x70011e9e74,
+        'surf_boost_remove': 0x70011e9e94,
+        'surf_jump_request': 0x70011ea3d4,
+        'stale_actor_helper': 0x700120bc40,
+        'stale_actor_kind': 0x700120ccdc,
+        'stale_actor_target': 0x7000dea400,
+        'phys_solver_steps': 0x700156f930,
+        'demo_move_arrive': 0x7000c711dc,
+        'rail_point_radius': 0x7000c89d4c,
+        'kf_angle': 0x70012d57fc,
+        'phys_tick': 0x70000f5e20,
+        'phys_tick_mt': 0x700012644c,
+        'phys_motion_tick': 0x700011f95c,
+        'phys_motion_tick_c': 0x70001207cc,
+        'snd_frame_floor': 0x7001551004,
+        'persp_matrix': 0x7000eb4a50,
+        'persp_matrix_offset': 0x7000eb4a58,
+        'persp_unproject_y': 0x7000eb4b28,
+        'proj_update': 0x7000eb4474,
+        'frustum_lr0': 0x7000eb4f24,
+        'frustum_lr1': 0x7000eb4f4c,
+        'frustum_tb0': 0x7000eb4f60,
+        'frustum_tb1': 0x7000eb4f80,
+        'persp_unproject_x': 0x7000eb4b58,
+        'pause_state': 0x7001e1611c,
+        'tp_gate': 0x70010b7a40,
+        'event_mgr': 0x7001e3a638,
+        'controller_step': 0x7001dad0e0,
+        'player_info': 0x7001e13ed0,
+        'world_mgr': 0x7001e57580,
+        'cam_stick': 0x7000d57fe0,
+        'cam_stick_end': 0x7000d5801c,
+        'horse_cam_lr': 0x7000c29000,
+        'cam_pitch_chase': 0x7000bf5334,
+        'cam_pitch_surf': 0x7000c1a52c,
+        'cam_pitch_wakeboard': 0x7000c22104,
+        'cam_pitch_aim': 0x7000bf0bfc,
+        'cam_pitch_item': 0x7000bf2c0c,
+        'cam_reverse_x': 0x7000d17024,
+        'cam_reverse_y': 0x7000d1703c,
+        'traverse_scale': 0x70010a4674,
+        'traverse_scale_default': 0x70010a4694,
+        'grass_range': 0x70013ad8b0,
+        'grass_fade_blades': 0x70013a85d0,
+        'grass_fade_quads': 0x70013baa5c,
+        'grass_blade_slots': 0x70013a7230,
+        'grass_blade_cap_a': 0x70013b32e0,
+        'grass_blade_cap_b': 0x7001496c40,
+        'grass_blade_cap_c': 0x70013ae960,
+        'grass_blade_cap_c_max': 0x70013ae96c,
+        'grass_blade_lateral_near': 0x70013a8f0c,
+        'grass_blade_lateral_far': 0x70013a8f20,
+        'tree_ranges': 0x70013c94ac,
+        'act_hold': 0x7000d16f0c,
+        'act_trig': 0x7000d16f74,
+        'act_masks': 0x70016d89b4,
+        'pouch_remove_arrows': 0x7000d93814,
+        'no_wear_store': 0x7000d93d50,
+        'no_wear_hit': 0x7000b9542c,
+        'no_wear_ret': 0x70007b09f4,
+        'link_life_store': 0x7000cc4e70,
+        'link_life_tick': 0x7000cc4da4,
+        'stamina_store': 0x7000cc7430,
+        'item_tick': 0x7000cc4c3c,
+        'pouch_item_get': 0x7000d921bc,
+        'pouch_mgr': 0x7001e18570,
+        'main_data': 0x7001b7a000,
+        'main_end': 0x7001e98000,
+    },
+}
+
+
+class SiteError(Exception):
+    pass
+
+
+def supported_version(build_id):
+    """The VERSIONS entry of a main module build id (64 hex digits or the first 16), or None."""
+    for v in VERSIONS:
+        if v.build_id and build_id[:16] == v.build_id:
+            return v
+    return None
+
+
+# ------------------------------------------------------------------ instructions
+
+def sext(v, bits):
+    return v - (1 << bits) if v & (1 << (bits - 1)) else v
+
+
+def is_adrp(w):
+    return (w & 0x9F000000) == 0x90000000
+
+
+def adrp_page(w, pc):
+    return (pc & ~0xFFF) + (sext(((w >> 5) & 0x7FFFF) << 2 | ((w >> 29) & 3), 21) << 12)
+
+
+def lo12(w):
+    """(scaled low 12 bits, base register) of an ADD (immediate, 64-bit) or an LDR / STR (unsigned offset); else None"""
+    if (w & 0xFFC00000) == 0x91000000:  # add xd, xn, #imm
+        return (w >> 10) & 0xFFF, (w >> 5) & 31
+    if (w & 0x3B000000) == 0x39000000:  # ldr / str (immediate, unsigned offset), integer or SIMD&FP
+        scale = (w >> 30) & 3
+        if w & 0x04000000 and (w >> 23) & 1:  # (a 128-bit SIMD&FP register)
+            scale = 4
+        return ((w >> 10) & 0xFFF) << scale, (w >> 5) & 31
+    return None
+
+
+def imm_value(w):
+    """The immediate of an LDR / STR (unsigned offset, scaled), an ADD / SUB / CMP (immediate) or a MOVZ; else None"""
+    if (w & 0x3B000000) == 0x39000000:
+        return lo12(w)[0]
+    if (w & 0x1F000000) == 0x11000000:
+        return ((w >> 10) & 0xFFF) << (12 if (w >> 22) & 1 else 0)
+    if (w & 0x7F800000) == 0x52800000:  # movz (32 / 64-bit)
+        return ((w >> 5) & 0xFFFF) << (16 * ((w >> 21) & 3))
+    return None
+
+
+def mask(w, adrp_regs):
+    """The bits of instruction w a pattern keeps (adrp_regs: registers an ADRP earlier in the pattern set)."""
+    if (w & 0x7C000000) == 0x14000000:  # b, bl
+        return 0xFC000000
+    if (w & 0xFF000010) == 0x54000000 or (w & 0x7E000000) == 0x34000000:  # b.cond; cbz, cbnz
+        return 0xFF00001F
+    if (w & 0x7E000000) == 0x36000000:  # tbz, tbnz
+        return 0xFFF8001F
+    if (w & 0x1F000000) == 0x10000000:  # adr, adrp
+        return 0x9F00001F
+    if (w & 0x3B000000) == 0x18000000:  # ldr (literal)
+        return 0xFF00001F
+    lo = lo12(w)
+    if lo and lo[1] in adrp_regs:
+        return 0xFFC003FF
+    return 0xFFFFFFFF
+
+
+def make_pattern(words):
+    """A pattern string for these instruction words: each word as hex, or value/mask where bits are masked."""
+    out, adrp_regs = [], set()
+    for w in words:
+        m = mask(w, adrp_regs)
+        if is_adrp(w):
+            adrp_regs.add(w & 31)
+        else:  # (most instructions write their bits 0-4 register: it holds no page any more)
+            adrp_regs.discard(w & 31)
+        out.append(f'{w:08x}' if m == 0xFFFFFFFF else f'{w & m:08x}/{m:08x}')
+    return ' '.join(out)
+
+
+def parse_pattern(p):
+    words = []
+    for t in p.split():
+        v, _, m = t.partition('/')
+        words.append((int(v, 16), int(m, 16) if m else 0xFFFFFFFF))
+    return words
+
+
+def compile_pattern(p):
+    parts = []
+    for v, m in parse_pattern(p):
+        for i in range(4):
+            vb, mb = (v >> 8 * i) & 0xFF, (m >> 8 * i) & 0xFF
+            if mb == 0xFF:
+                parts.append(re.escape(bytes([vb])))
+            elif mb == 0:
+                parts.append(b'.')
+            else:
+                parts.append(b'[' + b''.join(re.escape(bytes([b])) for b in range(256) if b & mb == vb & mb) + b']')
+    return re.compile(b''.join(parts), re.DOTALL)
+
+
+# ------------------------------------------------------------------ a main module
+
+class Main:
+    def __init__(self, nso, base=MAIN_BASE):
+        self.nso, self.base = nso, base
+        self.text_off, self.text_size = nso.text
+        self.text = bytes(nso.image[self.text_off:self.text_off + self.text_size])
+
+    def word(self, a):
+        return struct.unpack_from('<I', self.nso.image, a - self.base)[0]
+
+    def find(self, pattern, limit=2):
+        """Addresses (word-aligned, in .text) where the pattern matches; at most `limit`."""
+        rx, out, pos = compile_pattern(pattern), [], 0
+        while len(out) < limit:
+            m = rx.search(self.text, pos)
+            if not m:
+                break
+            if m.start() % 4:
+                pos = m.start() + 1
+                continue
+            out.append(self.base + self.text_off + m.start())
+            pos = m.start() + 4
+        return out
+
+    def target(self, kind, a):
+        """What the site of this kind at instruction a is (see the module docstring)."""
+        w = self.word(a)
+        if kind == 'code':
+            return a
+        if kind == 'call':
+            if (w & 0x7C000000) != 0x14000000:
+                raise SiteError(f'{a:#x} is not a branch ({w:08x})')
+            return a + sext(w & 0x3FFFFFF, 26) * 4
+        if kind == 'imm':
+            v = imm_value(w)
+            if v is None:
+                raise SiteError(f'{a:#x} has no immediate ({w:08x})')
+            return v
+        if is_adrp(w):
+            v = adrp_page(w, a)
+        else:
+            lo = lo12(w)
+            if not lo:
+                raise SiteError(f'{a:#x} does not complete an address ({w:08x})')
+            for b in range(a - 4, a - 4 * 33, -4):  # its ADRP
+                pw = self.word(b)
+                if is_adrp(pw) and (pw & 31) == lo[1]:
+                    v = adrp_page(pw, b) + lo[0]
+                    break
+            else:
+                raise SiteError(f'{a:#x}: no ADRP for x{lo[1]} above it')
+        if kind == 'got':
+            return self.base + struct.unpack_from('<Q', self.nso.image, v - self.base)[0]
+        return v
+
+    def locate(self, s):
+        """(address, or None when the pattern doesn't find exactly one place; how many places it matches) of a site"""
+        if s.kind == 'data':
+            return self.base + self.nso.data[0], 1
+        if s.kind == 'end':
+            return self.base + self.nso.size, 1
+        hits = []
+        for p, at in s.pattern if isinstance(s.pattern, list) else [(s.pattern, s.at)] if s.pattern else []:
+            hits = self.find(p)
+            if len(hits) == 1:
+                return self.target(s.kind, hits[0] + 4 * at), 1
+        return None, len(hits)
+
+    def text_words(self, a, n):
+        return [self.word(a + 4 * i) for i in range(n)]
+
+    def function_of(self, a):
+        """(start, end) of the function holding a, from the module's unwind info (None: none there)."""
+        import bisect
+        from analyze import eh_frame_extents
+        if not hasattr(self, 'fdes'):
+            self.fdes = sorted((self.base + s, self.base + e) for s, e in eh_frame_extents(self.nso) if e > s)
+        i = bisect.bisect_right(self.fdes, (a, 1 << 64)) - 1
+        return self.fdes[i] if i >= 0 and a < self.fdes[i][1] else None
+
+    def pattern_for(self, a, kind='code', shortest=8, longest=24):
+        """A pattern that finds only a: (pattern, at). It stays inside a's function (the code around it may change
+        on its own), starts as close above a as it can - at the ADRP for a ref or got site, whose address bits it
+        masks then - and has `shortest` words at least (or the whole function): short ones are likelier to find
+        another place in a new build."""
+        f0, f1 = self.function_of(a) or (a - 64, a + 128)
+        first = 0
+        if kind in ('ref', 'got') and not is_adrp(self.word(a)):
+            reg = lo12(self.word(a))[1]
+            first = next(i for i in range(1, 33) if is_adrp(self.word(a - 4 * i)) and self.word(a - 4 * i) & 31 == reg)
+        for back in range(first, (a - f0) // 4 + 1):
+            s = a - 4 * back
+            room = (f1 - s) // 4
+            for n in range(min(max(shortest, back + 1), room), min(longest, room) + 1):
+                p = make_pattern(self.text_words(s, n))
+                if self.find(p) == [s]:
+                    return p, back
+        raise SiteError(f'no pattern inside its function finds only {a:#x}')
+
+
+def common_pattern(ma, a, mb, b, kind='code', shortest=8, longest=32):
+    """A pattern that finds only a in main module ma and only b in mb, the same code in two versions: the bits both
+    keep (and make_pattern keeps). For an imm site the immediate itself is always masked. (pattern, at)"""
+    fa, fb = ma.function_of(a) or (a - 64, a + 128), mb.function_of(b) or (b - 64, b + 128)
+    first = 0
+    if kind in ('ref', 'got') and not is_adrp(ma.word(a)):
+        reg = lo12(ma.word(a))[1]
+        first = next(i for i in range(1, 33) if is_adrp(ma.word(a - 4 * i)) and ma.word(a - 4 * i) & 31 == reg)
+    for back in range(first, min(a - fa[0], b - fb[0]) // 4 + 1):
+        sa, sb = a - 4 * back, b - 4 * back
+        room = min(fa[1] - sa, fb[1] - sb) // 4
+        for n in range(min(max(shortest, back + 1), room), min(longest, room) + 1):
+            out = []
+            for i, ((va, ka), (vb, kb)) in enumerate(zip(parse_pattern(make_pattern(ma.text_words(sa, n))),
+                                                         parse_pattern(make_pattern(mb.text_words(sb, n))))):
+                k = ka & kb & ~(va ^ vb) & 0xFFFFFFFF
+                if kind == 'imm' and i == back:
+                    k &= 0xFFE0001F if (va & 0x7F800000) == 0x52800000 else 0xFFC003FF
+                out.append(f'{va & k:08x}' if k == 0xFFFFFFFF else f'{va & k:08x}/{k:08x}')
+            p = ' '.join(out)
+            if ma.find(p) == [sa] and mb.find(p) == [sb]:
+                return p, back
+    raise SiteError(f'no pattern inside both functions finds only {a:#x} and {b:#x}')
+
+
+def resolve(main, known=None, log=None):
+    """{site name: address} for this main module. known: the addresses listed for its build (or None)."""
+    out, problems = {}, []
+    for s in SITES:
+        try:
+            found, hits = main.locate(s)
+        except SiteError as e:
+            problems.append(f'{s.name}: {e}')
+            continue
+        # This experiment changes native object routing. A stale KNOWN address
+        # must never turn it on after a failed signature check.
+        if s.name in OPT_TWO_SITES and (found is None or
+                                      (known and s.name in known and found != known[s.name])):
+            if log:
+                log(f'game_sites: {s.name}: spike signature did not match')
+            continue
+        k = (known or {}).get(s.name)
+        if found is not None and k is not None and found != k:
+            raise SiteError(f'{s.name}: the pattern finds {found:#x}, the table says {k:#x}')
+        if found is None and k is None:
+            if s.name in OPTIONAL:
+                continue
+            problems.append(f'{s.name}: the pattern matches {hits} places' + (' or more' if hits > 1 else ''))
+            continue
+        if found is None and log:
+            log(f'game_sites: {s.name}: the pattern matches {hits} places; {k:#x} from the table')
+        out[s.name] = found if found is not None else k
+    if problems:
+        raise SiteError('; '.join(problems))
+    for g in OPTIONAL_GROUPS:
+        missing = [n for n in g if n not in out]
+        if not missing:
+            continue
+        if log:
+            log(f'game_sites: {", ".join(missing)} not found: {", ".join(g)} left out')
+        for n in g:
+            out.pop(n, None)
+    return out
+
+
+def for_module(nso, base, allow_unsupported=False, log=None):
+    """(version name, sites) for the main module nso at base. Refuses a build that VERSIONS doesn't support, unless
+    allow_unsupported (bringing up a new version: its sites must then all be found by pattern)."""
+    v = supported_version(nso.build_id)
+    if not v or not v.supported:
+        what = f'version {v.name}, not supported yet' if v else 'not a version Savage Wind knows'
+        if not allow_unsupported:
+            raise SiteError(f'main module build {nso.build_id[:16]}: {what}')
+        if log:
+            log(f'game_sites: main module build {nso.build_id[:16]}: {what}; sites by pattern only')
+    name = v.name if v else nso.build_id[:16]
+    return name, resolve(Main(nso, base), KNOWN.get(name) if v and v.supported else None, log)
+
+
+def main():
+    if len(sys.argv) < 3 or sys.argv[1] not in ('find', 'pattern', 'common'):
+        sys.exit(__doc__)
+    from nso import Nso
+    m = Main(Nso(sys.argv[2]))
+    if sys.argv[1] == 'common':
+        mb, a, b = Main(Nso(sys.argv[4])), int(sys.argv[3], 16), int(sys.argv[5], 16)
+        kind = sys.argv[6] if len(sys.argv) > 6 else 'code'
+        p, at = common_pattern(m, a, mb, b, kind)
+        print(f"    Site('<name>', '{kind}', '{p}', {at}),  # -> {m.target(kind, a):#x} / {mb.target(kind, b):#x}")
+        return
+    if sys.argv[1] == 'pattern':
+        a = int(sys.argv[3], 16)
+        kind = sys.argv[4] if len(sys.argv) > 4 else 'code'
+        p, at = m.pattern_for(a, kind)
+        print(f"    Site('<name>', '{kind}', '{p}', {at}),  # -> {m.target(kind, a):#x}")
+        return
+    v = supported_version(m.nso.build_id)
+    known = KNOWN.get(v.name, {}) if v else {}
+    print(f'main module build {m.nso.build_id[:16]}: ' + (f'version {v.name}' + ('' if v.supported else
+          ' (not supported yet)') if v else 'not in VERSIONS'))
+    bad = 0
+    for s in SITES:
+        try:
+            found, hits = m.locate(s)
+        except SiteError as e:
+            found, hits = None, str(e)
+        k = known.get(s.name)
+        state = (f'{hits} matches' if found is None else
+                 'ok' if k == found else 'new' if k is None else f'TABLE SAYS {k:#x}')
+        bad += state not in ('ok', 'new')
+        print(f"        '{s.name}': {found:#x},  # {state}" if found is not None else
+              f"        # '{s.name}': {state}" + (f' (table {k:#x})' if k is not None else ''))
+    sys.exit(1 if bad else 0)
+
+
+if __name__ == '__main__':
+    main()

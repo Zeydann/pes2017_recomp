@@ -1,0 +1,228 @@
+// Vulkan backend for the NVN layer (Windows; macOS uses runtime/nvn/metal.m + renderer.m).
+// Files: device.c (instance, window, swapchain, present, screenshots, ImGui hooks), textures.c (images, uploads,
+// views), exec.c (command execution: passes, draws, clears, copies, compute), shaders.c (GLSL -> SPIR-V, programs,
+// pipelines). Mirrors the Metal backend's behaviour; differences are noted where they happen.
+//
+// Synchronisation model: every image lives in VK_IMAGE_LAYOUT_GENERAL, and a full memory barrier separates
+// render passes, copies and dispatches (Metal tracks these hazards itself). Submissions are numbered; a timeline
+// semaphore signals each number, which is what NVN fences (renderer_fence_seq / renderer_wait_seq) wait for.
+#pragma once
+#include <stdbool.h>
+#include <stdint.h>
+#include <vulkan/vulkan.h>
+#if __has_include(<vma/vk_mem_alloc.h>)
+#include <vma/vk_mem_alloc.h>
+#else
+#include <vk_mem_alloc.h>  // (Debian / Ubuntu libvulkan-memory-allocator-dev)
+#endif
+
+#include "../nvn.h"
+#include "../maxwell/shader.h"
+
+void vk_device_fault_report(void);
+#define VK_CHECK(x) do { VkResult r_ = (x); if (r_ != VK_SUCCESS) { if (r_ == VK_ERROR_DEVICE_LOST) { vk_device_fault_report(); \
+    FATAL("Vulkan device lost: the GPU stopped responding (%s, %s:%d)\n", #x, __FILE__, __LINE__); } \
+    if (r_ == VK_ERROR_OUT_OF_DEVICE_MEMORY || r_ == VK_ERROR_OUT_OF_HOST_MEMORY) \
+        FATAL("the GPU ran out of memory (%s: %d, %s:%d)\n", #x, r_, __FILE__, __LINE__); \
+    FATAL("%s failed: %d (%s:%d)\n", #x, r_, __FILE__, __LINE__); } } while (0)
+
+typedef struct {
+    VkInstance inst;
+    VkPhysicalDevice phys;
+    VkDevice dev;
+    VkQueue queue;
+    VkQueue present_queue;     // a second queue of the same family for presentation (device.c), or queue
+    uint32_t qfam, qfam_count;
+    VmaAllocator vma;
+    VkPhysicalDeviceProperties props;
+    bool is_mali;              // Arm Mali (vendor 0x13B5): the Mali-only paths' default (tiler / non-coherent workarounds)
+    VkPipelineCache pcache;
+    VkPipelineCache pcache_pre;  // the precompiled shaders' libraries (cache/vk_precompiled.bin; read only while playing)
+    VkSemaphore timeline;      // value = last completed submission number
+    VkCommandPool pool;        // render thread only
+    bool provoking_last;  // VK_EXT_provoking_vertex: flat outputs from a primitive's last vertex, as NVN
+    bool custom_border, divisor, host_import, memory_budget, memory_priority, pageable_device_local_memory, sparse_queue, sparse_buffer,
+        sparse_nonresident_strict, sparse_host_import, wide_lines;
+    bool calibrated;  // VK_EXT_calibrated_timestamps (the profiler aligns GPU timestamps to the CPU clock)
+    bool nv_checkpoints;  // VK_NV_device_diagnostic_checkpoints: where the GPU was when it was lost (exec.c ck_mark)
+    bool feat_aniso;  // samplerAnisotropy (Video > Anisotropic filtering)
+    bool storage_ext;  // shaderStorageImageExtendedFormats (TAA's R8 / R16F / RG16F storage images: exec.c mvec_taa)
+    bool depth_clamp;          // depthClamp feature (nvnCommandBufferSetDepthClamp: shadow maps keep occluders before the near plane)
+    bool occlusion_precise;    // occlusionQueryPrecise: SAMPLES_PASSED counts samples, not just "any"
+    bool feedback_loop;        // attachment feedback loops + barriers inside dynamic rendering (exec.c)
+    bool feedback_layout;      // ... in ATTACHMENT_FEEDBACK_LOOP_OPTIMAL layout (no VK_KHR_unified_image_layouts: GENERAL otherwise)
+    bool lean_usage;           // colour images list their view formats instead of a bare MUTABLE_FORMAT (textures.c)
+    bool gpl;                  // graphics pipeline libraries with fast linking (exec.c)
+    bool dmabuf;               // memory exported as dma-bufs (Linux: the guest heap, exec.c backend_heap_set)
+    bool radv;                 // the driver is Mesa's RADV
+    bool turnip;               // the driver is Mesa's Turnip (Qualcomm Adreno; exec.c ubo_dynamic_mark_stage)
+    bool amd_proprietary;      // the driver is AMD's own (Windows; textures.c's cube-compatible rule, #59)
+    bool present_wait;         // VK_KHR_present_id + present_wait on (SAVAGEWIND_LOG_PRESENT: when frames are shown)
+    bool hdr_metadata;         // VK_EXT_hdr_metadata: the HDR10 swapchain carries the peak/game nits
+    bool fp16;                 // shaderFloat16 + 16-bit storage on (the FSR 3 upscaler's 16-bit shaders: fsr3.cpp)
+    // window
+    VkSurfaceKHR surface;
+    VkSwapchainKHR swapchain;
+    VkFormat sc_format;
+    VkExtent2D sc_extent;
+    VkPresentModeKHR sc_mode;
+    uint32_t sc_count;
+    VkImage sc_images[8];
+    VkImageView sc_views[8];
+} VkG;
+extern VkG g_vk;
+// g_vk.queue from more than one thread: the recorder's submissions (record.c), frame generation's presents (device.c
+// present_thread) and the sparse binds (exec.c)
+extern pthread_mutex_t g_vk_queue_lock;
+
+// ---- submissions (exec.c)
+// Work is recorded into the current command buffer; uploads go into a separate one that runs first.
+VkCommandBuffer vk_cmd(void);         // current command buffer (outside any rendering unless exec.c began one)
+VkCommandBuffer vk_upload_cmd(void);  // upload command buffer of the pending submission
+uint64_t vk_pending_seq(void);        // number the pending submission will get
+uint64_t vk_completed_seq(void);
+void vk_wait_seq(uint64_t seq);
+void vk_wait_ready(void);  // until the main thread has made the window and device (device.c)
+void vk_full_barrier(VkCommandBuffer cb);
+void vk_end_pass(void);
+void vk_submit_extra(VkSemaphore wait, VkSemaphore signal, VkCommandBuffer extra);  // submit + one more cb (present)
+void vk_present_idle(void);  // device.c: the presentation thread has no present queued or in progress
+void vk_dyn_forget(void);    // exec.c: graphics pipeline / dynamic state of the main command buffer changed elsewhere
+
+// Transient GPU-visible memory that lives until the submission it was allocated for completes.
+typedef struct { VkBuffer buf; uint64_t off; void *ptr; } VkSpan;
+VkSpan vk_transient(uint64_t size, uint64_t align);
+VkSpan vk_transient_copy(const void *data, uint64_t size, uint64_t align);
+VkSpan vk_readback(uint64_t size);  // host-cached GPU -> CPU staging (read right after the copy completes)
+void vk_readback_sync(void);         // ... before reading it (non-coherent host-cached memory: invalidated)
+VkDescriptorSet vk_alloc_set(VkDescriptorSetLayout layout);
+
+// ---- textures (textures.c)
+// Render-target scale groups (textures.c tex_scale_group): none, the 3D scene's (internal resolution), the final
+// image's (the window's resolution), shadow maps (Video > Shadow resolution)
+enum { RS_NONE = 0, RS_SCENE = 1, RS_OUT = 2, RS_SHADOW = 3 };
+
+typedef struct TexBackend {
+    VkImage image;
+    VmaAllocation mem;
+    VkFormat format;
+    VkImageViewType base_type;
+    uint32_t width, height, depth, layers, levels, samples;
+    VkImageAspectFlags aspect;
+    bool gpu_owned, uploaded, dynamic;
+    bool slices_renderable;  // 3D image made 2D-array compatible: its slices are render targets
+    bool not_attachable;     // made without a color or depth/stencil attachment usage (vk_view: no render view)
+    bool cube_ok;            // made cube compatible: cube and cube-array views allowed
+    bool feedback_ok;        // made with VK_IMAGE_USAGE_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT (sampled while it is rendered to)
+    bool feedback_seen;      // a draw sampled it while writing it: its passes begin with the feedback loop enabled
+    bool in_feedback_layout; // in ATTACHMENT_FEEDBACK_LOOP_OPTIMAL now (g_vk.feedback_layout: a pass that loops, exec.c)
+    VkFormat view_fmt[2];    // (g_vk.lean_usage) the only formats its views may have; nview_fmt 0: any compatible one
+    uint8_t nview_fmt;
+    uint64_t data_hash, sample_hash, checked_frame, full_frame;
+    bool scalable, presented;
+    bool native_post;           // shader-identified bloom target: never inherit a scene scale
+    bool hdr_upgraded;           // the game's linear 10-bit final image, made RGBA16F for HDR (hdr.c)
+    uint8_t rs_group;            // RS_*: which output scale its allocation follows (textures.c)
+    uint32_t guest_w;            // (RS_SHADOW: the guest width its scale is worked out from)
+    uint64_t touched_frame, frame_cleared;
+    uint32_t level_gen;
+    float sx, sy;
+    void *pending_rgba;  // host-produced pixels (video) waiting to be uploaded on the render thread
+    uint32_t pending_w, pending_h, pending_stride;
+    uint8_t astc_bw, astc_bh;  // ASTC without GPU support: decoded to RGBA8 on upload (runtime/nvn/astc.c)
+    bool astc_srgb;
+    uint8_t mem_kind;            // TM_* (runtime/perfcount.h): texture memory by kind
+    int64_t mem_bytes, mem_src;  // its memory; ASTC decoded to RGBA8: the guest ASTC size
+    bool bc4_cpu;                // BC4 decoded to R8 on upload (SAVAGEWIND_VK_BC4_CPU=1: Mali text / sprites test)
+    bool menu_tex;               // text_scale on one of the menus' textures, not a font sheet: the game's sampler stays
+    uint8_t text_scale;          // a font sheet enlarged by this much on upload (runtime/nvn/text_upscale.c); 0: not one
+    bool heart_half;             // the HUD's half heart, HEART_SCALE times wider on upload (textures.c)
+    uint32_t glyph_gen;          // a button glyph sheet (runtime/nvn/glyphs.c): the icons it was uploaded with
+    // textures.c: one image per memory and shape, shared by every texture made there
+    uint64_t key_addr;           // 0: not shared
+    uint32_t key[7];             // target, format, width, height, depth, levels, samples
+    struct TexBackend *key_next;
+    int refs;                    // textures holding the image
+    int all, idle;               // slots + 1 in textures.c's lists of all images / images no texture holds
+    uint64_t idle_frame, used_frame;  // when it was let go / last asked for by a finalized texture (zombies)
+    uint64_t guest_size;         // bytes of guest storage its last texture covered (textures.c: kept images)
+    uint64_t kept_hash, kept_bytes;
+    bool kept;                   // parked past PARK_FRAMES with its contents (textures.c idle_expire)
+    bool evicted;                // its image let go over the video memory budget: made and uploaded again when used (vram_trim)
+    uint64_t seen_frame;         // last frame a texture asked for it (textures.c tex_backend)
+    uint64_t drawn_frame, prev_drawn;  // last two frames a pass drew into it (exec.c: one-shot draws)
+    uint64_t serial;             // which image this is: every image made gets a new one (exec.c's linear targets)
+    // A compressed image drawn into through an uncompressed view of its blocks (a texel a block: BOTW encodes its NPC
+    // speech bubbles to BC4 on the GPU that way). Vulkan draws into no compressed image: the draw goes into this
+    // block-sized image instead, copied into this one after the pass (textures.c block_view, vk_block_flush).
+    // block is the one the open pass draws into: one of block_lv (a block image per level of b drawn into that way),
+    // block_level the level of b its texels are the blocks of, block_slice the layer (array) or slice (3D) of it. agl's
+    // GPU BC4 encoder fills a 32x32x32 BC4 volume that way, one slice a pass; each slice goes through the same image.
+    struct TexBackend *block;
+    struct TexBackend *block_lv[16];
+    uint8_t block_level;
+    uint16_t block_slice;
+    bool gpu_bc4;                // BC4 kept as BC4 though SAVAGEWIND_VK_BC4_CPU is on: the GPU draws into its blocks
+    bool block_pending;          // (exec.c) the attachment view just made is block's: copy it after the pass
+} TexBackend;
+
+TexBackend *vk_tex(NvnTexture *t, bool for_render);  // backend image (uploads CPU contents unless for_render)
+VkFormat vk_format(uint32_t nvn_format);
+bool vk_format_alpha_one(uint32_t nvn_format);
+// View of t (optionally through an NVN texture view) for rendering or sampling.
+VkImageView vk_view(NvnTexture *t, const NvnTextureView *v, bool has_view, bool render, int want_textype);
+VkComponentMapping vk_sample_swizzle(NvnTexture *t, const NvnTextureView *v);  // (a colour texture's, sampled)
+VkImageView vk_image_view(TexBackend *b, VkImageViewType type, VkFormat fmt, uint32_t lv0, uint32_t nlv, uint32_t ly0,
+                          uint32_t nly, VkComponentMapping sw, VkImageAspectFlags aspect);
+VkFormat vk_view_format(TexBackend *b, VkFormat want);  // want, or the image's own format where want is not listed
+
+// ---- HDR (runtime/nvn/vulkan/hdr.c)
+// The game's final image is linear 10-bit (A2B10G10R10) with the HUD drawn into it, then copied sRGB-encoded into the
+// 8-bit image the game presents. With Video > HDR on (or Automatic while the display is in HDR), that 10-bit image is
+// made RGBA16F so the tonemap can keep highlights above white; hdr.c records the float image the present copy reads,
+// and device.c presents that instead of the clipped 8-bit copy.
+bool vk_hdr_targets_wanted(void);   // HDR not Off: the game's linear 10-bit final image is made RGBA16F
+bool vk_hdr_game_enabled(void);     // the swapchain is HDR10
+void vk_hdr_nits(float *peak, float *game, float *ui);
+// The live HDR tonemap parameters (hdr.c): 5 vec4s, the push constant block of the HDR tonemap program.
+// game/UI, peak/game, SDR pivot, hue | blowout, vanilla saturation, bloom, clamp | tone mapper, exposure,
+// highlights, shadows | contrast, saturation, purity_highlights, flare | gamma, 0, 0, 0
+typedef struct { float v[20]; } VkHdrParams;
+void vk_hdr_params(VkHdrParams *p);
+const char *vk_hdr_icc_description(void);  // the startup ICC profile/peak, for the HDR settings description
+char *vk_hdr_tonemap_source(const char *orig, int scene_texture, int glow_texture);  // NULL when not ours to replace
+void vk_hdr_record(VkImage win, VkImage src, VkFormat fmt, uint32_t w, uint32_t h);  // src 0: forget win
+bool vk_hdr_source(VkImage win, VkImage *src, VkFormat *fmt, uint32_t *w, uint32_t *h);
+void vk_hdr_image_gone(VkImage img);
+VkFormat vk_frame_format(void);     // the format the frame is being drawn into (HDR: RGBA16F)
+bool vk_frame_hdr(void);            // ... and it is an RGBA16F HDR game image
+void vk_texture_drop_format_list(NvnTexture *t);        // (textures.c) a feedback loop target: no format list
+VkImageView vk_dummy_view(int textype);
+void vk_block_flush(VkCommandBuffer cb, TexBackend *b);  // (outside a pass) b->block's texels into b's blocks
+VkSampler vk_sampler(NvnSamplerDesc *d, bool aniso_ok, float bias);  // (aniso_ok: Video > Anisotropic filtering may
+                                                                     //  apply; bias: added to the LOD bias)
+VkSampler vk_default_sampler(bool linear);
+VkSampler vk_text_sampler(void);
+void vk_image_init_layout(VkCommandBuffer cb, VkImage img, VkImageAspectFlags aspect);
+// Destruction once every submission that may use the object has completed.
+void vk_defer_image(VkImage img, VmaAllocation mem);
+void vk_defer_view(VkImageView v);
+void vk_views_forget(TexBackend *b);  // drop (deferred) the cached views of an image being replaced
+void vk_make_scalable_like(NvnTexture *t, NvnTexture *like);  // a pass's attachments share one scale
+bool vk_native_post_target(NvnTexture *t);  // before its first write; contents may be discarded
+uint8_t vk_texture_scale_group(NvnTexture *t);
+bool vk_is_shadow_copy(const NvnTexture *t);  // the sun cascades' half-size R16 copy (textures.c)
+bool vk_shadow_direct(void);                  // its readers compare against the cascades (SAVAGEWIND_NO_SHADOW_DIRECT=1: off)
+bool vk_shadow_scaled(const NvnTexture *t);  // the cascades t are bigger than the game's (Shadow resolution above Console)
+void renderer_get_scene_scale(float *sx, float *sy);
+void renderer_set_scene_scale(float sx, float sy);
+void renderer_set_shadow_size(uint32_t n);  // shadow maps' width (RS_SHADOW; 0: the game's own)
+uint64_t vk_frame_counter(void);
+
+// ---- shaders / pipelines (shaders.c)
+VkShaderModule vk_compile_glsl(const char *src, int stage, const char *name);  // NULL on failure (logged)
+VkShaderModule vk_builtin_shader(const char *name);  // internal shaders (clear, copy, present)
+
+// ---- device / window (device.c)
+void vk_save_png(const char *path, const uint8_t *rgba, uint32_t w, uint32_t h);
+bool vk_replace_file(const char *tmp, const char *path);  // rename over an existing file, atomically
