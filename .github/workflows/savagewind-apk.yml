@@ -1,0 +1,81 @@
+name: Savage Wind Android APK
+
+# Manual for now: the app currently builds as a host shell with the runtime
+# unlinked, so a push trigger would only produce red builds. Switch to
+# push/pull_request once the native target links runtime code (see
+# PORT-HANDOFF.md, step 2).
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: savagewind-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-debug-apk:
+    name: Build debug APK
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: savagewind/android
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install SDK, NDK and CMake
+        run: |
+          sdkmanager --install \
+            "platforms;android-35" \
+            "build-tools;35.0.0" \
+            "ndk;27.2.12479018" \
+            "cmake;3.22.1"
+          yes | sdkmanager --licenses > /dev/null || true
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build debug APK
+        run: gradle :app:assembleDebug --stacktrace --no-daemon
+
+      - name: Report APK contents
+        if: always()
+        run: |
+          APK=$(ls app/build/outputs/apk/debug/*.apk 2>/dev/null | head -1)
+          if [ -n "$APK" ]; then
+            ls -lh "$APK"
+            unzip -l "$APK" | grep -E 'lib/|AndroidManifest' || true
+          else
+            echo "No APK produced."
+          fi
+
+      - name: Upload debug APK
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SavageWind-port-scaffold-${{ github.sha }}
+          path: savagewind/android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SavageWind-build-logs-${{ github.sha }}
+          path: |
+            savagewind/android/app/build/outputs/logs/
+            savagewind/android/build/reports/
+          if-no-files-found: warn
+          retention-days: 14
