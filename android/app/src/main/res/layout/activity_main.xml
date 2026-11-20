@@ -73,12 +73,20 @@
             android:paddingStart="10dp"
             android:paddingEnd="16dp">
 
-            <LinearLayout
+            <!-- Scrolls only when the list cannot fit at its own height; on a
+                 screen with room it spreads exactly as before (MenuColumn). -->
+            <ScrollView
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:layout_marginEnd="8dp"
-                android:orientation="vertical">
+                android:fillViewport="true"
+                android:scrollbars="none"
+                android:overScrollMode="never">
+
+            <com.pes2017.recomp.MenuColumn
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
 
                 <Button
                     android:id="@+id/play"
@@ -140,10 +148,16 @@
                     android:layout_marginTop="2dp"
                     android:layout_marginBottom="4dp"
                     android:text="@string/direct_launch"
-                    android:textColor="@color/pes_muted"
-                    android:textSize="10sp"
+                    android:textColor="@color/pes_navy"
+                    android:textSize="12sp"
+                    android:gravity="center_vertical"
+                    android:minHeight="32dp"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="4dp"
                     android:fontFamily="sans-serif-medium" />
-            </LinearLayout>
+            </com.pes2017.recomp.MenuColumn>
+
+            </ScrollView>
 
             <!-- The chosen entry's details: a PES 6 settings panel, title strip and body. -->
             <LinearLayout

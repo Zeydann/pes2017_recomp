@@ -106,9 +106,18 @@ class MainActivity : AppCompatActivity() {
         } catch (_: Throwable) {
         }
 
+        // The switch is the player's, always: it says what opening the app
+        // does, which is as true before the game is installed as after. It used
+        // to be hidden whenever no installation was found, so on a phone that
+        // still had to pick its game folder -- the usual first run, and the
+        // state the Arabic screenshot was taken in -- the feature looked gone.
         directLaunchSwitch.isChecked = prefs.autoLaunch
         directLaunchSwitch.setOnCheckedChangeListener { _, isChecked ->
             prefs.autoLaunch = isChecked
+            showDetail(
+                getString(R.string.direct_launch),
+                getString(if (isChecked) R.string.direct_launch_on else R.string.direct_launch_off),
+            )
         }
 
         play.setOnClickListener {
@@ -449,12 +458,11 @@ class MainActivity : AppCompatActivity() {
             play.text = getString(R.string.play)
             status.text = getString(if (autoFound) R.string.status_ready_auto else R.string.status_ready, gameDirectory)
             installButton.visibility = android.view.View.GONE
-            directLaunchSwitch.visibility = android.view.View.VISIBLE
 
             if (relaunchRequested) {
                 relaunchRequested = false
                 hasAutoLaunched = true
-                prefs.matchQuit = false
+                prefs.consumeMatchQuit()
                 startGameWhenPreviousRunIsGone()
                 return
             }
@@ -463,8 +471,7 @@ class MainActivity : AppCompatActivity() {
             // app, not about answering that question, so the once-only latch is
             // taken here too -- which also covers a launcher that was rebuilt
             // while the match ran.
-            if (prefs.matchQuit) {
-                prefs.matchQuit = false
+            if (prefs.consumeMatchQuit()) {
                 hasAutoLaunched = true
                 return
             }
@@ -481,7 +488,6 @@ class MainActivity : AppCompatActivity() {
                 ?: detectedSources.firstOrNull()
             detectedSource = chosen
             installButton.visibility = android.view.View.VISIBLE
-            directLaunchSwitch.visibility = android.view.View.GONE
 
             if (gameDirectory.isNotEmpty()) {
                 // A folder was chosen but is no longer usable: say why.

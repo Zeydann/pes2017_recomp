@@ -152,6 +152,8 @@
     <string name="entry_install">التثبيت من صورة قرص</string>
     <string name="entry_settings">الإعدادات</string>
     <string name="direct_launch">بدء المباراة فورًا عند فتح التطبيق</string>
+    <string name="direct_launch_on">يفتح التطبيق على المباراة مباشرة</string>
+    <string name="direct_launch_off">يفتح التطبيق على هذه القائمة</string>
     <string name="select_folder_hint">يبحث التطبيق أولًا عن اللعبة في هذا الهاتف بنفسه. وإن لم يجدها، فأشِره إلى المجلد الذي يحتوي ملفات PES 2017 (default.xex وأرشيفات .cpk). وإن لم يكن Android قد سمح للتطبيق بقراءة هذا الجزء من التخزين بعد، فسيسأل أولًا.</string>
     <string name="settings_hint">الصورة والأداء وعناصر التحكم وملفات اللعبة لهذه النسخة.</string>
     <string name="install_game">تثبيت ملفات اللعبة</string>

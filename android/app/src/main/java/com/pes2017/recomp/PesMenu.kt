@@ -1,9 +1,11 @@
 package com.pes2017.recomp
 
 import android.app.Activity
+import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
@@ -26,8 +28,10 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatDialog
+import kotlin.math.cos
 import kotlin.math.min
 import kotlin.math.roundToInt
+import kotlin.math.sin
 
 /**
  * The in-game menu, drawn the way PES 2017 draws one on the 360: a panel down
@@ -95,15 +99,25 @@ class PesMenu(
     private val rtl = activity.resources.configuration.layoutDirection == View.LAYOUT_DIRECTION_RTL
     private fun dp(value: Int): Int = (value * density).roundToInt()
 
-    private val headingType = Typeface.create("sans-serif-condensed", Typeface.BOLD_ITALIC)
+    /**
+     * PES's condensed italic capitals are a Latin design. Arabic has no italic
+     * of its own and the system synthesises one by shearing the whole line,
+     * which pushes the outer letters of a run past its advance and gets them
+     * clipped; so a right-to-left menu keeps the family and the weight and
+     * drops the slope.
+     */
+    private val headingType = Typeface.create(
+        "sans-serif-condensed", if (rtl) Typeface.BOLD else Typeface.BOLD_ITALIC,
+    )
     private val bodyType = Typeface.create("sans-serif-condensed", Typeface.BOLD)
 
     private val root = FrameLayout(activity)
+    private val backdrop = Backdrop(activity)
     private val panel = LinearLayout(activity)
     private val brand = TextView(activity)
     private val heading = TextView(activity)
     private val message = TextView(activity)
-    private val scroll = ScrollView(activity)
+    private val scroll = CappedScrollView(activity)
     private val body = LinearLayout(activity)
     private val promptStrip = TextView(activity)
     private val hintLine = TextView(activity)
@@ -150,32 +164,29 @@ class PesMenu(
         val widthDp = metrics.widthPixels / metrics.density
         val panelWidth = (min(widthDp * PANEL_FRACTION, PANEL_MAX_DP) * density).roundToInt()
 
+        // The panel is opaque now. It used to be a 95%-opaque blue gradient,
+        // and over a paused match -- whose own bright menu is still drawn on
+        // the surface behind this window -- the game's white text showed
+        // through the rows and between the letters. That is what "the Arabic
+        // is covered" was: not the translation, and not the font.
         panel.orientation = LinearLayout.VERTICAL
         // The panel takes its own taps: only the pitch beside it goes back, so
         // tapping a heading or the space between rows cannot close the menu.
         panel.setOnClickListener { }
-        panel.background = GradientDrawable(
-            GradientDrawable.Orientation.TOP_BOTTOM,
-            intArrayOf(PANEL_TOP, PANEL_BOTTOM),
-        )
-        // Centred in the window, in every language. Without a gravity the
-        // panel is pinned to the start edge, which is the left in English and
-        // the right in Arabic: the same menu would sit in a different place
-        // depending on the language it was reading. Centred, it is in the same
-        // place in all six.
+        panel.background = GradientDrawable().apply {
+            setColor(PANEL)
+            setStroke(maxOf(1, dp(1)), PANEL_EDGE)
+        }
+        // Centred in the window, in every language: pinned to a start edge the
+        // same menu sits on a different side depending on the language.
         panel.layoutParams = FrameLayout.LayoutParams(
-            panelWidth, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.CENTER,
+            panelWidth, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER,
         )
-        // Symmetric, so the text starts the same distance from either edge of
-        // the panel; the insets that differ are the row's own business.
-        panel.setPadding(dp(16), dp(18), dp(16), dp(12))
+        panel.setPadding(0, 0, 0, 0)
 
-        // "PES 2017 | Typhon Lhoucine": the title keeps the size, typeface,
-        // letter spacing and colour it always had, the name sits beside it on
-        // the same condensed line, and the bar between them is the dimmer cyan,
-        // so the pair reads as one header rather than two labels. The line wraps
-        // rather than ellipsizing: the whole name has to be readable even on the
-        // narrowest panel.
+        // The header is the PES 2017 blue bar with the page's title on it, as
+        // the Edit Menu in the reference is: edge to edge on the panel, white
+        // bold lettering, the build line above it in the quieter cyan.
         brand.text = SpannableStringBuilder("PES 2017").apply {
             val barAt = length
             append(" | ")
@@ -190,63 +201,74 @@ class PesMenu(
                 Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
             )
         }
-        brand.setTextColor(0xFF57C7FF.toInt())
-        brand.textSize = 10f
-        brand.letterSpacing = 0.32f
+        brand.setTextColor(BRAND)
+        brand.textSize = 9.5f
+        brand.letterSpacing = 0.28f
         brand.typeface = bodyType
-        brand.setPadding(0, 0, 0, dp(2))
 
         heading.setTextColor(Color.WHITE)
-        heading.textSize = 21f
+        heading.textSize = 18f
         heading.typeface = headingType
-        heading.letterSpacing = if (rtl) 0f else 0.05f
-        heading.isAllCaps = true
+        heading.letterSpacing = if (rtl) 0f else 0.02f
+        // No all-caps transformation in Arabic: it rewrites the string before
+        // shaping and can drop the last glyph of a run.
+        heading.isAllCaps = false
         heading.maxLines = 2
         heading.ellipsize = android.text.TextUtils.TruncateAt.END
 
-        message.setTextColor(0xFFA9C4E8.toInt())
-        message.textSize = 12f
+        message.setTextColor(HEADER_TEXT)
+        message.textSize = 11f
         message.typeface = bodyType
-        message.setPadding(0, dp(6), 0, 0)
+        message.setPadding(0, dp(3), 0, 0)
         message.visibility = View.GONE
 
-        val rule = View(activity)
-        rule.setBackgroundColor(0x6635D3FF)
         val header = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
+            setBackgroundColor(HEADER)
+            setPadding(dp(14), dp(9), dp(14), dp(10))
             addView(brand, LinearLayout.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-            addView(heading, LinearLayout.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            addView(
+                heading,
+                LinearLayout.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            )
             addView(message, LinearLayout.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-            addView(rule, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)).apply {
-                topMargin = dp(10)
-            })
         }
         panel.addView(header, LinearLayout.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
 
         body.orientation = LinearLayout.VERTICAL
-        scroll.isFillViewport = true
+        body.setPadding(0, dp(2), 0, dp(2))
+        scroll.isFillViewport = false
         scroll.isVerticalScrollBarEnabled = false
         scroll.addView(body, FrameLayout.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        // The page never grows past the screen: past that the rows scroll, and
+        // the panel ends on a whole row rather than half of one.
+        scroll.maxHeight = (metrics.heightPixels - dp(190)).coerceAtLeast(dp(120))
         panel.addView(
             scroll,
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f),
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
         )
 
-        promptStrip.setTextColor(0xFF7FD2F5.toInt())
+        promptStrip.setTextColor(PROMPT)
         promptStrip.textSize = 10f
         promptStrip.typeface = bodyType
-        promptStrip.letterSpacing = if (rtl) 0f else 0.08f
-        promptStrip.setPadding(0, dp(10), 0, dp(2))
+        promptStrip.letterSpacing = if (rtl) 0f else 0.06f
 
-        hintLine.setTextColor(0xFF8FA9CC.toInt())
-        hintLine.textSize = 10f
+        hintLine.setTextColor(HINT)
+        hintLine.textSize = 9.5f
         hintLine.typeface = bodyType
         hintLine.setPadding(0, dp(2), 0, 0)
         hintLine.visibility = View.GONE
-        panel.addView(promptStrip, LinearLayout.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-        panel.addView(hintLine, LinearLayout.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
 
-        root.setBackgroundColor(Color.TRANSPARENT)
+        val foot = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(FOOT)
+            setPadding(dp(14), dp(7), dp(14), dp(9))
+            addView(promptStrip, LinearLayout.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            addView(hintLine, LinearLayout.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        }
+        panel.addView(foot, LinearLayout.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+
+        root.addView(backdrop, FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
         root.addView(panel)
         // A tap on the pitch beside the panel is swallowed rather than closing
         // the menu: a thumb resting on the glass must not resume the match.
@@ -387,8 +409,10 @@ class PesMenu(
         // up, and it is not one of the page's rows: the band and the pickers'
         // indices are exactly what they were.
         if (stack.size > 1 && current.backRow) {
+            val back = RowView(backRow(), BACK_ROW)
+            back.setRowGap()
             body.addView(
-                RowView(backRow(), BACK_ROW),
+                back,
                 LinearLayout.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
             )
         }
@@ -421,8 +445,11 @@ class PesMenu(
 
         for ((i, row) in rows.withIndex()) {
             val view = RowView(row, i)
+            view.setRowGap()
             rowViews.add(view)
-            body.addView(view, LinearLayout.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            body.addView(
+                view, LinearLayout.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            )
         }
         paintSelection(scrollTo = false)
 
@@ -552,9 +579,6 @@ class PesMenu(
      */
     private inner class RowView(val row: Row, val rowIndex: Int) : LinearLayout(activity) {
 
-        private val bandPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-        private val edgePaint = Paint(Paint.ANTI_ALIAS_FLAG)
-        private val linePaint = Paint(Paint.ANTI_ALIAS_FLAG)
         // Both scroll when they do not fit, and sit still when they do: a row
         // that cuts a saved pad's name or a bound command into "LB + LS U..."
         // is the menu failing to say what it means.
@@ -562,10 +586,11 @@ class PesMenu(
         private val detail = MarqueeText(activity)
         private val tick = TextView(activity)
         private val chevron = TextView(activity)
-        private val chosenBackground = GradientDrawable(
-            GradientDrawable.Orientation.LEFT_RIGHT,
-            intArrayOf(0xF22E86D8.toInt(), 0x00204C86),
-        )
+        // Flat fills, as the reference's rows are: light grey for a row, the
+        // bright PES blue for the one the player is on. Two drawables reused by
+        // every row rather than one gradient repainted per selection change.
+        private val resting = GradientDrawable().apply { setColor(ROW) }
+        private val lit = GradientDrawable().apply { setColor(SELECTED) }
 
         var chosen: Boolean
             get() = isSelected
@@ -579,22 +604,22 @@ class PesMenu(
         init {
             orientation = HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            minimumHeight = dp(48)
+            // A row is one line of text plus the breathing room the reference
+            // gives it; the text decides the floor so a taller Arabic face can
+            // never be cut at the row's edge.
+            minimumHeight = dp(42)
             isClickable = true
             isFocusable = true
-            setWillNotDraw(false)
-            // Relative, so the wide inset is on the side the row starts from:
-            // the left in English, the right in Arabic, where the selection
-            // edge and the tick are drawn.
-            setPaddingRelative(dp(14), dp(8), dp(8), dp(9))
-            background = chosenBackground.constantState?.newDrawable()?.mutate()
-            background.alpha = 0
+            // Relative, so the text starts from the side the language starts
+            // from, and the tick and the value stay on their own sides.
+            setPaddingRelative(dp(14), dp(4), dp(10), dp(4))
+            background = resting
 
             label.text = row.label
             label.typeface = headingType
-            label.textSize = 14.5f
-            label.letterSpacing = if (rtl) 0f else 0.05f
-            label.isAllCaps = true
+            label.textSize = 15f
+            label.letterSpacing = if (rtl) 0f else 0.03f
+            label.isAllCaps = false
             label.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
 
             detail.typeface = bodyType
@@ -603,21 +628,18 @@ class PesMenu(
             detail.setPaddingRelative(dp(8), 0, dp(4), 0)
 
             tick.typeface = bodyType
-            tick.textSize = 12f
+            tick.textSize = 11f
             tick.setPaddingRelative(0, 0, dp(8), 0)
             tick.text = "\u25CF"
 
             chevron.typeface = headingType
-            chevron.textSize = 17f
+            chevron.textSize = 16f
             chevron.text = "\u203A"
 
             addView(tick)
             addView(label)
             addView(detail)
             addView(chevron)
-
-            edgePaint.color = EDGE
-            linePaint.color = LINE
 
             tick.visibility = if (row.checked == null) View.GONE else View.VISIBLE
             detail.visibility = if (row.detail.isEmpty()) View.GONE else View.VISIBLE
@@ -655,35 +677,27 @@ class PesMenu(
             detail.maxWidth = (w * DETAIL_SHARE).toInt()
         }
 
-        private fun restyle() {
-            label.setTextColor(
-                when {
-                    !row.enabled -> 0xFF6C7E9C.toInt()
-                    isSelected -> Color.WHITE
-                    else -> 0xFFD6E6FA.toInt()
-                },
-            )
-            detail.setTextColor(if (isSelected) 0xFFB9F1FF.toInt() else 0xFF8FB3D9.toInt())
-            detail.text = row.detail
-            tick.setTextColor(if (row.checked == true) 0xFF57D8FF.toInt() else 0x557F97B8)
-            chevron.setTextColor(if (isSelected) 0xFFB9F1FF.toInt() else 0x66D6E6FA)
-            alpha = if (row.enabled) 1f else 0.55f
-            background?.alpha = if (isSelected) 255 else 0
+        /** The hairline gap between two rows, which is the panel showing. */
+        fun setRowGap() {
+            val params = layoutParams as? LinearLayout.LayoutParams ?: return
+            params.bottomMargin = dp(2)
+            layoutParams = params
         }
 
-        override fun onDraw(canvas: Canvas) {
-            super.onDraw(canvas)
-            if (isSelected) {
-                // The bright edge marks where the row begins: the left in
-                // English, the right in Arabic, as the text does.
-                val edge = if (layoutDirection == View.LAYOUT_DIRECTION_RTL) width - dp(3) else 0
-                canvas.drawRect(edge.toFloat(), 0f, (edge + dp(3)).toFloat(), height.toFloat(), edgePaint)
-                bandPaint.color = 0x33B9F1FF
-                canvas.drawRect(0f, 0f, width.toFloat(), dp(1).toFloat(), bandPaint)
-            }
-            val ruleStart = if (layoutDirection == View.LAYOUT_DIRECTION_RTL) 0f else paddingStart.toFloat()
-            val ruleEnd = if (layoutDirection == View.LAYOUT_DIRECTION_RTL) (width - paddingStart).toFloat() else width.toFloat()
-            canvas.drawRect(ruleStart, height - 1f, ruleEnd, height.toFloat(), linePaint)
+        private fun restyle() {
+            background = if (isSelected) lit else resting
+            label.setTextColor(
+                when {
+                    !row.enabled -> 0xFF77828F.toInt()
+                    isSelected -> Color.WHITE
+                    else -> INK
+                },
+            )
+            detail.setTextColor(if (isSelected) 0xFFD9ECFF.toInt() else 0xFF3E4C5C.toInt())
+            detail.text = row.detail
+            tick.setTextColor(if (row.checked == true) 0xFF1B8DFF.toInt() else 0x33202C3A)
+            chevron.setTextColor(if (isSelected) 0xFFEAF6FF.toInt() else 0xFF5C6B7C.toInt())
+            alpha = if (row.enabled) 1f else 0.6f
         }
     }
 
@@ -695,8 +709,8 @@ class PesMenu(
         )
 
         /** How much of the window the panel takes, and its ceiling on a tablet. */
-        private const val PANEL_FRACTION = 0.46f
-        private const val PANEL_MAX_DP = 380f
+        private const val PANEL_FRACTION = 0.58f
+        private const val PANEL_MAX_DP = 520f
 
         /** The Back row's place in a page: not one of its own rows, so never lit. */
         private const val BACK_ROW = -1
@@ -718,9 +732,109 @@ class PesMenu(
         private const val COLOR_HEADER_NAME = 0xFFEAF4FF.toInt()
         private const val COLOR_HEADER_BAR = 0x9957C7FF.toInt()
 
-        private const val PANEL_TOP = 0xF2071B3D.toInt()
-        private const val PANEL_BOTTOM = 0xF20A2F66.toInt()
-        private const val EDGE = 0xFF35D3FF.toInt()
-        private const val LINE = 0x33B9D9FF
+        /** The panel: opaque navy, so nothing behind it reads through a row. */
+        private const val PANEL = 0xFF0B1420.toInt()
+        private const val PANEL_EDGE = 0xFF1B2A3D.toInt()
+
+        /** The title bar, and the strip along the foot that names the keys. */
+        private const val HEADER = 0xFF1D5B93.toInt()
+        private const val HEADER_TEXT = 0xFFD6E9FF.toInt()
+        private const val FOOT = 0xFF0E1A27.toInt()
+        private const val PROMPT = 0xFF7FD2F5.toInt()
+        private const val HINT = 0xFF8FA9CC.toInt()
+        private const val BRAND = 0xFFBFE4FF.toInt()
+
+        /** A row at rest, and the row the player is on. */
+        private const val ROW = 0xFFD2D6DC.toInt()
+        private const val SELECTED = 0xFF1B8DFF.toInt()
+        private const val INK = 0xFF172433.toInt()
+    }
+}
+
+/**
+ * The screen behind the panel: the reference menu's low-poly field, dark navy
+ * shards with a thin pale wire over them, instead of the paused match showing
+ * through. Deterministic, so the same triangles are in the same places on
+ * every opening, and drawn from a handful of flat fills so it costs one pass
+ * over the screen behind a paused game.
+ */
+private class Backdrop(context: Context) : View(context) {
+
+    private class Facet(val points: FloatArray, val color: Int)
+
+    private val density = resources.displayMetrics.density
+    private val base = Paint().apply { color = 0xF2070B12.toInt() }
+    private val fill = Paint().apply { isAntiAlias = true }
+    private val wire = Paint().apply {
+        isAntiAlias = true
+        style = Paint.Style.STROKE
+        strokeWidth = maxOf(1f, density)
+        color = 0x1F8FC4F0
+    }
+    private val path = Path()
+    private val facets: List<Facet> = buildFacets()
+
+    private fun buildFacets(): List<Facet> {
+        // A fixed seed: the backdrop is part of the design, not a surprise.
+        var seed = 2017L
+        fun next(): Float {
+            seed = seed * 6364136223846793005L + 1442695040888963407L
+            return ((seed ushr 33) % 1000L) / 1000f
+        }
+        val shades = intArrayOf(
+            0xFF0C1420.toInt(), 0xFF101B29.toInt(),
+            0xFF13202F.toInt(), 0xFF0A1019.toInt(),
+        )
+        val facets = ArrayList<Facet>(18)
+        repeat(18) {
+            val centerX = next() * 1.3f - 0.15f
+            val centerY = next() * 1.3f - 0.15f
+            val radius = 0.2f + next() * 0.35f
+            val start = next() * 6.2832f
+            val points = FloatArray(6)
+            for (corner in 0 until 3) {
+                val angle = start + corner * 2.0944f + (next() - 0.5f) * 0.8f
+                points[corner * 2] = centerX + cos(angle) * radius
+                points[corner * 2 + 1] = centerY + sin(angle) * radius
+            }
+            facets += Facet(points, shades[(next() * shades.size).toInt().coerceIn(0, shades.size - 1)])
+        }
+        return facets
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), base)
+        for (facet in facets) {
+            path.reset()
+            path.moveTo(facet.points[0] * width, facet.points[1] * height)
+            path.lineTo(facet.points[2] * width, facet.points[3] * height)
+            path.lineTo(facet.points[4] * width, facet.points[5] * height)
+            path.close()
+            fill.color = facet.color
+            canvas.drawPath(path, fill)
+            canvas.drawPath(path, wire)
+        }
+    }
+}
+
+/**
+ * A ScrollView that stops growing at [maxHeight] and scrolls instead.
+ *
+ * The page is as tall as its rows, so a short page stays a short panel; but a
+ * page longer than the screen must not run off it, and the rows must end on a
+ * whole row. Without a ceiling the panel was given the whole screen and the
+ * last row was cut in half at the bottom edge, which reads as clipped text.
+ */
+private class CappedScrollView(context: Context) : ScrollView(context) {
+
+    var maxHeight: Int = 0
+
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        if (maxHeight <= 0) {
+            super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+            return
+        }
+        val capped = MeasureSpec.makeMeasureSpec(maxHeight, MeasureSpec.AT_MOST)
+        super.onMeasure(widthMeasureSpec, capped)
     }
 }

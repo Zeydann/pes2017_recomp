@@ -106,6 +106,13 @@
         <item name="android:fontFamily">sans-serif-condensed</item>
         <item name="android:letterSpacing">0.04</item>
         <item name="android:stateListAnimator">@null</item>
+        <!-- A long label wraps to a second line instead of being cut at the
+             row's end; Arabic labels are longer than their English ones. The
+             row grows to whatever the text needs (MenuColumn). -->
+        <item name="android:singleLine">false</item>
+        <item name="android:maxLines">2</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:includeFontPadding">true</item>
     </style>
 
     <!-- A card holding one group of settings (Display, Frame rate, ...). -->

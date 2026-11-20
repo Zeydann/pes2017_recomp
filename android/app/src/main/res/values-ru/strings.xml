@@ -152,6 +152,8 @@
     <string name="entry_install">УСТАНОВИТЬ ИЗ ОБРАЗА ДИСКА</string>
     <string name="entry_settings">НАСТРОЙКИ</string>
     <string name="direct_launch">Начинать матч сразу при открытии приложения</string>
+    <string name="direct_launch_on">Приложение сразу открывает матч</string>
+    <string name="direct_launch_off">Приложение открывает это меню</string>
     <string name="select_folder_hint">Сначала приложение само ищет игру на этом телефоне. Если не находит, укажите папку с файлами PES 2017 (default.xex и архивы .cpk). Если Android ещё не разрешил приложению читать эту часть хранилища, он сначала спросит.</string>
     <string name="settings_hint">Изображение, производительность, управление и файлы игры для этого порта.</string>
     <string name="install_game">Установить файлы игры</string>

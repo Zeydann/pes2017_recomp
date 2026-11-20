@@ -152,6 +152,8 @@
     <string name="entry_install">INSTALLER DEPUIS UNE IMAGE DE DISQUE</string>
     <string name="entry_settings">PARAMÈTRES</string>
     <string name="direct_launch">Démarrer le match dès l’ouverture de l’application</string>
+    <string name="direct_launch_on">L’application ouvre directement un match</string>
+    <string name="direct_launch_off">L’application ouvre ce menu</string>
     <string name="select_folder_hint">L’application cherche d’abord le jeu toute seule sur ce téléphone. Si elle ne le trouve pas, indiquez-lui le dossier qui contient vos fichiers PES 2017 (default.xex et les archives .cpk). Si Android n’a pas encore autorisé l’application à lire cette partie du stockage, il le demande d’abord.</string>
     <string name="settings_hint">Image, performances, contrôles et fichiers du jeu pour ce port.</string>
     <string name="install_game">Installer les fichiers du jeu</string>

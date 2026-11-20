@@ -1103,10 +1103,12 @@ class GameActivity : AppCompatActivity(), NativeListener {
         // the launcher was rebuilt from scratch and its "kick off straight
         // away" started another match the instant the player quit this one.
         //
-        // matchQuit tells a rebuilt launcher the same thing, in case this
+        // The marker tells a rebuilt launcher the same thing, in case this
         // process was the only one left: one menu, no match, until the player
-        // asks for one.
-        prefs.matchQuit = true
+        // asks for one. A file rather than a preference, because the launcher
+        // has its own copy of the preferences cached and would never see a
+        // change made from this process (Prefs.markMatchQuit).
+        prefs.markMatchQuit()
         if (NativeBridge.isLoaded()) NativeBridge.nativeRequestStop()
         finish()
         // The only way to end a guest that is inside recompiled code. The

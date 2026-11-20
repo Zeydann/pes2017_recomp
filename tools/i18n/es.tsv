@@ -145,6 +145,8 @@ entry_select_folder	ELEGIR CARPETA DEL JUEGO
 entry_install	INSTALAR DESDE UNA IMAGEN DE DISCO
 entry_settings	AJUSTES
 direct_launch	Empezar el partido nada más abrir la aplicación
+direct_launch_on	La aplicación abre directamente un partido
+direct_launch_off	La aplicación abre este menú
 select_folder_hint	La aplicación busca primero el juego en este teléfono por su cuenta. Si no lo encuentra, indícale la carpeta que contiene tus archivos de PES 2017 (default.xex y los archivos .cpk). Si Android aún no ha dejado que la aplicación lea esa parte del almacenamiento, lo preguntará antes.
 settings_hint	Imagen, rendimiento, controles y archivos del juego de este port.
 install_game	Instalar los archivos del juego

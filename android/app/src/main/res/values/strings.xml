@@ -194,6 +194,8 @@
     <string name="entry_install">INSTALL FROM DISC IMAGE</string>
     <string name="entry_settings">SETTINGS</string>
     <string name="direct_launch">Kick off straight away when the app opens</string>
+    <string name="direct_launch_on">Opening the app starts a match</string>
+    <string name="direct_launch_off">Opening the app leaves you on this menu</string>
     <string name="select_folder_hint">The app first looks for the game on this phone by itself. If it cannot find it, point it at the folder that holds your PES 2017 files (default.xex and the .cpk archives). If Android has not yet let the app read that part of the storage, it asks first.</string>
     <string name="settings_hint">Picture, performance, controls and game files for this port.</string>
     <string name="install_game">Install the game files</string>

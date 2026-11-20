@@ -2,6 +2,7 @@ package com.pes2017.recomp
 
 import android.content.Context
 import android.content.SharedPreferences
+import java.io.File
 
 /**
  * Everything the player can change, in one place, with the defaults a weak
@@ -9,6 +10,9 @@ import android.content.SharedPreferences
  * (docs/switches.md) the moment a run starts.
  */
 class Prefs(context: Context) {
+
+    /** For the marker files the two processes hand each other ([markMatchQuit]). */
+    private val files = context.applicationContext.filesDir
 
     private val store: SharedPreferences =
         context.applicationContext.getSharedPreferences("pes17", Context.MODE_PRIVATE)
@@ -528,18 +532,34 @@ class Prefs(context: Context) {
         set(value) = store.edit().putBoolean(KEY_AUTO_LAUNCH, value).apply()
 
     /**
-     * Written by the run when the player quits a match, read once by the
-     * launcher: coming back from a quit must not start another match, whatever
-     * "kick off straight away" says. Committed rather than applied because the
-     * run that writes it ends its own process a moment later, which is exactly
-     * the case an asynchronous write can lose.
+     * Quit Game: a marker file, not a preference.
+     *
+     * The run and the launcher are separate processes, and SharedPreferences
+     * caches its values per process. The launcher has already read its copy by
+     * the time the run writes the quit, so it kept seeing `false` -- which is
+     * why the launcher rebuilt itself and kicked off another match one second
+     * after the player quit. A file in the app's own storage is read from disk
+     * by whoever asks next, so the launcher sees the quit however the two
+     * processes came to be, and however many times either was restarted.
+     *
+     * It is a one-shot latch: the launcher deletes it as it takes it, so the
+     * saved "kick off straight away" choice is untouched and works normally on
+     * the next start.
      */
-    var matchQuit: Boolean
-        get() = store.getBoolean(KEY_MATCH_QUIT, false)
-        set(value) {
-            @Suppress("ApplySharedPref")
-            store.edit().putBoolean(KEY_MATCH_QUIT, value).commit()
+    fun markMatchQuit() {
+        try {
+            File(files, QUIT_MARKER).writeText("1")
+        } catch (_: Throwable) {
         }
+    }
+
+    /** True once per quit: takes the marker away with it. */
+    fun consumeMatchQuit(): Boolean = try {
+        val marker = File(files, QUIT_MARKER)
+        marker.exists() && marker.delete()
+    } catch (_: Throwable) {
+        false
+    }
 
     /**
      * Compile every recorded pipeline synchronously at boot instead of the
@@ -645,7 +665,8 @@ class Prefs(context: Context) {
         private const val KEY_LAST_SOURCE = "lastSource"
         private const val KEY_WELCOME = "seenWelcome"
         private const val KEY_AUTO_LAUNCH = "autoLaunch"
-        private const val KEY_MATCH_QUIT = "matchQuit"
+        /** The run-to-launcher "a match was just quit" latch ([markMatchQuit]). */
+        private const val QUIT_MARKER = "match-quit"
         private const val KEY_DRIVER_AUTO = "driverAutoTried"
         private const val KEY_UPDATE_TAG = "seenUpdateTag"
         private const val KEY_PREWARM_ALL = "prewarmAllShaders"

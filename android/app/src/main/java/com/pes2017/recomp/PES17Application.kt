@@ -32,15 +32,15 @@ class PES17Application : Application() {
             Localization.ensure(Prefs(this))
         } catch (_: Throwable) {
         }
-        // Arabic's first letters: a letter-spaced label loses its first glyph
-        // at the head of a right-to-left line, so every screen that is built
-        // drops the tracking as soon as it is up (Localization.dropRtlTracking).
-        // Registered before any activity exists, so the first screen gets it too.
+        // Arabic's first letters: tracking, all-caps and synthetic italic all
+        // cut a right-to-left run, so every screen built drops them as soon as
+        // it is up (Localization.relaxRtlText). Registered before any activity
+        // exists, so the first screen gets it too.
         registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
             override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {
                 val decor = activity.window?.decorView ?: return
                 // After the first layout pass, when the labels exist.
-                decor.post { activity.dropRtlTracking() }
+                decor.post { activity.relaxRtlText() }
             }
 
             override fun onActivityStarted(activity: Activity) = Unit
