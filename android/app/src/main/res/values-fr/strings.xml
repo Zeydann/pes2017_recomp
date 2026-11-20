@@ -36,6 +36,7 @@
     <string name="install_done">Les fichiers du jeu sont installés.</string>
     <string name="install_failed">L’installation ne s’est pas terminée :\n%1$s</string>
     <string name="install_cancelled">Annulé. Ce qui a été copié est conservé : relancer l’installation reprendra à cet endroit.</string>
+    <string name="install_not_recognised">le jeu copié n’a pas été reconnu</string>
     <string name="install_running_warning">L’installation est toujours en cours. Quitter maintenant l’interrompt ; elle pourra reprendre plus tard.</string>
     <string name="no_space">Espace libre insuffisant : %1$s de disponible, environ 7 Go nécessaires.</string>
     <string name="unknown_reason">aucune raison indiquée</string>
@@ -105,6 +106,8 @@
     <string name="update_check_failed">Impossible de vérifier les mises à jour : %1$s.</string>
     <string name="update_check_rate_limited">Impossible de vérifier les mises à jour : GitHub limite le débit de ce réseau. Réessayez plus tard.</string>
     <string name="update_download">Télécharger et installer</string>
+    <string name="update_download_name">Mise à jour de PES 2017</string>
+    <string name="update_download_description">Téléchargement de l’APK</string>
     <string name="update_downloading">Téléchargement de la mise à jour…</string>
     <string name="update_failed">Le téléchargement a échoué. Ouvrez plutôt la page de publication.</string>
     <string name="open_page">Page de publication</string>
@@ -158,6 +161,14 @@
     <string name="status_ready_auto">Match prêt. Les fichiers du jeu ont été trouvés sur ce téléphone :\n%1$s</string>
     <string name="status_folder_missing">Le dossier de jeu choisi a disparu ou est illisible :\n%1$s\n\nChoisissez-le à nouveau.</string>
     <string name="status_needs_access">Le dossier de jeu est défini, mais Android n’a pas accordé à l’application l’accès en lecture :\n%1$s</string>
+    <string name="source_found">Jeu trouvé (%1$s) :\n%2$s\n%3$s</string>
+    <string name="source_more">%1$d autre(s) source(s) trouvée(s).</string>
+    <string name="source_plays_here">Se joue depuis ce dossier, rien n’est copié.</string>
+    <string name="source_ready_setup">Prêt pour une installation en un clic.</string>
+    <string name="source_kind_folder">dossier</string>
+    <string name="source_kind_iso">ISO</string>
+    <string name="choose_game_source">Choisir la source du jeu (%1$d)</string>
+    <string name="choose_another_source">Choisir une autre source</string>
     <string name="pick_folder">Copier un dossier de jeu extrait (aucune autorisation nécessaire)</string>
     <string name="folder_title">Dossier du jeu</string>
     <string name="folder_no_xex">Ce dossier ne contient pas default.xex. Choisissez le dossier qui contient default.xex et les fichiers .cpk.</string>

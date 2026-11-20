@@ -528,6 +528,20 @@ class Prefs(context: Context) {
         set(value) = store.edit().putBoolean(KEY_AUTO_LAUNCH, value).apply()
 
     /**
+     * Written by the run when the player quits a match, read once by the
+     * launcher: coming back from a quit must not start another match, whatever
+     * "kick off straight away" says. Committed rather than applied because the
+     * run that writes it ends its own process a moment later, which is exactly
+     * the case an asynchronous write can lose.
+     */
+    var matchQuit: Boolean
+        get() = store.getBoolean(KEY_MATCH_QUIT, false)
+        set(value) {
+            @Suppress("ApplySharedPref")
+            store.edit().putBoolean(KEY_MATCH_QUIT, value).commit()
+        }
+
+    /**
      * Compile every recorded pipeline synchronously at boot instead of the
      * small instant-boot budget (PES17_SHADER_PREWARM_ALL). Boot takes minutes
      * on a cold cache but there is no warmup debt left afterwards.
@@ -631,6 +645,7 @@ class Prefs(context: Context) {
         private const val KEY_LAST_SOURCE = "lastSource"
         private const val KEY_WELCOME = "seenWelcome"
         private const val KEY_AUTO_LAUNCH = "autoLaunch"
+        private const val KEY_MATCH_QUIT = "matchQuit"
         private const val KEY_DRIVER_AUTO = "driverAutoTried"
         private const val KEY_UPDATE_TAG = "seenUpdateTag"
         private const val KEY_PREWARM_ALL = "prewarmAllShaders"

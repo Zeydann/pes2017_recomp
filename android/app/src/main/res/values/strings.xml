@@ -45,6 +45,7 @@
     <string name="install_done">The game files are installed.</string>
     <string name="install_failed">The install did not finish:\n%1$s</string>
     <string name="install_cancelled">Cancelled. What was copied is kept, so starting again carries on from there.</string>
+    <string name="install_not_recognised">the copied game was not recognised</string>
     <string name="install_running_warning">The install is still running. Leaving now stops it; it can be carried on later.</string>
     <string name="no_space">There is not enough free space: %1$s free, about 7 GB needed.</string>
 
@@ -133,6 +134,10 @@
     <string name="update_check_failed">Could not check for updates: %1$s.</string>
     <string name="update_check_rate_limited">Could not check for updates: GitHub is rate-limiting this network. Try again later.</string>
     <string name="update_download">Download &amp; install</string>
+    <!-- The download manager's own notification, which is outside the app's
+         windows and so needs its own two strings. -->
+    <string name="update_download_name">PES 2017 update</string>
+    <string name="update_download_description">Downloading the APK</string>
     <string name="update_downloading">Downloading update…</string>
     <string name="update_failed">The download failed. Open the release page instead.</string>
     <string name="open_page">Release page</string>
@@ -198,6 +203,19 @@
     <string name="status_ready_auto">Match ready. The game files were found on this phone:\n%1$s</string>
     <string name="status_folder_missing">The chosen game folder is gone or unreadable:\n%1$s\n\nChoose it again.</string>
     <string name="status_needs_access">The game folder is set, but Android has not given the app access to read it:\n%1$s</string>
+
+    <!-- What the launcher says about a disc image or folder it found by itself,
+         and the button that picks between several of them. The kind (a folder,
+         an ISO) is a word of its own, so it can be translated: an Arabic screen
+         must not read "folder" in English. -->
+    <string name="source_found">Game found (%1$s):\n%2$s\n%3$s</string>
+    <string name="source_more">%1$d other source(s) found.</string>
+    <string name="source_plays_here">Plays from this folder, nothing copied.</string>
+    <string name="source_ready_setup">Ready for one-click setup.</string>
+    <string name="source_kind_folder">folder</string>
+    <string name="source_kind_iso">ISO</string>
+    <string name="choose_game_source">Choose Game Source (%1$d)</string>
+    <string name="choose_another_source">Choose Another Source</string>
 
     <!-- choosing the game folder -->
     <string name="pick_folder">Copy an extracted game folder (no permission needed)</string>

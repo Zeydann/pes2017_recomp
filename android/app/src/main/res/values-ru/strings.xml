@@ -36,6 +36,7 @@
     <string name="install_done">Файлы игры установлены.</string>
     <string name="install_failed">Установка не завершилась:\n%1$s</string>
     <string name="install_cancelled">Отменено. Скопированное сохранено, поэтому при повторном запуске установка продолжится с этого места.</string>
+    <string name="install_not_recognised">скопированная игра не распознана</string>
     <string name="install_running_warning">Установка ещё идёт. Если выйти сейчас, она остановится; её можно будет продолжить позже.</string>
     <string name="no_space">Недостаточно свободного места: свободно %1$s, требуется около 7 ГБ.</string>
     <string name="unknown_reason">причина не указана</string>
@@ -105,6 +106,8 @@
     <string name="update_check_failed">Не удалось проверить обновления: %1$s.</string>
     <string name="update_check_rate_limited">Не удалось проверить обновления: GitHub ограничивает запросы из этой сети. Повторите позже.</string>
     <string name="update_download">Скачать и установить</string>
+    <string name="update_download_name">Обновление PES 2017</string>
+    <string name="update_download_description">Загрузка APK</string>
     <string name="update_downloading">Скачивание обновления…</string>
     <string name="update_failed">Не удалось скачать. Откройте страницу выпуска.</string>
     <string name="open_page">Страница выпуска</string>
@@ -158,6 +161,14 @@
     <string name="status_ready_auto">Матч готов. Файлы игры найдены на этом телефоне:\n%1$s</string>
     <string name="status_folder_missing">Выбранная папка игры исчезла или недоступна для чтения:\n%1$s\n\nВыберите её снова.</string>
     <string name="status_needs_access">Папка игры задана, но Android не дал приложению прав на её чтение:\n%1$s</string>
+    <string name="source_found">Игра найдена (%1$s):\n%2$s\n%3$s</string>
+    <string name="source_more">Найдено ещё источников: %1$d.</string>
+    <string name="source_plays_here">Запускается из этой папки, ничего не копируется.</string>
+    <string name="source_ready_setup">Готова к установке в один клик.</string>
+    <string name="source_kind_folder">папка</string>
+    <string name="source_kind_iso">ISO</string>
+    <string name="choose_game_source">Выбрать источник игры (%1$d)</string>
+    <string name="choose_another_source">Выбрать другой источник</string>
     <string name="pick_folder">Скопировать распакованную папку игры (разрешение не нужно)</string>
     <string name="folder_title">Папка игры</string>
     <string name="folder_no_xex">В этой папке нет default.xex. Выберите папку, содержащую default.xex и файлы .cpk.</string>

@@ -36,6 +36,7 @@
     <string name="install_done">Los archivos del juego están instalados.</string>
     <string name="install_failed">La instalación no terminó:\n%1$s</string>
     <string name="install_cancelled">Cancelado. Lo copiado se conserva, así que al empezar de nuevo continuará desde ahí.</string>
+    <string name="install_not_recognised">el juego copiado no se ha reconocido</string>
     <string name="install_running_warning">La instalación sigue en marcha. Salir ahora la detiene; se puede continuar más tarde.</string>
     <string name="no_space">No hay espacio libre suficiente: %1$s libres y hacen falta unos 7 GB.</string>
     <string name="unknown_reason">sin motivo indicado</string>
@@ -105,6 +106,8 @@
     <string name="update_check_failed">No se pudieron buscar actualizaciones: %1$s.</string>
     <string name="update_check_rate_limited">No se pudieron buscar actualizaciones: GitHub está limitando las peticiones de esta red. Inténtalo más tarde.</string>
     <string name="update_download">Descargar e instalar</string>
+    <string name="update_download_name">Actualización de PES 2017</string>
+    <string name="update_download_description">Descargando el APK</string>
     <string name="update_downloading">Descargando la actualización…</string>
     <string name="update_failed">La descarga falló. Abre mejor la página de la versión.</string>
     <string name="open_page">Página de la versión</string>
@@ -158,6 +161,14 @@
     <string name="status_ready_auto">Partido listo. Los archivos del juego se encontraron en este teléfono:\n%1$s</string>
     <string name="status_folder_missing">La carpeta de juego elegida ya no existe o no se puede leer:\n%1$s\n\nElígela otra vez.</string>
     <string name="status_needs_access">La carpeta de juego está definida, pero Android no ha dado permiso a la aplicación para leerla:\n%1$s</string>
+    <string name="source_found">Juego encontrado (%1$s):\n%2$s\n%3$s</string>
+    <string name="source_more">%1$d fuente(s) más encontrada(s).</string>
+    <string name="source_plays_here">Se juega desde esta carpeta, no se copia nada.</string>
+    <string name="source_ready_setup">Listo para instalarlo con un clic.</string>
+    <string name="source_kind_folder">carpeta</string>
+    <string name="source_kind_iso">ISO</string>
+    <string name="choose_game_source">Elegir origen del juego (%1$d)</string>
+    <string name="choose_another_source">Elegir otro origen</string>
     <string name="pick_folder">Copiar una carpeta de juego extraída (no hace falta permiso)</string>
     <string name="folder_title">Carpeta del juego</string>
     <string name="folder_no_xex">Esa carpeta no tiene default.xex. Elige la carpeta que contiene default.xex y los archivos .cpk.</string>

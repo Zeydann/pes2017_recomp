@@ -36,6 +36,7 @@
     <string name="install_done">Os ficheiros do jogo estão instalados.</string>
     <string name="install_failed">A instalação não terminou:\n%1$s</string>
     <string name="install_cancelled">Cancelado. O que foi copiado fica guardado, por isso começar de novo continua a partir daí.</string>
+    <string name="install_not_recognised">o jogo copiado não foi reconhecido</string>
     <string name="install_running_warning">A instalação ainda está a decorrer. Sair agora para-a; pode ser continuada mais tarde.</string>
     <string name="no_space">Não há espaço livre suficiente: %1$s livres e são precisos cerca de 7 GB.</string>
     <string name="unknown_reason">sem motivo indicado</string>
@@ -105,6 +106,8 @@
     <string name="update_check_failed">Não foi possível verificar atualizações: %1$s.</string>
     <string name="update_check_rate_limited">Não foi possível verificar atualizações: o GitHub está a limitar os pedidos desta rede. Tenta mais tarde.</string>
     <string name="update_download">Transferir e instalar</string>
+    <string name="update_download_name">Atualização do PES 2017</string>
+    <string name="update_download_description">A descarregar o APK</string>
     <string name="update_downloading">A transferir a atualização…</string>
     <string name="update_failed">A transferência falhou. Abre antes a página da versão.</string>
     <string name="open_page">Página da versão</string>
@@ -158,6 +161,14 @@
     <string name="status_ready_auto">Jogo pronto. Os ficheiros do jogo foram encontrados neste telemóvel:\n%1$s</string>
     <string name="status_folder_missing">A pasta de jogo escolhida desapareceu ou não pode ser lida:\n%1$s\n\nEscolhe-a outra vez.</string>
     <string name="status_needs_access">A pasta de jogo está definida, mas o Android não deu à aplicação acesso para a ler:\n%1$s</string>
+    <string name="source_found">Jogo encontrado (%1$s):\n%2$s\n%3$s</string>
+    <string name="source_more">Mais %1$d fonte(s) encontrada(s).</string>
+    <string name="source_plays_here">Joga-se a partir desta pasta, nada é copiado.</string>
+    <string name="source_ready_setup">Pronto para instalação com um clique.</string>
+    <string name="source_kind_folder">pasta</string>
+    <string name="source_kind_iso">ISO</string>
+    <string name="choose_game_source">Escolher origem do jogo (%1$d)</string>
+    <string name="choose_another_source">Escolher outra origem</string>
     <string name="pick_folder">Copiar uma pasta de jogo extraída (não precisa de permissão)</string>
     <string name="folder_title">Pasta do jogo</string>
     <string name="folder_no_xex">Essa pasta não tem default.xex. Escolhe a pasta que contém default.xex e os ficheiros .cpk.</string>

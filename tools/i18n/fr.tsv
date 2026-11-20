@@ -467,3 +467,14 @@ renderer_notice	Avis du moteur de rendu
 renderer_notice_body	%1$s¶¶Le GPU de votre appareil ne fournit pas Vulkan 1.3 ni VK_KHR_dynamic_rendering. Le jeu s’exécutera en mode sans affichage, sans sortie vidéo. Consultez le journal pour les détails.
 view_log_button	Voir le journal
 continue_headless	Continuer sans affichage
+source_found	Jeu trouvé (%1$s) :¶%2$s¶%3$s
+source_more	%1$d autre(s) source(s) trouvée(s).
+source_plays_here	Se joue depuis ce dossier, rien n’est copié.
+source_ready_setup	Prêt pour une installation en un clic.
+source_kind_folder	dossier
+source_kind_iso	ISO
+choose_game_source	Choisir la source du jeu (%1$d)
+choose_another_source	Choisir une autre source
+update_download_name	Mise à jour de PES 2017
+update_download_description	Téléchargement de l’APK
+install_not_recognised	le jeu copié n’a pas été reconnu

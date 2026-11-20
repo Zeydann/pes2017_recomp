@@ -1,8 +1,10 @@
 package com.pes2017.recomp
 
+import android.app.Activity
 import android.app.Application
 import android.content.Context
 import android.os.Build
+import android.os.Bundle
 import java.io.File
 import java.io.PrintWriter
 import java.io.StringWriter
@@ -30,6 +32,24 @@ class PES17Application : Application() {
             Localization.ensure(Prefs(this))
         } catch (_: Throwable) {
         }
+        // Arabic's first letters: a letter-spaced label loses its first glyph
+        // at the head of a right-to-left line, so every screen that is built
+        // drops the tracking as soon as it is up (Localization.dropRtlTracking).
+        // Registered before any activity exists, so the first screen gets it too.
+        registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
+            override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {
+                val decor = activity.window?.decorView ?: return
+                // After the first layout pass, when the labels exist.
+                decor.post { activity.dropRtlTracking() }
+            }
+
+            override fun onActivityStarted(activity: Activity) = Unit
+            override fun onActivityResumed(activity: Activity) = Unit
+            override fun onActivityPaused(activity: Activity) = Unit
+            override fun onActivityStopped(activity: Activity) = Unit
+            override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
+            override fun onActivityDestroyed(activity: Activity) = Unit
+        })
         Trail.install(this)
         Trail.note(this, "app: process started")
     }

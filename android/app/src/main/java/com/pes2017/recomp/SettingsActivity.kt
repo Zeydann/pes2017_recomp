@@ -109,12 +109,10 @@ class SettingsActivity : AppCompatActivity() {
         switch(R.id.gamepad, prefs.gamepadEnabled) { prefs.gamepadEnabled = it }
         // One haptics switch for the pad and the match alike (Haptics).
         switch(R.id.vibration, prefs.haptics) { prefs.haptics = it }
-        switch(R.id.dpad_auto_hide, prefs.dpadAutoHide) { prefs.dpadAutoHide = it }
         switch(R.id.control_fx, prefs.controlFx != ControlTheme.FX_OFF) {
             prefs.controlFx = if (it) ControlTheme.FX_SUBTLE else ControlTheme.FX_OFF
         }
         switch(R.id.flick_skill_stick, prefs.flickSkillStick) { prefs.flickSkillStick = it }
-        switch(R.id.defending_pad, prefs.defendingPad) { prefs.defendingPad = it }
         val stickMode: android.widget.RadioGroup = findViewById(R.id.stick_mode)
         stickMode.check(if (prefs.stickMode == Prefs.STICK_FIXED) R.id.stick_mode_fixed else R.id.stick_mode_move)
         stickMode.setOnCheckedChangeListener { _, id ->

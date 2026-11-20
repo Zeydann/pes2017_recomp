@@ -1,5 +1,9 @@
 package com.pes2017.recomp
 
+import android.app.Activity
+import android.view.View
+import android.view.ViewGroup
+import android.widget.TextView
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.os.LocaleListCompat
 
@@ -73,4 +77,31 @@ object Localization {
         prefs.language = tag
         apply(tag)
     }
+}
+
+/**
+ * Drops letter-spacing from every label on [this] screen when the layout runs
+ * right to left.
+ *
+ * Two reasons, one of them a bug. Android applies the tracking after every
+ * glyph, the last one included, and measures the line with it; in a
+ * right-to-left run that trailing space lands at the head of the line, so a
+ * label that fills its container is clipped there and the first Arabic letter
+ * of the row disappears off the panel's edge. Tracking is also a Latin
+ * typographic device: Arabic is written joined, and pulling the glyphs apart
+ * reads as disconnected letters rather than a word.
+ *
+ * [PesMenu] does the same by hand for the dialog it draws; this is how the
+ * screens whose labels come from layouts (the Main Menu, Settings, the guide)
+ * get it, whichever of the six languages is selected.
+ */
+fun Activity.dropRtlTracking() {
+    if (resources.configuration.layoutDirection != View.LAYOUT_DIRECTION_RTL) return
+    val root = window?.decorView ?: return
+    root.visitTextViews { it.letterSpacing = 0f }
+}
+
+private fun View.visitTextViews(action: (TextView) -> Unit) {
+    if (this is TextView) action(this)
+    if (this is ViewGroup) for (index in 0 until childCount) getChildAt(index).visitTextViews(action)
 }

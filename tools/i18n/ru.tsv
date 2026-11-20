@@ -467,3 +467,14 @@ renderer_notice	Сообщение рендерера
 renderer_notice_body	%1$s¶¶GPU вашего устройства не предоставляет Vulkan 1.3 или VK_KHR_dynamic_rendering. Игра будет работать без экрана, без вывода видео. Подробности в журнале.
 view_log_button	Открыть журнал
 continue_headless	Продолжить без экрана
+source_found	Игра найдена (%1$s):¶%2$s¶%3$s
+source_more	Найдено ещё источников: %1$d.
+source_plays_here	Запускается из этой папки, ничего не копируется.
+source_ready_setup	Готова к установке в один клик.
+source_kind_folder	папка
+source_kind_iso	ISO
+choose_game_source	Выбрать источник игры (%1$d)
+choose_another_source	Выбрать другой источник
+update_download_name	Обновление PES 2017
+update_download_description	Загрузка APK
+install_not_recognised	скопированная игра не распознана

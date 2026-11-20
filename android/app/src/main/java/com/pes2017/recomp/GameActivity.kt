@@ -1097,8 +1097,18 @@ class GameActivity : AppCompatActivity(), NativeListener {
 
     private fun quit() {
         overlay.layout.save(this)
+        // Quit Game lands on the launcher, which sits under this activity in
+        // the same task: finish() uncovers it. finishAndRemoveTask() used to be
+        // here, and it takes the whole task down -- the launcher included -- so
+        // the launcher was rebuilt from scratch and its "kick off straight
+        // away" started another match the instant the player quit this one.
+        //
+        // matchQuit tells a rebuilt launcher the same thing, in case this
+        // process was the only one left: one menu, no match, until the player
+        // asks for one.
+        prefs.matchQuit = true
         if (NativeBridge.isLoaded()) NativeBridge.nativeRequestStop()
-        finishAndRemoveTask()
+        finish()
         // The only way to end a guest that is inside recompiled code. The
         // launcher is another process and carries on.
         handler.postDelayed({ Process.killProcess(Process.myPid()) }, 120)

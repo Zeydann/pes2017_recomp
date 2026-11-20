@@ -404,7 +404,10 @@ class InstallActivity : AppCompatActivity() {
                 setBusy(false)
                 if (failure == null && safelyInstalled(target)) installedDone(target)
                 else {
-                    progressText.text = failure ?: getString(R.string.install_failed, "the copied game was not recognised")
+                    progressText.text = failure ?: getString(
+                        R.string.install_failed,
+                        getString(R.string.install_not_recognised),
+                    )
                     message(progressText.text.toString())
                 }
             }

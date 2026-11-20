@@ -454,7 +454,18 @@ class MainActivity : AppCompatActivity() {
             if (relaunchRequested) {
                 relaunchRequested = false
                 hasAutoLaunched = true
+                prefs.matchQuit = false
                 startGameWhenPreviousRunIsGone()
+                return
+            }
+            // Back from a match the player quit: the Main Menu is where Quit
+            // Game asked to be. "Kick off straight away" is about opening the
+            // app, not about answering that question, so the once-only latch is
+            // taken here too -- which also covers a launcher that was rebuilt
+            // while the match ran.
+            if (prefs.matchQuit) {
+                prefs.matchQuit = false
+                hasAutoLaunched = true
                 return
             }
             if (prefs.autoLaunch && !hasAutoLaunched) {
@@ -484,10 +495,16 @@ class MainActivity : AppCompatActivity() {
             } else if (chosen != null) {
                 play.isEnabled = true
                 play.text = getString(if (chosen.isFolder) R.string.play else R.string.install_and_play)
-                val more = if (detectedSources.size > 1) "\n${detectedSources.size - 1} other source(s) found." else ""
-                val ready = if (chosen.isFolder) "Plays from this folder, nothing copied." else "Ready for one-click setup."
-                status.text = "Game found (${chosen.kind}):\n${chosen.file.name}\n$ready$more"
-                installButton.text = if (detectedSources.size > 1) "Choose Game Source (${detectedSources.size})" else "Choose Another Source"
+                val more = if (detectedSources.size > 1) "\n" + getString(R.string.source_more, detectedSources.size - 1) else ""
+                val ready = getString(
+                    if (chosen.isFolder) R.string.source_plays_here else R.string.source_ready_setup,
+                )
+                status.text = getString(R.string.source_found, kindName(chosen), chosen.file.name, ready) + more
+                installButton.text = if (detectedSources.size > 1) {
+                    getString(R.string.choose_game_source, detectedSources.size)
+                } else {
+                    getString(R.string.choose_another_source)
+                }
             } else {
                 play.isEnabled = true
                 play.text = getString(R.string.play)
@@ -513,7 +530,7 @@ class MainActivity : AppCompatActivity() {
     /** Pick which disc image or folder to install from, or go and look for another. */
     private fun chooseSource() {
         val names = detectedSources.map {
-            "${it.file.name}  (${it.kind}, ${android.text.format.Formatter.formatFileSize(this, it.bytes)})"
+            "${it.file.name}  (${kindName(it)}, ${android.text.format.Formatter.formatFileSize(this, it.bytes)})"
         } + getString(R.string.choose_source)
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle(R.string.install_game)
@@ -528,6 +545,10 @@ class MainActivity : AppCompatActivity() {
             .setNegativeButton(R.string.cancel, null)
             .show()
     }
+
+    /** "folder" or "ISO" in the player's language, for the status line. */
+    private fun kindName(source: GameSource): String =
+        getString(if (source.isFolder) R.string.source_kind_folder else R.string.source_kind_iso)
 
     private fun device(): String {
         val vkVersion = packageManager.systemAvailableFeatures
@@ -719,8 +740,8 @@ class MainActivity : AppCompatActivity() {
         try {
             val manager = getSystemService(DOWNLOAD_SERVICE) as DownloadManager
             val request = DownloadManager.Request(Uri.parse(apkUrl))
-                .setTitle("PES 2017 update")
-                .setDescription("Downloading APK")
+                .setTitle(getString(R.string.update_download_name))
+                .setDescription(getString(R.string.update_download_description))
                 .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
                 .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "pes17-update.apk")
                 .setAllowedOverMetered(true)

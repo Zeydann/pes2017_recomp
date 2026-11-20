@@ -158,8 +158,17 @@ class PesMenu(
             GradientDrawable.Orientation.TOP_BOTTOM,
             intArrayOf(PANEL_TOP, PANEL_BOTTOM),
         )
-        panel.layoutParams = FrameLayout.LayoutParams(panelWidth, ViewGroup.LayoutParams.MATCH_PARENT)
-        panel.setPadding(dp(16), dp(18), dp(14), dp(12))
+        // Centred in the window, in every language. Without a gravity the
+        // panel is pinned to the start edge, which is the left in English and
+        // the right in Arabic: the same menu would sit in a different place
+        // depending on the language it was reading. Centred, it is in the same
+        // place in all six.
+        panel.layoutParams = FrameLayout.LayoutParams(
+            panelWidth, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.CENTER,
+        )
+        // Symmetric, so the text starts the same distance from either edge of
+        // the panel; the insets that differ are the row's own business.
+        panel.setPadding(dp(16), dp(18), dp(16), dp(12))
 
         // "PES 2017 | Typhon Lhoucine": the title keeps the size, typeface,
         // letter spacing and colour it always had, the name sits beside it on
@@ -574,7 +583,10 @@ class PesMenu(
             isClickable = true
             isFocusable = true
             setWillNotDraw(false)
-            setPadding(dp(14), dp(8), dp(8), dp(9))
+            // Relative, so the wide inset is on the side the row starts from:
+            // the left in English, the right in Arabic, where the selection
+            // edge and the tick are drawn.
+            setPaddingRelative(dp(14), dp(8), dp(8), dp(9))
             background = chosenBackground.constantState?.newDrawable()?.mutate()
             background.alpha = 0
 
@@ -588,11 +600,11 @@ class PesMenu(
             detail.typeface = bodyType
             detail.textSize = 11.5f
             detail.gravity = Gravity.END
-            detail.setPadding(dp(8), 0, dp(4), 0)
+            detail.setPaddingRelative(dp(8), 0, dp(4), 0)
 
             tick.typeface = bodyType
             tick.textSize = 12f
-            tick.setPadding(0, 0, dp(8), 0)
+            tick.setPaddingRelative(0, 0, dp(8), 0)
             tick.text = "\u25CF"
 
             chevron.typeface = headingType
@@ -662,11 +674,16 @@ class PesMenu(
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
             if (isSelected) {
-                canvas.drawRect(0f, 0f, dp(3).toFloat(), height.toFloat(), edgePaint)
+                // The bright edge marks where the row begins: the left in
+                // English, the right in Arabic, as the text does.
+                val edge = if (layoutDirection == View.LAYOUT_DIRECTION_RTL) width - dp(3) else 0
+                canvas.drawRect(edge.toFloat(), 0f, (edge + dp(3)).toFloat(), height.toFloat(), edgePaint)
                 bandPaint.color = 0x33B9F1FF
                 canvas.drawRect(0f, 0f, width.toFloat(), dp(1).toFloat(), bandPaint)
             }
-            canvas.drawRect(dp(14).toFloat(), height - 1f, width.toFloat(), height.toFloat(), linePaint)
+            val ruleStart = if (layoutDirection == View.LAYOUT_DIRECTION_RTL) 0f else paddingStart.toFloat()
+            val ruleEnd = if (layoutDirection == View.LAYOUT_DIRECTION_RTL) (width - paddingStart).toFloat() else width.toFloat()
+            canvas.drawRect(ruleStart, height - 1f, ruleEnd, height.toFloat(), linePaint)
         }
     }
 

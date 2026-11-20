@@ -36,6 +36,7 @@
     <string name="install_done">تم تثبيت ملفات اللعبة.</string>
     <string name="install_failed">لم يكتمل التثبيت:\n%1$s</string>
     <string name="install_cancelled">أُلغيت العملية. ما نُسخ محفوظ، لذا سيكمل التثبيت من حيث توقف عند البدء مجددًا.</string>
+    <string name="install_not_recognised">لم يتم التعرف على اللعبة المنسوخة</string>
     <string name="install_running_warning">التثبيت ما زال جاريًا. الخروج الآن يوقفه، ويمكن متابعته لاحقًا.</string>
     <string name="no_space">لا توجد مساحة حرة كافية: المتاح %1$s، والمطلوب نحو 7 غيغابايت.</string>
     <string name="unknown_reason">دون ذكر سبب</string>
@@ -105,6 +106,8 @@
     <string name="update_check_failed">تعذّر التحقق من التحديثات: %1$s.</string>
     <string name="update_check_rate_limited">تعذّر التحقق من التحديثات: GitHub يحدّ من طلبات هذه الشبكة. حاول لاحقًا.</string>
     <string name="update_download">تنزيل وتثبيت</string>
+    <string name="update_download_name">تحديث PES 2017</string>
+    <string name="update_download_description">جارٍ تنزيل APK</string>
     <string name="update_downloading">جارٍ تنزيل التحديث…</string>
     <string name="update_failed">فشل التنزيل. افتح صفحة الإصدار بدلًا من ذلك.</string>
     <string name="open_page">صفحة الإصدار</string>
@@ -158,6 +161,14 @@
     <string name="status_ready_auto">المباراة جاهزة. وُجدت ملفات اللعبة في هذا الهاتف:\n%1$s</string>
     <string name="status_folder_missing">مجلد اللعبة المختار اختفى أو تعذّرت قراءته:\n%1$s\n\nاختره مرة أخرى.</string>
     <string name="status_needs_access">مجلد اللعبة محدد، لكن Android لم يمنح التطبيق إذن قراءته:\n%1$s</string>
+    <string name="source_found">تم العثور على اللعبة (%1$s):\n%2$s\n%3$s</string>
+    <string name="source_more">و%1$d مصدرًا آخر موجود.</string>
+    <string name="source_plays_here">تُلعب من هذا المجلد دون نسخ أي شيء.</string>
+    <string name="source_ready_setup">جاهزة للتثبيت بنقرة واحدة.</string>
+    <string name="source_kind_folder">مجلد</string>
+    <string name="source_kind_iso">ISO</string>
+    <string name="choose_game_source">اختيار مصدر اللعبة (%1$d)</string>
+    <string name="choose_another_source">اختيار مصدر آخر</string>
     <string name="pick_folder">نسخ مجلد لعبة مفكوك (دون إذن)</string>
     <string name="folder_title">مجلد اللعبة</string>
     <string name="folder_no_xex">لا يحتوي هذا المجلد على default.xex. اختر المجلد الذي يضم default.xex وملفات .cpk.</string>
@@ -209,8 +220,8 @@
     <string name="hud_minimal">أدنى</string>
     <string name="hud_normal">عادي</string>
     <string name="hud_complete">كامل</string>
-    <string name="hud_level_hint">القراءة في الزاوية العلوية اليسرى من المباراة. أدنى: الإطارات في الثانية. عادي: يضيف زمن الإطار والحرارة. كامل: يضيف المعالج والذاكرة والقوام في سطر ثانٍ. وأيضًا في المباراة: الإيقاف المؤقت ثم «HUD الأداء».</string>
-    <string name="hud_menu">HUD الأداء</string>
+    <string name="hud_level_hint">القراءة في الزاوية العلوية اليسرى من المباراة. أدنى: الإطارات في الثانية. عادي: يضيف زمن الإطار والحرارة. كامل: يضيف المعالج والذاكرة والقوام في سطر ثانٍ. وأيضًا في المباراة: الإيقاف المؤقت ثم «واجهة الاداء».</string>
+    <string name="hud_menu">واجهة الاداء</string>
     <string name="button_style">تسميات الأزرار</string>
     <string name="button_style_playstation">PlayStation (✕ ○ □ △)</string>
     <string name="button_style_xbox">Xbox (A B X Y)</string>
@@ -249,7 +260,7 @@
     <string name="perf_hint_hint">يخبر Android بمدة كل إطار ليتمكن من رفع تردد المعالج والبطاقة أو خفضه (PES17_HINT). لا يفعل شيئًا على هاتف يرفضه، مثل Snapdragon 865 على Android 13؛ أوقفه إذا كان الهاتف يسخن أكثر معه.</string>
     <string name="crowd">جماهير الملعب</string>
     <string name="crowd_hint">الإيقاف يترك المدرجات فارغة ويوفر على العارض والبطاقة رسم الجماهير، مما يبقي الهاتف أبرد قليلًا في المباراة. تستمر اللعبة في تحريكهم. يسري عند تشغيل اللعبة التالي.</string>
-    <string name="fsr">رفع دقة أحدّ (FSR)</string>
+    <string name="fsr">رفع دقة و حدة (FSR)</string>
     <string name="black_guard">حماية من الإطارات السوداء (تجريبي)</string>
     <string name="black_guard_hint">لهواتف تومض صورتها بالأسود كل ثالث إطار: يُستبدل الإطار الأسود المنفرد بالإطار الذي قبله. يقرأ كل إطار رجوعًا، لذا يكلف سرعة. يسري عند تشغيل اللعبة التالي.</string>
     <string name="fsr_hint">يستخدم مرحلة رفع دقة وزيادة حدة AMD FSR بدلًا من شد بسيط. يكلف بضعة إطارات على هاتف ساخن.</string>

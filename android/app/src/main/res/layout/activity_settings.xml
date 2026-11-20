@@ -502,19 +502,6 @@
                         android:text="@string/vibration" />
 
                     <androidx.appcompat.widget.SwitchCompat
-                        android:id="@+id/dpad_auto_hide"
-                        style="@style/SettingSwitch"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/dpad_auto_hide" />
-
-                    <TextView
-                        style="@style/SettingHint"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/dpad_auto_hide_hint" />
-
-                    <androidx.appcompat.widget.SwitchCompat
                         android:id="@+id/control_fx"
                         style="@style/SettingSwitch"
                         android:layout_width="match_parent"
@@ -575,19 +562,6 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="@string/stick_mode_hint" />
-
-                    <androidx.appcompat.widget.SwitchCompat
-                        android:id="@+id/defending_pad"
-                        style="@style/SettingSwitch"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/defending_pad" />
-
-                    <TextView
-                        style="@style/SettingHint"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/defending_pad_hint" />
 
                     <TextView
                         style="@style/SettingLabel"
