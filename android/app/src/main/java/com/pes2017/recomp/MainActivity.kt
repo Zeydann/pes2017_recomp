@@ -53,6 +53,14 @@ class MainActivity : AppCompatActivity() {
     private var hasAutoLaunched = false
 
     /**
+     * True only when this instance is the first screen of a fresh launch.
+     * A recreated launcher (a rotation, a low-memory restart) restores its
+     * saved state, and "kick off straight away" is about opening the app, not
+     * about a screen being rebuilt -- so only this starts a match on its own.
+     */
+    private var coldStart = false
+
+    /**
      * When the launcher came back from a match the player quit. A confirm that
      * dismissed the match's own menu must not land on KICK OFF as the launcher
      * appears, so the first moments after the return ignore that button.
@@ -88,6 +96,7 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        coldStart = savedInstanceState == null
         prefs = Prefs(this)
         relaunchRequested = QuickGraphics.takeRelaunch(intent, prefs)
         // The performance preset this phone starts from, once (DeviceProfile).
@@ -512,7 +521,11 @@ class MainActivity : AppCompatActivity() {
                 if (quitReturnedAt == 0L) quitReturnedAt = android.os.SystemClock.uptimeMillis()
                 return
             }
-            if (prefs.autoLaunch && !hasAutoLaunched) {
+            // A match starts by itself on a fresh launch only. `coldStart`
+            // keeps a rebuilt screen (a rotation, a restart underneath the
+            // player) from counting as "the app was opened", and the latch
+            // keeps every later resume of the same instance on the menu.
+            if (prefs.autoLaunch && !hasAutoLaunched && coldStart) {
                 hasAutoLaunched = true
                 startGame()
                 return

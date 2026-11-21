@@ -153,7 +153,7 @@
     <string name="show_touch_controls">Show the on-screen controls</string>
     <string name="disable_gamepad">Ignore physical controllers</string>
     <string name="enable_gamepad">Use physical controllers</string>
-    <string name="quit">Quit</string>
+    <string name="quit">Exit</string>
     <string name="quit_explained">The game ends now. Anything the game itself has not saved is lost.</string>
     <string name="cannot_start">The game could not start</string>
     <string name="error_library">The runtime library would not load:\n%1$s</string>
