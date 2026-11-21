@@ -49,6 +49,9 @@
     <string name="log_more">et %1$d de plus, comptés mais non affichés</string>
     <string name="log_everything">Le journal complet</string>
     <string name="log_share_note">Le partage envoie le journal complet, pas ce résumé.</string>
+    <string name="log_export_report">Exporter le rapport</string>
+    <string name="log_note_hint">Qu’est-ce qui a mal tourné ? (facultatif)</string>
+    <string name="log_note_label">Ce qui a mal tourné :</string>
     <string name="pick_with_files">Choisir avec l’application Fichiers</string>
     <string name="import_file">Importer</string>
     <string name="copying_file">Copie de %1$s (%2$d %%)</string>

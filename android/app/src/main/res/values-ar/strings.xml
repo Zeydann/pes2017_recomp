@@ -49,6 +49,9 @@
     <string name="log_more">و%1$d أخرى، محسوبة لكن غير معروضة</string>
     <string name="log_everything">السجل الكامل</string>
     <string name="log_share_note">المشاركة ترسل السجل كاملًا لا هذا الملخص.</string>
+    <string name="log_export_report">تصدير التقرير</string>
+    <string name="log_note_hint">ما الذي حدث؟ (اختياري)</string>
+    <string name="log_note_label">ما الذي حدث:</string>
     <string name="pick_with_files">الاختيار عبر تطبيق الملفات</string>
     <string name="import_file">استيراد</string>
     <string name="copying_file">جارٍ نسخ %1$s (%2$d %%)</string>

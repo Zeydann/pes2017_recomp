@@ -8,8 +8,12 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.text.InputType
 import android.view.View
+import android.view.ViewGroup
 import android.widget.Button
+import android.widget.EditText
+import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
@@ -864,21 +868,83 @@ class MainActivity : AppCompatActivity() {
         showLogText(LogSummary.whole(this, session), 10f)
     }
 
+    /**
+     * The log dialog: a bounded, scrolling viewer over a note box and the three
+     * actions. Only this chrome is translated -- the lines in the viewer are the
+     * runtime's own, kept exactly as written.
+     *
+     * The viewer has a height of its own rather than growing with its text: an
+     * AlertDialog measures a custom view freely, and a few hundred log lines
+     * used to push the note box and the button row off the screen. The buttons
+     * live in the dialog's own footer, so bounding the scroller is what keeps
+     * CLOSE, THE WHOLE LOG and EXPORT REPORT always reachable.
+     */
     private fun showLogText(text: String, textSize: Float) {
+        val density = resources.displayMetrics.density
         val body = TextView(this)
         body.setPadding(32, 24, 32, 24)
         body.textSize = textSize
         body.setTextIsSelectable(true)
         body.text = text
-        val scroll = ScrollView(this)
-        scroll.addView(body)
+        val scroll = ScrollView(this).apply {
+            isFillViewport = false
+            addView(body, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        }
+        val note = EditText(this).apply {
+            hint = getString(R.string.log_note_hint)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            minLines = 2
+            maxLines = 3
+            setSingleLine(false)
+        }
+        val column = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, 0, 0, 0)
+            // The viewer takes a fixed share of the window; the note box sits
+            // under it, and both stay above the dialog's own button row.
+            addView(
+                scroll,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    (resources.displayMetrics.heightPixels * 0.45f).toInt()
+                        .coerceAtLeast((120 * density).toInt()),
+                ),
+            )
+            addView(
+                note,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ).apply {
+                    val margin = (12 * density).toInt()
+                    setMargins(margin, (8 * density).toInt(), margin, 0)
+                },
+            )
+        }
         AlertDialog.Builder(this)
             .setTitle(R.string.view_log)
-            .setView(scroll)
+            .setView(column)
             .setPositiveButton(R.string.close, null)
             .setNegativeButton(R.string.log_everything) { _, _ -> showWholeLog() }
-            .setNeutralButton(R.string.share) { _, _ -> share(wholeLog()) }
+            .setNeutralButton(R.string.log_export_report) { _, _ ->
+                share(report(note.text.toString(), text))
+            }
             .show()
+    }
+
+    /**
+     * What EXPORT REPORT sends: the player's note, when there is one, above the
+     * whole log. The log lines themselves are untouched -- a report with a
+     * translated error message would be a report nobody can search for.
+     */
+    private fun report(note: String, summary: String): String {
+        val whole = wholeLog()
+        if (note.isBlank()) return whole
+        return buildString {
+            append(getString(R.string.log_note_label)).append('\n')
+            append(note.trim()).append("\n\n")
+            append(whole.ifBlank { summary })
+        }
     }
 
     /** What Share sends: every log and crash file, not the summary. */

@@ -49,6 +49,9 @@
     <string name="log_more">y %1$d más, contados pero no mostrados</string>
     <string name="log_everything">El registro completo</string>
     <string name="log_share_note">Al compartir se envía el registro completo, no este resumen.</string>
+    <string name="log_export_report">Exportar informe</string>
+    <string name="log_note_hint">¿Qué fue mal? (opcional)</string>
+    <string name="log_note_label">Qué fue mal:</string>
     <string name="pick_with_files">Elegir con la aplicación Archivos</string>
     <string name="import_file">Importar</string>
     <string name="copying_file">Copiando %1$s (%2$d %%)</string>

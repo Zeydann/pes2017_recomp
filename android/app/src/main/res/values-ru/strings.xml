@@ -49,6 +49,9 @@
     <string name="log_more">и ещё %1$d, учтены, но не показаны</string>
     <string name="log_everything">Весь журнал</string>
     <string name="log_share_note">При отправке передаётся весь журнал, а не эта сводка.</string>
+    <string name="log_export_report">Экспорт отчёта</string>
+    <string name="log_note_hint">Что пошло не так? (необязательно)</string>
+    <string name="log_note_label">Что пошло не так:</string>
     <string name="pick_with_files">Выбрать через приложение «Файлы»</string>
     <string name="import_file">Импорт</string>
     <string name="copying_file">Копирование %1$s (%2$d %%)</string>
