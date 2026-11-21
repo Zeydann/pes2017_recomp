@@ -133,7 +133,7 @@ object PatchStore {
             patchFrom = state.second,
             editAt = state.third,
             editFrom = state.fourth,
-            backups = listBackups(root).map { it.second },
+            backups = listBackups(root).map { it.second.summary },
         )
     }
 
