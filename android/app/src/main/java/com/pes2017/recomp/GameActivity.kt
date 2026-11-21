@@ -95,6 +95,14 @@ class GameActivity : AppCompatActivity(), NativeListener {
     private var menuOpen = false
 
     /**
+     * Set by [quit] before anything is dismissed. From that moment the run is
+     * over: the menu's dismissal must not resume the guest, and no touch or
+     * key may be forwarded while the launcher comes back -- a confirmation
+     * that ended the match must not be replayed at the menu underneath.
+     */
+    private var quitting = false
+
+    /**
      * Set while the quick graphics dialog is open. It is a pause of its own: the
      * pause menu is already gone by the time it opens, so this is what keeps the
      * match from starting behind a settings dialog, and its close is what
@@ -957,7 +965,7 @@ class GameActivity : AppCompatActivity(), NativeListener {
             // The editor pauses for itself and starts its own resume on the way
             // out, and quitting leaves nothing to resume; everything else
             // resumes here, once, when the menu closes.
-            if (started && !overlay.editing && !editingFromMenu) {
+            if (started && !quitting && !overlay.editing && !editingFromMenu) {
                 NativeBridge.nativeSetPaused(false)
                 setGameState(playing = true)
             }
@@ -1047,10 +1055,10 @@ class GameActivity : AppCompatActivity(), NativeListener {
         message = getString(R.string.quit_explained),
         rows = listOf(
             PesMenu.Row(getString(R.string.cancel)) { it.back() },
-            PesMenu.Row(getString(R.string.quit)) { menu ->
-                menu.dismissNow()
-                quit()
-            },
+            // quit() owns the whole teardown, including closing this page. It
+            // sets the quitting flag first so the dismissal cannot resume the
+            // paused match for a frame on its way out.
+            PesMenu.Row(getString(R.string.quit)) { quit() },
         ),
         // Cancel is this page's way back, so the menu does not print a second one.
         backRow = false,
@@ -1067,6 +1075,9 @@ class GameActivity : AppCompatActivity(), NativeListener {
     }
 
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        // The run is going: swallow whatever is left of the gesture instead of
+        // letting a release or a second tap act on anything on the way out.
+        if (quitting) return true
         if (touchHiddenByPad && event.actionMasked == MotionEvent.ACTION_DOWN &&
             event.isFromSource(android.view.InputDevice.SOURCE_TOUCHSCREEN)
         ) {
@@ -1096,7 +1107,21 @@ class GameActivity : AppCompatActivity(), NativeListener {
     }
 
     private fun quit() {
+        if (quitting) return
+        quitting = true
         overlay.layout.save(this)
+        // Nothing stays held or queued from the pause menu: the touch pad lets
+        // go of every finger and latch, the menu is taken down without its own
+        // close resuming the guest, and the run is left paused and out of
+        // gameplay before the process is ended.
+        overlay.releaseEverything()
+        menu?.dismissNow()
+        menu = null
+        menuOpen = false
+        editingFromMenu = false
+        setGameState(playing = false)
+        NativeBridge.nativeSetPaused(true)
+        handler.removeCallbacks(statsTick)
         // Quit Game lands on the launcher, which sits under this activity in
         // the same task: finish() uncovers it. finishAndRemoveTask() used to be
         // here, and it takes the whole task down -- the launcher included -- so
@@ -1159,7 +1184,8 @@ class GameActivity : AppCompatActivity(), NativeListener {
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         // The dialogs and the editor come first; a pad should not fire a gun
-        // through a menu.
+        // through a menu, and nothing may be forwarded once the run is ending.
+        if (quitting) return true
         if (started && !overlay.editing && pads.onKey(event)) {
             if (event.action == KeyEvent.ACTION_DOWN) hideTouchForPad()
             return true
@@ -1188,7 +1214,8 @@ class GameActivity : AppCompatActivity(), NativeListener {
         if (!started) return
         // A menu still open across a trip out of the app stays a pause: its own
         // dismissal is what starts the match again. So does quick graphics.
-        if (!menuOpen) {
+        // A run that is quitting never resumes, whatever brings this window back.
+        if (!menuOpen && !quitting) {
             NativeBridge.nativeSetPaused(false)
             setGameState(playing = true)
         }

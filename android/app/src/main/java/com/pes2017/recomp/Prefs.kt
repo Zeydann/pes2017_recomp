@@ -542,23 +542,43 @@ class Prefs(context: Context) {
      * by whoever asks next, so the launcher sees the quit however the two
      * processes came to be, and however many times either was restarted.
      *
-     * It is a one-shot latch: the launcher deletes it as it takes it, so the
-     * saved "kick off straight away" choice is untouched and works normally on
-     * the next start.
+     * The marker holds the time it was written. The launcher keeps its menu
+     * for [QUIT_GRACE_MS] after that, not merely for the next refresh: the
+     * activity can be rebuilt on the way back (a rotation, or a low-memory
+     * restart) or resumed more than once, and every one of those must stay on
+     * the menu instead of falling through to "kick off straight away". It is
+     * still not a preference -- [clearMatchQuit] is called when the player
+     * asks for a match, and an expired marker is ignored, so the saved choice
+     * works normally on a later start.
      */
     fun markMatchQuit() {
         try {
-            File(files, QUIT_MARKER).writeText("1")
+            File(files, QUIT_MARKER).writeText(System.currentTimeMillis().toString())
         } catch (_: Throwable) {
         }
     }
 
-    /** True once per quit: takes the marker away with it. */
-    fun consumeMatchQuit(): Boolean = try {
+    /** True while a quit is still fresh; an old marker is thrown away. */
+    fun matchQuitRecently(): Boolean {
         val marker = File(files, QUIT_MARKER)
-        marker.exists() && marker.delete()
-    } catch (_: Throwable) {
-        false
+        if (!marker.exists()) return false
+        val age = try {
+            System.currentTimeMillis() - marker.readText().trim().toLong()
+        } catch (_: Throwable) {
+            // The first marker format was a bare "1": treat it as just written.
+            0L
+        }
+        if (age <= QUIT_GRACE_MS) return true
+        clearMatchQuit()
+        return false
+    }
+
+    /** The player asked for a match (or the marker expired): let it go. */
+    fun clearMatchQuit() {
+        try {
+            File(files, QUIT_MARKER).delete()
+        } catch (_: Throwable) {
+        }
     }
 
     /**
@@ -667,6 +687,14 @@ class Prefs(context: Context) {
         private const val KEY_AUTO_LAUNCH = "autoLaunch"
         /** The run-to-launcher "a match was just quit" latch ([markMatchQuit]). */
         private const val QUIT_MARKER = "match-quit"
+
+        /**
+         * How long after a quit the launcher keeps its menu whatever
+         * "kick off straight away" says. Long enough to cover the trip back
+         * (including an activity rebuild), short enough that opening the app
+         * later still starts a match as the player chose.
+         */
+        private const val QUIT_GRACE_MS = 30_000L
         private const val KEY_DRIVER_AUTO = "driverAutoTried"
         private const val KEY_UPDATE_TAG = "seenUpdateTag"
         private const val KEY_PREWARM_ALL = "prewarmAllShaders"

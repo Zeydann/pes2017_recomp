@@ -51,6 +51,13 @@ class MainActivity : AppCompatActivity() {
     private var nativeReady = false
     private var hasAutoLaunched = false
 
+    /**
+     * When the launcher came back from a match the player quit. A confirm that
+     * dismissed the match's own menu must not land on KICK OFF as the launcher
+     * appears, so the first moments after the return ignore that button.
+     */
+    private var quitReturnedAt = 0L
+
     /** The match asked to be started again with new settings (QuickGraphics). */
     private var relaunchRequested = false
     private var installRequired = false
@@ -121,6 +128,10 @@ class MainActivity : AppCompatActivity() {
         }
 
         play.setOnClickListener {
+            // A fresh quit-return may still carry the finger or key that
+            // confirmed Exit in the match's menu. KICK OFF is deliberately
+            // inert for that instant; the next tap is the player's.
+            if (android.os.SystemClock.uptimeMillis() - quitReturnedAt < QUIT_INPUT_GUARD_MS) return@setOnClickListener
             select(play)
             showDetail(getString(R.string.play), status.text.toString())
             val gameDirectory = prefs.gameDirectory
@@ -460,19 +471,25 @@ class MainActivity : AppCompatActivity() {
             installButton.visibility = android.view.View.GONE
 
             if (relaunchRequested) {
+                // An explicit "apply & restart" is a new match, so it wins
+                // over the quit latch: QuickGraphics starts this activity and
+                // ends the run in the same breath, and the latch exists to
+                // stop an *unasked-for* start, not that one.
                 relaunchRequested = false
                 hasAutoLaunched = true
-                prefs.consumeMatchQuit()
+                prefs.clearMatchQuit()
                 startGameWhenPreviousRunIsGone()
                 return
             }
             // Back from a match the player quit: the Main Menu is where Quit
             // Game asked to be. "Kick off straight away" is about opening the
-            // app, not about answering that question, so the once-only latch is
-            // taken here too -- which also covers a launcher that was rebuilt
-            // while the match ran.
-            if (prefs.consumeMatchQuit()) {
+            // app, not about answering that question. The latch is checked on
+            // every resume and is not consumed, so a launcher rebuilt on the
+            // way back (rotation, low memory) or resumed again still stays on
+            // the menu instead of starting another match.
+            if (prefs.matchQuitRecently()) {
                 hasAutoLaunched = true
+                if (quitReturnedAt == 0L) quitReturnedAt = android.os.SystemClock.uptimeMillis()
                 return
             }
             if (prefs.autoLaunch && !hasAutoLaunched) {
@@ -611,6 +628,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun startGame() {
         if (!nativeReady) return
+        // A match is being asked for on purpose: the quit latch has done its job.
+        prefs.clearMatchQuit()
         // A copy of the saves before every run (SaveBackup), taken before the
         // game's process exists, so nothing is writing them while they are read.
         val context = applicationContext
@@ -833,6 +852,14 @@ class MainActivity : AppCompatActivity() {
         startActivity(Intent.createChooser(intent, getString(R.string.share)))
     }
 }
+
+/**
+ * How long KICK OFF ignores its first press after a match was quit. The
+ * confirmation that left the match can arrive as a click or a key on the
+ * launcher's window as it appears; this is shorter than a deliberate tap, and
+ * long enough to swallow that one event.
+ */
+private const val QUIT_INPUT_GUARD_MS = 700L
 
 /** The end of a file, which is the part of a log anyone wants. */
 fun File.readTextTail(bytes: Int): String = try {
