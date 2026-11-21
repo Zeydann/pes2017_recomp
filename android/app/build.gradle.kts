@@ -182,6 +182,14 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("androidx.activity:activity-ktx:1.9.3")
     implementation("androidx.documentfile:documentfile:1.0.1")
+
+    // libarchive 3.8.1, for the INSTALL PATCH screen: Android has no RAR or 7Z
+    // reader of its own, and java.util.zip cannot open a password-protected
+    // archive. 1.1.6 is the last release whose arm64 .so is built for 16 KB
+    // pages; 1.1.7 needs compileSdk 37. The same version is used by the
+    // PES 2018 import screen this one is modelled on.
+    implementation("me.zhanghai.android.libarchive:library:1.1.6")
+
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.mockito:mockito-core:5.14.2")
     // The android.jar on the unit-test classpath stubs org.json, and its

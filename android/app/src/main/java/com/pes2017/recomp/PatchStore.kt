@@ -58,6 +58,9 @@ object PatchStore {
     /** The largest edit save this app will accept; a real one is a few MB. */
     private const val MAX_EDIT_BYTES = 64L * 1024 * 1024
 
+    /** The message a cancelled [installPatch] fails with; the screen checks for it. */
+    const val CANCELLED = "the install was cancelled"
+
     /** What is in one slot: a data pack is a directory, a save is one file. */
     data class Slot(val present: Boolean, val files: Int, val bytes: Long) {
         val empty: Boolean get() = !present || files == 0
@@ -91,6 +94,14 @@ object PatchStore {
     class Failure(message: String, val detail: String = "") : Exception(
         if (detail.isEmpty()) message else "$message: $detail",
     )
+
+    /**
+     * Progress of a copy, in bytes; returning false cancels it before the swap.
+     * [total] is 0 while the source cannot say how much there is.
+     */
+    fun interface Progress {
+        fun onBytes(copied: Long, total: Long): Boolean
+    }
 
     // ---- where things are ----------------------------------------------------
 
@@ -160,7 +171,7 @@ object PatchStore {
      * cancelled or failed copy leaves the installed pack exactly as it was.
      * Returns the backup made of the pack that was there, if any.
      */
-    fun installPatch(game: File, source: File): Backup? {
+    fun installPatch(game: File, source: File, progress: Progress? = null): Backup? {
         val root = rootOf(game)
         requireGame(game)
         if (!source.exists()) throw Failure("the patch source is missing", source.name)
@@ -168,7 +179,7 @@ object PatchStore {
         val staging = File(File(root, STAGING), "install-" + stamp())
         staging.deleteRecursively()
         try {
-            val imported = importPayload(source, staging)
+            val imported = importPayload(source, staging, progress)
             if (imported.files == 0) {
                 throw Failure("not a PES 2017 patch", "no .cpk files and no $DP_FILE_LIST")
             }
@@ -494,11 +505,13 @@ object PatchStore {
      * LIVE, PIRS) are not unpacked here; an extracted pack is what this takes,
      * which is also what a phone-side patch is.
      */
-    private fun importPayload(source: File, staging: File): Imported {
+    private fun importPayload(source: File, staging: File, progress: Progress?): Imported {
         staging.mkdirs()
         val taken = LinkedHashSet<String>()
         var files = 0
         var bytes = 0L
+        var copied = 0L
+        var total = 0L
         fun want(name: String): Boolean {
             val flat = name.substringAfterLast('/').substringAfterLast('\\').lowercase(Locale.US)
             return flat.endsWith(".cpk") || flat == DP_FILE_LIST.lowercase(Locale.US)
@@ -510,7 +523,20 @@ object PatchStore {
                 throw Failure("the source holds two files called $flat", source.name)
             }
             val out = File(staging, flat)
-            input.use { from -> out.outputStream().use { from.copyTo(it) } }
+            input.use { from ->
+                out.outputStream().use { to ->
+                    val buffer = ByteArray(1 shl 20)
+                    while (true) {
+                        val read = from.read(buffer)
+                        if (read <= 0) break
+                        to.write(buffer, 0, read)
+                        copied += read
+                        if (progress != null && !progress.onBytes(copied, total)) {
+                            throw Failure(CANCELLED)
+                        }
+                    }
+                }
+            }
             files++
             bytes += out.length()
         }
@@ -525,6 +551,7 @@ object PatchStore {
                         "no .cpk files and no $DP_FILE_LIST under ${source.name}",
                     )
                 }
+                total = found.sumOf { it.length() }
                 for (file in found) file.inputStream().use { put(file.name, it) }
             }
             source.name.lowercase(Locale.US).endsWith(".zip") -> {
@@ -536,6 +563,7 @@ object PatchStore {
                             "the archive holds no .cpk files and no $DP_FILE_LIST",
                         )
                     }
+                    total = entries.sumOf { it.size.coerceAtLeast(0) }
                     for (entry in entries) zip.getInputStream(entry).use { put(entry.name, it) }
                 }
             }

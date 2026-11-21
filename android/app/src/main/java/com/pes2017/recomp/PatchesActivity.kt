@@ -1,5 +1,6 @@
 package com.pes2017.recomp
 
+import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.widget.Button
@@ -35,29 +36,6 @@ class PatchesActivity : AppCompatActivity() {
     private lateinit var editReplaceButton: Button
     private lateinit var editRestoreButton: Button
     private lateinit var folderButton: Button
-
-    /** The folder the player picked to read a patch from, while it is being read. */
-    private val pickPatchFolder = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-        if (uri == null) return@registerForActivityResult
-        val folder = GameFolder.pathOf(uri)
-        if (folder == null) {
-            message(getString(R.string.patches_unreadable_path))
-            return@registerForActivityResult
-        }
-        if (!GameFolder.hasAccess(this)) {
-            message(getString(R.string.patches_need_access))
-            return@registerForActivityResult
-        }
-        if (!ready()) return@registerForActivityResult
-        work { installFrom(folder) }
-    }
-
-    private val pickPatchZip = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri == null) return@registerForActivityResult
-        if (!ready()) return@registerForActivityResult
-        val name = displayName(uri) ?: "patch.zip"
-        work { installFrom(copyToImport(uri, name)) }
-    }
 
     private val pickEdit = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@registerForActivityResult
@@ -104,7 +82,12 @@ class PatchesActivity : AppCompatActivity() {
         folderButton = findViewById(R.id.patches_folder)
 
         folderButton.setOnClickListener { pickGameFolder.launch(null) }
-        installButton.setOnClickListener { choosePatchSource() }
+        // INSTALL PATCH is its own page now (PatchImportActivity): the popup
+        // that used to ask "zip or folder" could not show what was found, what
+        // it costs, or ask a locked archive for its password.
+        installButton.setOnClickListener {
+            startActivity(Intent(this, PatchImportActivity::class.java))
+        }
         restoreButton.setOnClickListener {
             if (!ready()) return@setOnClickListener
             confirm(getString(R.string.patches_restore_confirm)) {
@@ -187,18 +170,6 @@ class PatchesActivity : AppCompatActivity() {
         editRestoreButton.isEnabled = state.backups.any { it.kind == "edit" }
     }
 
-    private fun choosePatchSource() {
-        AlertDialog.Builder(this)
-            .setTitle(R.string.patches_install)
-            .setMessage(R.string.patches_install_choose_message)
-            .setNegativeButton(R.string.cancel, null)
-            .setNeutralButton(R.string.patches_source_folder) { _, _ -> pickPatchFolder.launch(null) }
-            .setPositiveButton(R.string.patches_source_zip) { _, _ ->
-                pickPatchZip.launch(arrayOf("application/zip", "application/octet-stream", "*/*"))
-            }
-            .show()
-    }
-
     // ---- operations ----------------------------------------------------------
 
     /** Refuses while the game's process is up: its files are open in it. */
@@ -212,20 +183,6 @@ class PatchesActivity : AppCompatActivity() {
             return false
         }
         return true
-    }
-
-    private fun installFrom(source: File): String {
-        val game = game() ?: return ""
-        return try {
-            val backup = PatchStore.installPatch(game, source)
-            refreshOnUi()
-            if (backup != null) getString(R.string.patches_installed_kept)
-            else getString(R.string.patches_installed_done)
-        } catch (error: PatchStore.Failure) {
-            failure(error)
-        } catch (error: Throwable) {
-            failure(error)
-        }
     }
 
     private fun restorePatch(): String {

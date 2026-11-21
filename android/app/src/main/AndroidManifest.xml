@@ -151,6 +151,15 @@
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode|density"
             tools:ignore="DiscouragedApi,LockedOrientationActivity" />
 
+        <!-- INSTALL PATCH: a full page, opened from PATCHES. -->
+        <activity
+            android:name=".PatchImportActivity"
+            android:exported="false"
+            android:parentActivityName=".PatchesActivity"
+            android:screenOrientation="fullUser"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode|density"
+            tools:ignore="DiscouragedApi,LockedOrientationActivity" />
+
         <activity
             android:name=".InstallActivity"
             android:exported="false"
