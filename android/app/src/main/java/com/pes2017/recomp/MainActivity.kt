@@ -516,7 +516,13 @@ class MainActivity : AppCompatActivity() {
             // every resume and is not consumed, so a launcher rebuilt on the
             // way back (rotation, low memory) or resumed again still stays on
             // the menu instead of starting another match.
-            if (prefs.matchQuitRecently()) {
+            //
+            // A fresh launch is not that return, though: the player may have
+            // gone In-App Menu > Exit > Main Menu > Quit and opened the app
+            // again, which is "opening the app" in the switch's own words.
+            // `coldStart` tells the two apart, so the latch only holds a
+            // rebuilt or resumed launcher -- never a new one.
+            if (!coldStart && prefs.matchQuitRecently()) {
                 hasAutoLaunched = true
                 if (quitReturnedAt == 0L) quitReturnedAt = android.os.SystemClock.uptimeMillis()
                 return
@@ -527,6 +533,10 @@ class MainActivity : AppCompatActivity() {
             // keeps every later resume of the same instance on the menu.
             if (prefs.autoLaunch && !hasAutoLaunched && coldStart) {
                 hasAutoLaunched = true
+                // The latch has done its job for the return that set it; a
+                // match started by opening the app must not leave it behind
+                // for the next resume of this launcher.
+                prefs.clearMatchQuit()
                 startGame()
                 return
             }

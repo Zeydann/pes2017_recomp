@@ -380,11 +380,19 @@ class ControlEditPanel(
             PesMenu.Screen(
                 title,
                 fields = listOf(PesMenu.Field(label, initial)),
+                // Glass has no A key: the same confirm and cancel are rows a
+                // finger can hit, below the box. Cancel is this page's own way
+                // back, so the menu does not print a second one.
+                rows = listOf(
+                    PesMenu.Row(activity.getString(android.R.string.ok)) { it.submit() },
+                    PesMenu.Row(activity.getString(R.string.cancel)) { it.back() },
+                ),
                 submit = activity.getString(android.R.string.ok),
                 onSubmit = { values ->
                     menu.dismissNow()
                     onOk(values.firstOrNull().orEmpty().trim())
                 },
+                backRow = false,
             )
         }
     }
@@ -939,7 +947,7 @@ class ControlEditPanel(
     private fun loadBuiltIn(profile: String) {
         remember()
         overlay.layout.replaceWith(
-            ControlLayout.defaults(overlay.layout.widthDp, overlay.layout.heightDp, profile),
+            ControlLayout.starterLayout(overlay.layout.widthDp, overlay.layout.heightDp, profile),
         )
         overlay.select(null)
         show(null)

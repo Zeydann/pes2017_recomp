@@ -399,7 +399,7 @@
     <string name="profile_modern">Pavé moderne (par défaut)</string>
     <string name="profile_classic">Espacement classique</string>
     <string name="profile_save_as">Enregistrer la disposition actuelle sous…</string>
-    <string name="profile_name">Nom du profil</string>
+    <string name="profile_name">Nom de la disposition</string>
     <string name="profile_saved">Profil enregistré</string>
     <string name="profile_failed">Impossible d’enregistrer ce profil</string>
     <string name="profile_load">Charger</string>

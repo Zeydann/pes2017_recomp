@@ -399,7 +399,7 @@
     <string name="profile_modern">لوحة حديثة (افتراضي)</string>
     <string name="profile_classic">تباعد كلاسيكي</string>
     <string name="profile_save_as">حفظ التخطيط الحالي باسم…</string>
-    <string name="profile_name">اسم الملف الشخصي</string>
+    <string name="profile_name">اسم التخطيط</string>
     <string name="profile_saved">حُفظ الملف الشخصي</string>
     <string name="profile_failed">تعذّر حفظ هذا الملف الشخصي</string>
     <string name="profile_load">تحميل</string>

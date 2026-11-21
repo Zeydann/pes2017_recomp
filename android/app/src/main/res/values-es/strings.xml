@@ -399,7 +399,7 @@
     <string name="profile_modern">Mando moderno (predeterminado)</string>
     <string name="profile_classic">Espaciado clásico</string>
     <string name="profile_save_as">Guardar la disposición actual como…</string>
-    <string name="profile_name">Nombre del perfil</string>
+    <string name="profile_name">Nombre del diseño</string>
     <string name="profile_saved">Perfil guardado</string>
     <string name="profile_failed">No se pudo guardar ese perfil</string>
     <string name="profile_load">Cargar</string>

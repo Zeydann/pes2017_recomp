@@ -510,7 +510,8 @@ class PesMenu(
         handler.invoke(this, delta)
     }
 
-    private fun submit() {
+    /** Confirms a form page from a row, the same way A does from the box. */
+    fun submit() {
         val current = screen ?: return
         if (current.fields.isEmpty()) return
         current.onSubmit.invoke(fieldViews.map { it.text.toString() })

@@ -469,14 +469,14 @@ class ControlLayout private constructor(
     }
 
     fun resetAll() {
-        val fresh = defaults(widthDp, heightDp, profile)
+        val fresh = starterLayout(widthDp, heightDp, profile)
         elements.clear()
         elements.addAll(fresh.elements)
         removed.clear()
     }
 
     fun reset(id: String) {
-        val fresh = defaults(widthDp, heightDp, profile).find(id) ?: return
+        val fresh = starterLayout(widthDp, heightDp, profile).find(id) ?: return
         val index = elements.indexOfFirst { it.id == id }
         if (index >= 0) elements[index] = fresh else elements.add(fresh)
         removed.remove(id)
@@ -659,7 +659,7 @@ class ControlLayout private constructor(
             }
             val widthDp = max(widthPx, heightPx) / metrics.density
             val heightDp = min(widthPx, heightPx) / metrics.density
-            val fallback = defaults(widthDp, heightDp)
+            val fallback = starterLayout(widthDp, heightDp)
             val file = File(context.filesDir, FILE_NAME)
             if (!file.exists()) return fallback
             val text = try {
@@ -981,6 +981,23 @@ class ControlLayout private constructor(
             deleteSlot(context, LayoutStore.sanitize(name))
 
         fun hasBackup(context: Context): Boolean = File(context.filesDir, BACKUP_NAME).exists()
+
+        /**
+         * The pad a fresh install starts from, and the one a reset puts back:
+         * the layout this build ships ([BuiltinLayout]) for the modern profile,
+         * and the factory pad for any other. A user-saved slot is never read
+         * here -- [load] only falls back to this when there is no file yet.
+         */
+        fun starterLayout(
+            widthDp: Float = 800f,
+            heightDp: Float = 360f,
+            profile: String = PROFILE_MODERN,
+        ): ControlLayout =
+            if (profile == PROFILE_MODERN) {
+                parse(BuiltinLayout.JSON, widthDp, heightDp) ?: defaults(widthDp, heightDp, profile)
+            } else {
+                defaults(widthDp, heightDp, profile)
+            }
 
         /**
          * Where everything starts: a football pad laid out for thumbs, the way
