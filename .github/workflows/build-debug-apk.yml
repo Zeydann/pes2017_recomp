@@ -163,7 +163,19 @@ jobs:
         run: |
           PREBUILT="$GITHUB_WORKSPACE/libpes17_prebuilt"
           echo "Building debug apk with prebuiltNative=$PREBUILT"
-          ./gradlew :app:assembleDebug -PprebuiltNative="$PREBUILT" --stacktrace
+          set +e
+          ./gradlew :app:assembleDebug -PprebuiltNative="$PREBUILT" --stacktrace \
+            > /tmp/assemble.log 2>&1
+          status=$?
+          tail -n 80 /tmp/assemble.log
+          if [ $status -ne 0 ]; then
+            # The job log needs a signed-in reader; an annotation does not, and
+            # it is what a person fixing the build reads first anyway.
+            reason=$(grep -m 15 -E '^e: |error:|FAILURE:|What went wrong|^> Task .* FAILED|Caused by' \
+              /tmp/assemble.log | tr '\n' '~' | cut -c1-4000)
+            echo "::error::assembleDebug failed: $reason"
+          fi
+          exit $status
 
       - name: Check the APK carries the engine
         run: |
