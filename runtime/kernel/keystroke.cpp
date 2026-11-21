@@ -26,6 +26,40 @@ namespace
     // XINPUT_KEYSTROKE: u16 virtual key, u16 unicode, u16 flags, u8 user, u8 hid.
     constexpr uint16_t kKeyDown = 0x0001, kKeyUp = 0x0002, kKeyRepeat = 0x0004;
 
+    // The order a change is turned into events in, which one event per call
+    // makes part of the message: whatever arrives first is the state the next
+    // event arrives into.
+    //
+    // This is why a controlled shot (R2 + shoot) used to need two attempts. The
+    // title rebuilds the pad from this stream, so a trigger that only sorted
+    // after the face buttons by bit number arrived *after* shoot whenever both
+    // changed inside one poll -- the shot was made without R2, and R2 turned up
+    // mid-shot. On the next attempt R2 was already in the held state, so the
+    // same press worked. Bit order is not an order a hand makes.
+    //
+    // So a modifier leads on the way down and trails on the way up: R2 goes down
+    // before shoot (a finesse is R2 held as the shot is pressed, not R2 pressed
+    // into it), and shoot comes up before R2 (the shot is read as it comes up,
+    // with the modifier still held). The bit indices are XINPUT_GAMEPAD's:
+    // 8 LB, 9 RB, 12 A, 13 B, 14 X, 15 Y, 16 LT, 17 RT; 10 and 11 have no
+    // virtual key and are kept here only so both lists are complete.
+    constexpr int kPressOrder[34] = {
+        8, 9, 16, 17,                       // the modifiers lead
+        12, 13, 14, 15,                     // A, B, X, Y
+        0, 1, 2, 3, 4, 5, 6, 7,             // d-pad, start, back, L3, R3
+        10, 11,
+        18, 19, 20, 21, 22, 23, 24, 25,     // left stick directions
+        26, 27, 28, 29, 30, 31, 32, 33,     // right stick directions
+    };
+    constexpr int kReleaseOrder[34] = {
+        12, 13, 14, 15,                     // the button goes first
+        8, 9, 16, 17,                       // the modifiers trail it
+        0, 1, 2, 3, 4, 5, 6, 7,
+        10, 11,
+        18, 19, 20, 21, 22, 23, 24, 25,
+        26, 27, 28, 29, 30, 31, 32, 33,
+    };
+
     // Bit i of the key field -> virtual key. 0-15 are XINPUT_GAMEPAD's button bits,
     // 16-17 the triggers, 18-25 the left stick's eight directions, 26-33 the right's.
     constexpr uint16_t kVk[34] = {
@@ -101,7 +135,12 @@ PPC_FUNC(__imp__XamInputGetKeystrokeEx)
             | Stick(pad.leftX, pad.leftY, 18) | Stick(pad.rightX, pad.rightY, 26);
         Keys& keys = g_keys[user & 3];
 
-        if (keys.repeating >= 0)
+        const uint64_t changed = now_keys ^ keys.last;
+        // A repeat never jumps ahead of a change. Holding R2 for the second of a
+        // controlled shot repeats it every 100 ms, and a repeat delivered first
+        // held the fresh shoot press back to the next repeat slot -- a shot that
+        // arrived a frame or two late, or not at all if the tap was shorter.
+        if (keys.repeating >= 0 && !changed)
         {
             if (keys.waiting && now - keys.since >= kRepeatDelay) { keys.waiting = false; keys.since = now; }
             else if (!keys.waiting && now - keys.since >= kRepeatRate)
@@ -113,13 +152,16 @@ PPC_FUNC(__imp__XamInputGetKeystrokeEx)
             }
         }
 
-        const uint64_t changed = now_keys ^ keys.last;
         if (!changed) continue;
         // Releases first, then presses, so a stick moving between directions
-        // ends one before it starts the next.
+        // ends one before it starts the next. Within a pass the order is a
+        // hand's, not the bit's -- see kPressOrder/kReleaseOrder.
         for (int pass = 0; pass < 2; pass++)
-            for (int bit = 0; bit < 34; bit++)
+        {
+            const int* order = pass == 0 ? kReleaseOrder : kPressOrder;
+            for (int i = 0; i < 34; i++)
             {
+                const int bit = order[i];
                 const uint64_t mask = 1ull << bit;
                 if (!(changed & mask) || !kVk[bit]) continue;
                 const bool pressed = (now_keys & mask) != 0;
@@ -140,6 +182,7 @@ PPC_FUNC(__imp__XamInputGetKeystrokeEx)
                     return;
                 }
             }
+        }
         keys.last = now_keys;   // only buttons with no virtual key changed
     }
     ctx.r3.u64 = X_ERROR_EMPTY;
