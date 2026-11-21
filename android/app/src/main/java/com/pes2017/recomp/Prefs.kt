@@ -527,9 +527,18 @@ class Prefs(context: Context) {
         get() = store.getBoolean(KEY_WELCOME, false)
         set(value) = store.edit().putBoolean(KEY_WELCOME, value).apply()
 
+    /**
+     * "Kick off straight away when the app opens": read by the launcher on
+     * every resume, so the saved value must be on disk before the screen goes
+     * away. Committed rather than applied because it is the one setting whose
+     * loss changes what opening the app does.
+     */
     var autoLaunch: Boolean
         get() = store.getBoolean(KEY_AUTO_LAUNCH, true)
-        set(value) = store.edit().putBoolean(KEY_AUTO_LAUNCH, value).apply()
+        set(value) {
+            @Suppress("ApplySharedPref")
+            store.edit().putBoolean(KEY_AUTO_LAUNCH, value).commit()
+        }
 
     /**
      * Quit Game: a marker file, not a preference.

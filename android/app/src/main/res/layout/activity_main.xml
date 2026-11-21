@@ -73,13 +73,21 @@
             android:paddingStart="10dp"
             android:paddingEnd="16dp">
 
-            <!-- Scrolls only when the list cannot fit at its own height; on a
-                 screen with room it spreads exactly as before (MenuColumn). -->
-            <ScrollView
+            <!-- The list and, under it, the always-visible auto-start row: the
+                 list scrolls, the switch must not. -->
+            <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:layout_marginEnd="8dp"
+                android:orientation="vertical">
+
+            <!-- Scrolls only when the list cannot fit at its own height; on a
+                 screen with room it spreads exactly as before (MenuColumn). -->
+            <ScrollView
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
                 android:fillViewport="true"
                 android:scrollbars="none"
                 android:overScrollMode="never">
@@ -140,24 +148,46 @@
                     style="@style/MenuEntry"
                     android:text="@string/quit_launcher" />
 
+            </com.pes2017.recomp.MenuColumn>
+
+            </ScrollView>
+
+            <!-- The auto-start choice, inline with its label and pinned under
+                 the list instead of at its scrolling foot, where it slid out
+                 of sight behind the foot strip. The whole row is tappable. -->
+            <LinearLayout
+                android:id="@+id/direct_launch_row"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:background="@drawable/bg_setting_row"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:minHeight="40dp"
+                android:orientation="horizontal"
+                android:paddingStart="10dp"
+                android:paddingEnd="4dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:paddingEnd="6dp"
+                    android:text="@string/direct_launch"
+                    android:textColor="@color/pes_navy"
+                    android:textSize="12sp"
+                    android:fontFamily="sans-serif-medium" />
+
                 <androidx.appcompat.widget.SwitchCompat
                     android:id="@+id/direct_launch_switch"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="32dp"
-                    android:layout_marginTop="2dp"
-                    android:layout_marginBottom="4dp"
-                    android:text="@string/direct_launch"
-                    android:textColor="@color/pes_navy"
-                    android:textSize="12sp"
-                    android:gravity="center_vertical"
-                    android:minHeight="32dp"
-                    android:paddingStart="14dp"
-                    android:paddingEnd="4dp"
-                    android:fontFamily="sans-serif-medium" />
-            </com.pes2017.recomp.MenuColumn>
+                    android:minHeight="40dp"
+                    android:paddingEnd="8dp" />
+            </LinearLayout>
 
-            </ScrollView>
+            </LinearLayout>
 
             <!-- The chosen entry's details: a PES 6 settings panel, title strip and body. -->
             <LinearLayout

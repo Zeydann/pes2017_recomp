@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.view.View
 import android.widget.Button
 import android.widget.ScrollView
 import android.widget.TextView
@@ -118,13 +119,27 @@ class MainActivity : AppCompatActivity() {
         // to be hidden whenever no installation was found, so on a phone that
         // still had to pick its game folder -- the usual first run, and the
         // state the Arabic screenshot was taken in -- the feature looked gone.
+        // Registered after the state is written, and guarded against the
+        // no-op changes a rebuild can replay: a listener that fires on its own
+        // initial state used to overwrite the saved choice with whatever the
+        // freshly inflated switch happened to hold.
+        directLaunchSwitch.setOnCheckedChangeListener(null)
         directLaunchSwitch.isChecked = prefs.autoLaunch
         directLaunchSwitch.setOnCheckedChangeListener { _, isChecked ->
-            prefs.autoLaunch = isChecked
+            if (prefs.autoLaunch != isChecked) prefs.autoLaunch = isChecked
+            // The choice applies the next time the app opens, as the label says.
+            // Taking the auto-start latch here keeps a resume (a dialog, Home)
+            // from starting a match this session the instant it is switched on.
+            hasAutoLaunched = true
             showDetail(
                 getString(R.string.direct_launch),
                 getString(if (isChecked) R.string.direct_launch_on else R.string.direct_launch_off),
             )
+        }
+        // The whole row is the target, not just the switch's thumb: the label
+        // and the switch sit inline in one band under the list.
+        findViewById<View>(R.id.direct_launch_row).setOnClickListener {
+            directLaunchSwitch.toggle()
         }
 
         play.setOnClickListener {

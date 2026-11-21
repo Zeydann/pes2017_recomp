@@ -56,6 +56,18 @@ class ControlEditPanel(
     private val resetOne: Button = view.findViewById(R.id.edit_reset_one)
 
     /**
+     * The upper row of [actions]: the buttons that act on the selection.
+     *
+     * It is held here rather than fetched back out of [actions], because the
+     * grip was put in at index 0 and looking up "the first child" then found a
+     * TextView where a HorizontalScrollView was expected -- the editor threw
+     * before it ever appeared.
+     */
+    private val tools: LinearLayout = LinearLayout(activity).apply {
+        orientation = LinearLayout.HORIZONTAL
+    }
+
+    /**
      * The editor's own strip: two rows, not one.
      *
      * A single row grew wider than the screen as the editor gained buttons, and
@@ -71,7 +83,6 @@ class ControlEditPanel(
         // A dark backing: the row floats over a bright pitch, and a button whose
         // edges disappear is a button a player aims at and misses.
         setBackgroundColor(0x99000000.toInt())
-        val tools = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }
         val finishes = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }
         // The tools are wider than a phone held sideways once Swipe directions
         // and the wheel join Arrangement and More. A scroller keeps every one of
@@ -113,9 +124,8 @@ class ControlEditPanel(
      */
     private fun editorButton(): Button = Button(activity, null, 0, R.style.EditorButton)
 
-    /** The upper row of [actions]: the buttons that act on the selection. */
-    private fun toolRow(): LinearLayout =
-        ((actions.getChildAt(0) as HorizontalScrollView).getChildAt(0) as LinearLayout)
+    private fun toolRow(): LinearLayout = tools
+
     /** Shown while a swipe control or an action button is selected: what each direction sends. */
     private val swipes: Button = editorButton().apply {
         setText(R.string.swipe_bindings)
