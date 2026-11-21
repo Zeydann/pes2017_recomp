@@ -21,8 +21,9 @@ import java.util.Locale
  *
  * A source is read twice: once to scan (names and sizes only) and once to
  * extract. Nothing is written to the game folder by either pass -- the
- * extraction lands in the app's own storage and only [PatchStore] touches
- * `dlc/SYSTEM00000000`, after it keeps a backup.
+ * extraction lands in the app's own storage and only [PatchStore] writes the
+ * payload, into the game folder and `dlc/SYSTEM00000000`, after it keeps a
+ * backup.
  */
 enum class PatchSourceKind { ARCHIVE, FOLDER, MULTIPART }
 

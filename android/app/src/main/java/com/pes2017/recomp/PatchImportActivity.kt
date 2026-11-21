@@ -263,7 +263,10 @@ class PatchImportActivity : AppCompatActivity() {
                 runOnUiThread {
                     if (token != scanToken || isFinishing) return@runOnUiThread
                     if (error.failure == PatchSourceFailure.PASSWORD && passwordForScan == null) {
-                        askPassword(name, allowNoPassword = false) { chosen ->
+                        // All three answers stay on the retry: a player who
+                        // picked the wrong file should still be able to say
+                        // "no password" and cancel, not only type one.
+                        askPassword(name, allowNoPassword = true) { chosen ->
                             if (chosen == null) {
                                 // Cancelling must not leave the spinner running with no scan.
                                 showStep(Step.PICK)
@@ -390,6 +393,7 @@ class PatchImportActivity : AppCompatActivity() {
             R.string.patch_import_peak_breakdown,
             PatchFormat.bytes(scanned.extractBytes),
             PatchFormat.bytes(scanned.stagingBytes),
+            PatchFormat.bytes(scanned.gameBytes),
             PatchFormat.bytes(scanned.existingBytes),
             PatchFormat.bytes(PatchScanner.MARGIN_BYTES),
         )

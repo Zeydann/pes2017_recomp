@@ -83,11 +83,11 @@ class PatchScanTest {
     }
 
     @Test
-    fun `the peak keeps two copies, the pack being kept and the reserve`() {
+    fun `the peak keeps the extract, the staging, the game copy, the kept pack and the reserve`() {
         val root = source("data.cpk")  // one byte
         val plan = scan(root, existing = 10, free = 0)
         assertEquals(
-            1 + 1 + 10 + PatchScanner.MARGIN_BYTES,
+            1 + 1 + 1 + 10 + PatchScanner.MARGIN_BYTES,
             plan.peakBytes,
         )
         assertFalse(plan.enough)

@@ -706,7 +706,13 @@ class ControlEditPanel(
             // A custom toggle keeps the action it was assigned: its binding is
             // that action, not a pad bit, and the strip's own TG mapping button
             // is still where the mapping is changed.
-            if (element.kind == ControlKind.BUTTON) {
+            //
+            // The four action buttons (Cross/A, Circle/B, Square/X and
+            // Triangle/Y) keep the action the title gives them: their binding
+            // is what the game reads as pass, shoot and through ball, so a
+            // "Change binding" page here only turned a working shot into a
+            // dead button. It is not offered for them.
+            if (element.kind == ControlKind.BUTTON && !hasFixedAction(element)) {
                 labels.add(activity.getString(R.string.edit_bind))
                 actions.add { pickBinding(element) }
             }
@@ -719,8 +725,23 @@ class ControlEditPanel(
             labels.add(activity.getString(R.string.edit_redo))
             actions.add { redo() }
         }
+        // The More page opened from the editor is the menu's root page, and a
+        // root page has no Back row of its own; without one a player had no
+        // visible way out of it. On a pushed page the menu already prints a
+        // Back row, so this adds none on top of it.
+        val rootPage = menu?.let { it.isShowing && it.depth <= 1 } ?: true
+        if (rootPage) {
+            labels.add(activity.getString(R.string.back))
+            actions.add { menu?.back() }
+        }
         listScreen(activity.getString(R.string.edit_more), labels) { which -> actions[which].invoke() }
     }
+
+    /** True for the four action buttons, whose binding is the title's own action. */
+    private fun hasFixedAction(element: ControlElement): Boolean =
+        element.kind == ControlKind.BUTTON &&
+            (element.value == NativeBridge.A || element.value == NativeBridge.B ||
+                element.value == NativeBridge.X || element.value == NativeBridge.Y)
 
     private fun pickBinding(element: ControlElement) {
         val bits = intArrayOf(
@@ -854,7 +875,6 @@ class ControlEditPanel(
     private fun slotActions(slot: LayoutSlot) {
         val labels = listOf(
             activity.getString(R.string.profile_load),
-            activity.getString(R.string.profile_overwrite_current),
             activity.getString(R.string.profile_rename),
             activity.getString(R.string.profile_duplicate),
             activity.getString(R.string.layout_export),
@@ -863,10 +883,9 @@ class ControlEditPanel(
         listScreen(slot.displayName, labels) { which ->
             when (which) {
                 0 -> loadSlot(slot)
-                1 -> writeSlot(slot.id, slot.displayName)
-                2 -> renameSlot(slot)
-                3 -> duplicateSlot(slot)
-                4 -> exportSlot(slot)
+                1 -> renameSlot(slot)
+                2 -> duplicateSlot(slot)
+                3 -> exportSlot(slot)
                 else -> confirmDeleteSlot(slot)
             }
         }
@@ -1035,18 +1054,48 @@ class ControlEditPanel(
 
     /**
      * Copies a saved pad into the first free numbered slot. With all five used,
-     * the copy goes beside it under its own id -- never on top of another pad,
-     * which is the silent overwrite this replaces.
+     * the copy may not become a loose file below the five slots: the player is
+     * asked which of the five it should replace instead, and may answer Yes,
+     * No or Go Back. No and Go Back change nothing.
      */
     private fun duplicateSlot(slot: LayoutSlot) {
         val free = ControlLayout.freeSlot(activity)
-        val id = free ?: LayoutStore.sanitize(slot.displayName + " copy")
-        if (free == null && ControlLayout.listSlots(activity).any { it.id == id }) {
-            Toast.makeText(activity, R.string.profile_full, Toast.LENGTH_SHORT).show()
+        if (free != null) {
+            copySlotInto(slot, free)
             return
         }
-        val copyName = activity.getString(R.string.profile_copy_name, slot.displayName)
-        val ok = ControlLayout.duplicateSlot(activity, slot.id, id, copyName)
+        showSlotPicker(R.string.profile_duplicate) { chosen ->
+            askDuplicateOverwrite(slot, chosen)
+        }
+    }
+
+    /** The overwrite prompt for a duplicate when every numbered slot is taken. */
+    private fun askDuplicateOverwrite(from: LayoutSlot, into: SaveSlotChoice) {
+        screen { menu ->
+            PesMenu.Screen(
+                activity.getString(R.string.profile_duplicate),
+                message = activity.getString(
+                    R.string.profile_duplicate_full,
+                    activity.getString(R.string.profile_slot, into.id, into.displayName),
+                ),
+                rows = listOf(
+                    PesMenu.Row(activity.getString(R.string.yes)) {
+                        menu.dismissNow()
+                        copySlotInto(from, into.id)
+                    },
+                    PesMenu.Row(activity.getString(R.string.no)) { menu.dismissNow() },
+                    PesMenu.Row(activity.getString(R.string.go_back)) { menu.back() },
+                ),
+                // The three rows are this page's way out; a menu Back row on
+                // top of them would be a fourth answer to the same question.
+                backRow = false,
+            )
+        }
+    }
+
+    private fun copySlotInto(from: LayoutSlot, id: String) {
+        val copyName = activity.getString(R.string.profile_copy_name, from.displayName)
+        val ok = ControlLayout.duplicateSlot(activity, from.id, id, copyName)
         Toast.makeText(
             activity, if (ok) R.string.profile_duplicated else R.string.profile_failed,
             Toast.LENGTH_SHORT,

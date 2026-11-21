@@ -66,10 +66,19 @@ object PatchScanner {
         val extractBytes: Long get() = payloadBytes
         val stagingBytes: Long get() = payloadBytes
 
-        /** Extraction copy + staging copy + the pack being replaced + the reserve. */
+        /** The staged payload is copied into the game folder as well, as a manual replace would. */
+        val gameBytes: Long get() = payloadBytes
+
+        /**
+         * Extraction copy + staging copy + the copy in the game folder + the
+         * pack being replaced + the reserve.
+         */
         val peakBytes: Long
             get() = safeAdd(
-                safeAdd(safeAdd(extractBytes, stagingBytes), existingBytes),
+                safeAdd(
+                    safeAdd(safeAdd(extractBytes, stagingBytes), gameBytes),
+                    existingBytes,
+                ),
                 MARGIN_BYTES,
             )
 

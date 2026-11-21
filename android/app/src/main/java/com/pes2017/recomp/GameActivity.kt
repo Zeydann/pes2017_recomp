@@ -92,6 +92,19 @@ class GameActivity : AppCompatActivity(), NativeListener {
     private val padHolds = HashMap<Int, Long>()
     private var padHoldPolling = false
     private val padHoldPoll = Runnable { pollPadMenuHold() }
+
+    /**
+     * The menu chord: D-Pad up and RB held together open the pause menu at
+     * once, without waiting for the three-second single-button hold. Both have
+     * to stay down for [CHORD_HOLD_MS], so a sprint that rolls onto the d-pad
+     * for a frame does not open it, and the chord is disarmed when it fires so
+     * the menu cannot be toggled twice by one press.
+     */
+    private val chordKeys = HashSet<Int>()
+    private var chordArmed = true
+    private var chordPolling = false
+    private var chordSince = 0L
+    private val chordPoll = Runnable { pollMenuChord() }
     private var vibrator: Vibrator? = null
 
     /** The shared haptics policy: the pad and this activity ask the same switch. */
@@ -992,6 +1005,9 @@ class GameActivity : AppCompatActivity(), NativeListener {
         val opened = PesMenu(this) {
             menu = null
             menuOpen = false
+            // The dialog had the pad's keys while it was open, so the chord's
+            // own key-up events never reached this activity; arm it again here.
+            clearMenuChord()
             // The editor pauses for itself and starts its own resume on the way
             // out, and quitting leaves nothing to resume; everything else
             // resumes here, once, when the menu closes. A menu that closed to
@@ -1217,6 +1233,7 @@ class GameActivity : AppCompatActivity(), NativeListener {
         // through a menu, and nothing may be forwarded once the run is ending.
         if (quitting) return true
         trackPadHold(event)
+        trackMenuChord(event)
         if (started && !overlay.editing && pads.onKey(event)) {
             if (event.action == KeyEvent.ACTION_DOWN) hideTouchForPad()
             return true
@@ -1228,11 +1245,13 @@ class GameActivity : AppCompatActivity(), NativeListener {
         if (started && !overlay.editing && pads.onMotion(event)) {
             // A stick pushed while a button is down is play, not a request for
             // the menu: the hold is cancelled and starts over from a release.
-            if (padHolds.isNotEmpty() &&
-                (abs(event.getAxisValue(MotionEvent.AXIS_X)) > PAD_STICK_CANCEL ||
-                    abs(event.getAxisValue(MotionEvent.AXIS_Y)) > PAD_STICK_CANCEL)
-            ) {
-                clearPadHolds()
+            if (padHolds.isNotEmpty() || chordKeys.isNotEmpty()) {
+                if (abs(event.getAxisValue(MotionEvent.AXIS_X)) > PAD_STICK_CANCEL ||
+                    abs(event.getAxisValue(MotionEvent.AXIS_Y)) > PAD_STICK_CANCEL
+                ) {
+                    clearPadHolds()
+                    clearMenuChord()
+                }
             }
             // A pad that only moves its sticks takes the screen over the same
             // way one with buttons does; otherwise the overlay sits on top of a
@@ -1301,6 +1320,73 @@ class GameActivity : AppCompatActivity(), NativeListener {
             padHoldPolling = false
             handler.removeCallbacks(padHoldPoll)
         }
+    }
+
+    // ---- the D-Pad up + RB menu chord -------------------------------------------
+
+    /** Keeps the chord's two keys and starts its own timer while both are down. */
+    private fun trackMenuChord(event: KeyEvent) {
+        if (!started || quitting || menuOpen || overlay.editing) {
+            clearMenuChord()
+            return
+        }
+        val source = event.source
+        val fromPad = source and InputDevice.SOURCE_GAMEPAD == InputDevice.SOURCE_GAMEPAD ||
+            source and InputDevice.SOURCE_JOYSTICK == InputDevice.SOURCE_JOYSTICK
+        if (!fromPad) return
+        val key = event.keyCode
+        if (key != KeyEvent.KEYCODE_DPAD_UP && key != KeyEvent.KEYCODE_BUTTON_R1) return
+        when (event.action) {
+            KeyEvent.ACTION_DOWN -> {
+                if (event.repeatCount > 0) return
+                chordKeys.add(key)
+                if (chordKeys.size == 2 && chordArmed && !chordPolling) {
+                    chordPolling = true
+                    chordSince = SystemClock.uptimeMillis()
+                    handler.postDelayed(chordPoll, CHORD_POLL_MS)
+                }
+            }
+
+            KeyEvent.ACTION_UP -> {
+                chordKeys.remove(key)
+                // Both released: the next time they meet is a new request.
+                if (chordKeys.isEmpty()) {
+                    chordArmed = true
+                    stopChordPoll()
+                }
+            }
+        }
+    }
+
+    private fun pollMenuChord() {
+        if (!chordPolling) return
+        if (chordKeys.size < 2 || !chordArmed || !started || quitting || menuOpen || overlay.editing) {
+            clearMenuChord()
+            return
+        }
+        if (SystemClock.uptimeMillis() - chordSince >= CHORD_HOLD_MS) {
+            // One opening per chord: the keys stay in the set until they are
+            // released, so holding on cannot toggle the menu again.
+            chordArmed = false
+            stopChordPoll()
+            chordKeys.clear()
+            clearPadHolds()
+            showMenu()
+            return
+        }
+        handler.postDelayed(chordPoll, CHORD_POLL_MS)
+    }
+
+    private fun stopChordPoll() {
+        if (!chordPolling) return
+        chordPolling = false
+        handler.removeCallbacks(chordPoll)
+    }
+
+    private fun clearMenuChord() {
+        chordKeys.clear()
+        chordArmed = true
+        stopChordPoll()
     }
 
     // ---- lifecycle ---------------------------------------------------------------------
@@ -1751,6 +1837,12 @@ class GameActivity : AppCompatActivity(), NativeListener {
 
         /** The timer's resolution: how often a hold is checked, in milliseconds. */
         private const val PAD_HOLD_POLL_MS = 100L
+
+        /** How long D-Pad up and RB must be down together to count as the chord. */
+        private const val CHORD_HOLD_MS = 250L
+
+        /** The chord timer's resolution. */
+        private const val CHORD_POLL_MS = 50L
 
         /** Past this much stick the hold is gameplay, not a request for the menu. */
         private const val PAD_STICK_CANCEL = 0.5f
