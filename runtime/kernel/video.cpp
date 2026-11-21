@@ -7,6 +7,9 @@
 #include "../log.h"
 #include "../gpu/gpu.h"
 #include "../frame_rate.h"
+#include "../android/android.h"
+#include <chrono>
+#include <thread>
 #include "trace.h"
 
 namespace
@@ -147,6 +150,19 @@ PPC_FUNC(__imp__VdSwap)
         dwords[i++] = fetch ? ((size >> 13) & 0x1FFF) + 1 : kDisplayHeight;
         while (i < kReservedDwords) dwords[i++] = kType2Nop;
     }
+    // A pause has to reach the guest, not only the window. The presenter stops
+    // showing frames while the app is paused, but that stops the picture and
+    // nothing else: the title keeps its own clock and a match played behind a
+    // menu would keep its timer running. Waiting here -- on the thread that
+    // swaps, which is the guest's own -- stops it at the point the console's
+    // blank would, until the app says to carry on.
+#ifdef PES17_ANDROID
+    if (android::Paused())
+    {
+        while (android::Running() && android::Paused())
+            std::this_thread::sleep_for(std::chrono::milliseconds(8));
+    }
+#endif
     frame_rate::PaceSwap();
     gpu::Swap();
     ctx.r3.u64 = 0;

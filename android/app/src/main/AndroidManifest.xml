@@ -144,6 +144,14 @@
             tools:ignore="DiscouragedApi,LockedOrientationActivity" />
 
         <activity
+            android:name=".PatchesActivity"
+            android:exported="false"
+            android:parentActivityName=".MainActivity"
+            android:screenOrientation="fullUser"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode|density"
+            tools:ignore="DiscouragedApi,LockedOrientationActivity" />
+
+        <activity
             android:name=".InstallActivity"
             android:exported="false"
             android:parentActivityName=".MainActivity"

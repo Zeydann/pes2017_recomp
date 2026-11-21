@@ -128,6 +128,11 @@
                     android:text="@string/language" />
 
                 <Button
+                    android:id="@+id/patches"
+                    style="@style/MenuEntry"
+                    android:text="@string/patches" />
+
+                <Button
                     android:id="@+id/entry_quit"
                     style="@style/MenuEntry"
                     android:text="@string/quit_launcher" />

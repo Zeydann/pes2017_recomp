@@ -948,15 +948,28 @@ class GameActivity : AppCompatActivity(), NativeListener {
     /** Set when Edit Controls is chosen, so closing the menu does not resume first. */
     private var editingFromMenu = false
 
+    /**
+     * The one answer to "should the guest be running", from what the screen is
+     * in: the menu, the pad editor and the way out are each a pause, and
+     * nothing else is. Always sent, because a resume the runtime ignores is
+     * harmless while a pause it never hears is a match still playing behind a
+     * menu -- which is exactly how the clock kept running.
+     */
+    private fun syncPause() {
+        if (!started || !NativeBridge.isLoaded()) return
+        val paused = quitting || menuOpen || overlay.editing
+        NativeBridge.nativeSetPaused(paused)
+        setGameState(playing = !paused)
+    }
+
     private fun showMenu() {
         // Opening the menu is pausing, as the title's own Start does: the match
         // must not keep running (and keep taking damage) behind a menu, and a
         // thumb resting on the pad must not fire through it.
-        if (!menuOpen) {
+        if (!quitting) {
             menuOpen = true
             overlay.releaseEverything()
-            NativeBridge.nativeSetPaused(true)
-            setGameState(playing = false)
+            syncPause()
         }
         menu?.dismiss()
         val opened = PesMenu(this) {
@@ -964,12 +977,11 @@ class GameActivity : AppCompatActivity(), NativeListener {
             menuOpen = false
             // The editor pauses for itself and starts its own resume on the way
             // out, and quitting leaves nothing to resume; everything else
-            // resumes here, once, when the menu closes.
-            if (started && !quitting && !overlay.editing && !editingFromMenu) {
-                NativeBridge.nativeSetPaused(false)
-                setGameState(playing = true)
-            }
+            // resumes here, once, when the menu closes. A menu that closed to
+            // open the editor must not resume for the frame in between.
+            val intoEditor = editingFromMenu
             editingFromMenu = false
+            if (!intoEditor) syncPause()
             goFullscreen()
         }
         menu = opened
@@ -1119,8 +1131,7 @@ class GameActivity : AppCompatActivity(), NativeListener {
         menu = null
         menuOpen = false
         editingFromMenu = false
-        setGameState(playing = false)
-        NativeBridge.nativeSetPaused(true)
+        syncPause()
         handler.removeCallbacks(statsTick)
         // Quit Game lands on the launcher, which sits under this activity in
         // the same task: finish() uncovers it. finishAndRemoveTask() used to be
@@ -1166,7 +1177,7 @@ class GameActivity : AppCompatActivity(), NativeListener {
             editPanel = ControlEditPanel(this, root, overlay) { endEditing(save = true) }
         }
         editPanel?.attach()
-        NativeBridge.nativeSetPaused(true)
+        syncPause()
     }
 
     private fun endEditing(save: Boolean) {
@@ -1176,7 +1187,7 @@ class GameActivity : AppCompatActivity(), NativeListener {
         menuButton.visibility = View.VISIBLE
         applyDeveloperTools()
         if (save) overlay.layout.save(this)
-        NativeBridge.nativeSetPaused(false)
+        syncPause()
         goFullscreen()
     }
 
@@ -1215,9 +1226,8 @@ class GameActivity : AppCompatActivity(), NativeListener {
         // A menu still open across a trip out of the app stays a pause: its own
         // dismissal is what starts the match again. So does quick graphics.
         // A run that is quitting never resumes, whatever brings this window back.
-        if (!menuOpen && !quitting) {
-            NativeBridge.nativeSetPaused(false)
-            setGameState(playing = true)
+        if (!menuOpen && !quitting && !overlay.editing) {
+            syncPause()
         }
         // A trim while the window was away may have cut the texture cache.
         // Without this it stays cut, and every texture is uploaded again on

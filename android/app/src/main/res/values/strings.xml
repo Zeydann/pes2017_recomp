@@ -542,6 +542,55 @@
     <string name="language_name_ru">Русский</string>
     <string name="language_name_pt">Português (Portugal)</string>
 
+    <!-- PATCHES: the data pack and the edit save beside the game, the backups
+         each operation keeps, and the game folder every one of them uses
+         (PatchStore, PatchesActivity). -->
+    <string name="patches">PATCHES</string>
+    <string name="patches_hint">Install a data pack beside the game and manage the edit save. Nothing is changed before a copy is kept.</string>
+    <string name="patches_status_section">GAME AND SAVE DATA</string>
+    <string name="patches_no_folder">No game folder yet. Choose the folder that holds default.xex.</string>
+    <string name="patches_folder_set">Game folder: %1$s</string>
+    <string name="patches_system_present">SYSTEM00000000: %1$s · never modified</string>
+    <string name="patches_system_absent">SYSTEM00000000: not present · never modified</string>
+    <string name="patches_patch_section">PATCH DATA</string>
+    <string name="patches_patch_none">No patch data installed.</string>
+    <string name="patches_patch_installed">%1$s · %2$s</string>
+    <string name="patches_installed_on">Installed %1$s from %2$s</string>
+    <string name="patches_install">INSTALL PATCH</string>
+    <string name="patches_restore">RESTORE PREVIOUS PATCH</string>
+    <string name="patches_edit_section">EDITED DATA</string>
+    <string name="patches_edit_none">No EDIT00000000 in the saves folder.</string>
+    <string name="patches_edit_present">EDIT00000000 · %1$s</string>
+    <string name="patches_edit_replaced_on">Replaced %1$s from %2$s</string>
+    <string name="patches_edit_replace">REPLACE EDITED DATA</string>
+    <string name="patches_edit_restore">RESTORE EDITED DATA</string>
+    <string name="patches_backups_section">BACKUPS</string>
+    <string name="patches_backups_none">No backups yet.</string>
+    <string name="patches_backup_line">%1$s\n%2$s\n%3$s · %4$s</string>
+    <string name="patches_files">%1$d files</string>
+    <string name="patches_protection">Every file is copied to a backup before it is replaced, and a backup is checked before it is restored. SYSTEM00000000 is never modified.</string>
+    <string name="patches_change_folder">CHOOSE GAME FOLDER</string>
+    <string name="patches_install_choose_message">Choose the patch as a .zip archive, or the folder it was extracted to.</string>
+    <string name="patches_source_folder">EXTRACTED FOLDER</string>
+    <string name="patches_source_zip">ZIP ARCHIVE</string>
+    <string name="patches_continue">CONTINUE</string>
+    <string name="patches_edit_confirm">Replace EDIT00000000? The current save is copied to a backup first.</string>
+    <string name="patches_restore_confirm">Restore the previous patch? The pack installed now is kept as a backup.</string>
+    <string name="patches_edit_restore_confirm">Restore the previous EDIT00000000? The current save is kept as a backup.</string>
+    <string name="patches_busy">Working…</string>
+    <string name="patches_installed_done">Patch installed.</string>
+    <string name="patches_installed_kept">Patch installed. The pack that was there is kept as a backup.</string>
+    <string name="patches_restored_done">Previous patch restored.</string>
+    <string name="patches_edit_done">EDIT00000000 replaced.</string>
+    <string name="patches_edit_done_kept">EDIT00000000 replaced. The previous save is kept as a backup.</string>
+    <string name="patches_edit_restored">EDIT00000000 restored.</string>
+    <string name="patches_failed">Could not finish: %1$s</string>
+    <string name="patches_game_running">Quit the game first: its data cannot be replaced while it runs.</string>
+    <string name="patches_select_folder_first">Choose the game folder first.</string>
+    <string name="patches_unreadable_path">That folder or file cannot be read by the app.</string>
+    <string name="patches_need_access">The app needs access to that folder. Allow all-files access, then try again.</string>
+    <string name="patches_wrong_game">That folder does not hold default.xex.</string>
+
     <!-- One-word states, and the prompts the in-game menu draws at its foot. -->
     <string name="on">On</string>
     <string name="off">Off</string>

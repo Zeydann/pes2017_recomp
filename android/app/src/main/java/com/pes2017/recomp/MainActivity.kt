@@ -208,6 +208,11 @@ class MainActivity : AppCompatActivity() {
             showDetail(getString(R.string.language), getString(R.string.language_hint))
             LanguagePicker.show(this, prefs)
         }
+        findViewById<Button>(R.id.patches).setOnClickListener {
+            select(it as Button)
+            showDetail(getString(R.string.patches), getString(R.string.patches_hint))
+            startActivity(Intent(this, PatchesActivity::class.java))
+        }
         quitButton.setOnClickListener {
             select(quitButton)
             finishAndRemoveTask()
