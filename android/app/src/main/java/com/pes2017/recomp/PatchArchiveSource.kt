@@ -77,7 +77,10 @@ class PatchArchiveSource private constructor(
                             PatchSourceFailure.IO,
                         )
                     descriptor = opened
-                    runCatching { Os.lseek(opened.fd, 0, OsConstants.SEEK_SET) }
+                    // Os.lseek takes the FileDescriptor, while libarchive's
+                    // readOpenFd takes the raw int: the two are not the same
+                    // and swapping them does not compile.
+                    runCatching { Os.lseek(opened.fileDescriptor, 0, OsConstants.SEEK_SET) }
                     Archive.readOpenFd(archive, opened.fd, READ_BLOCK)
                 }
             } catch (error: Throwable) {

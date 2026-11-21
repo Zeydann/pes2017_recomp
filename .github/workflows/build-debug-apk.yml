@@ -40,6 +40,13 @@ on:
       - 'typhonfix*'
   workflow_dispatch:
 
+# One run per branch at a time: a push while an older build is still going
+# replaces it, so a branch's newest commit is always the one that ends up with
+# an apk instead of two jobs racing for the same artifact name.
+concurrency:
+  group: debug-apk-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -52,6 +59,9 @@ env:
 jobs:
   debug:
     runs-on: ubuntu-latest
+    # A hung Gradle worker or a stalled download would otherwise hold the
+    # runner (and the branch's concurrency slot) until GitHub's six-hour limit.
+    timeout-minutes: 75
 
     steps:
       - name: What is being built
@@ -85,6 +95,16 @@ jobs:
           echo "ANDROID_HOME=$HOME/android-sdk" >> "$GITHUB_ENV"
           echo "ANDROID_SDK_ROOT=$HOME/android-sdk" >> "$GITHUB_ENV"
           mkdir -p "$HOME/android-sdk"
+
+      # The SDK install is the slowest fixed cost of this job and only changes
+      # when a version below does. The install step always runs after a
+      # restore and repairs anything the cache is missing, so a partial or
+      # stale cache costs a minute, never the build.
+      - name: Cache the Android SDK
+        uses: actions/cache@v4
+        with:
+          path: ~/android-sdk
+          key: android-sdk-35.0.0-${{ runner.os }}-v1
 
       - name: Install SDK components via sdkmanager
         run: |
@@ -167,12 +187,15 @@ jobs:
           ./gradlew :app:assembleDebug -PprebuiltNative="$PREBUILT" --stacktrace \
             > /tmp/assemble.log 2>&1
           status=$?
-          tail -n 80 /tmp/assemble.log
+          tail -n 200 /tmp/assemble.log
           if [ $status -ne 0 ]; then
             # The job log needs a signed-in reader; an annotation does not, and
-            # it is what a person fixing the build reads first anyway.
-            reason=$(grep -m 15 -E '^e: |error:|FAILURE:|What went wrong|^> Task .* FAILED|Caused by' \
-              /tmp/assemble.log | tr '\n' '~' | cut -c1-4000)
+            # it is what a person fixing the build reads first anyway. Kotlin
+            # reports every error it found, so 40 lines are kept: the first
+            # fix often uncovers the second error, and one run should say all
+            # of them rather than one per push.
+            reason=$(grep -m 40 -E '^e: |error:|FAILURE:|What went wrong|^> Task .* FAILED|Caused by' \
+              /tmp/assemble.log | tr '\n' '~' | cut -c1-6000)
             echo "::error::assembleDebug failed: $reason"
           fi
           exit $status
