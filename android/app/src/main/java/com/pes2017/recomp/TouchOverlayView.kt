@@ -182,6 +182,40 @@ class TouchOverlayView @JvmOverloads constructor(
     private var liveSwipeRight = false
     private var liveSwipeSince = 0L
 
+    /**
+     * The button bit carried past the finger's lift.
+     *
+     * A modifier swipe on an action button is one held pair -- RT and shoot --
+     * and the press the thumb has already made is the button half of it. When
+     * the direction is only read as the thumb leaves, that press is still what
+     * the title is charging: the modifier is added beside it and this carries
+     * the button through the same short tail. Replaying the lift through the
+     * fallback sequence instead lifts the button first, which the title reads
+     * as the ordinary shot the player did not ask for.
+     */
+    private var liveSwipeHoldBits = 0
+
+    /**
+     * Which hold the live modifier belongs to. A tail posted by one gesture
+     * must not clear the modifier a newer gesture has already armed, so every
+     * hold that comes on takes a new epoch and a tail only acts on its own.
+     */
+    private var liveSwipeEpoch = 0
+    private var liveSwipeTailEpoch = 0
+
+    /**
+     * The modifier this gesture armed, and when it first armed it: kept apart
+     * from the bits sent right now. A direction that reads as NONE for a moment
+     * -- the thumb crossing back over the travel threshold, a diagonal exactly
+     * between two arms -- lets go of the bits but not of the clock. The title
+     * has already polled the modifier down, and the reading that comes back a
+     * sample later is the same gesture, not a new one that has to start again.
+     */
+    private var liveSwipeArmedAt = 0L
+    private var liveSwipeArmedButtons = 0
+    private var liveSwipeArmedLeft = false
+    private var liveSwipeArmedRight = false
+
     /** What the pad last told the title, so logcat shows a dead stick or a lost flick. */
     private val trace = TouchTraceGate()
 
@@ -192,6 +226,10 @@ class TouchOverlayView @JvmOverloads constructor(
      * go one beat after the button under it (LIVE_MODIFIER_TAIL_MS).
      */
     private val liveSwipeTail = Runnable {
+        // An older hold's tail outliving a newer swipe's modifier: clearing it
+        // here would lift the RT the new gesture is relying on, one frame
+        // before the button it belongs to. The newer hold has its own tail.
+        if (liveSwipeTailEpoch != liveSwipeEpoch) return@Runnable
         clearLiveSwipe()
         if (NativeBridge.isLoaded()) pushState()
         invalidate()
@@ -829,9 +867,11 @@ class TouchOverlayView @JvmOverloads constructor(
             HoldSource.MACRO_SEQUENCE, combo.buttons, combo.leftTrigger, combo.rightTrigger,
         )
         // The modifier of a live swipe, held while the thumb is still charging
-        // the button. It ends with the thumb, in the same push as the lift.
+        // the button -- and, for a direction only read at the lift, the button
+        // itself carried one beat past the finger so the title polls the pair.
         mixer.set(
-            HoldSource.SWIPE_HOLD, liveSwipeButtonBits, liveSwipeLeft, liveSwipeRight,
+            HoldSource.SWIPE_HOLD, liveSwipeButtonBits or liveSwipeHoldBits,
+            liveSwipeLeft, liveSwipeRight,
         )
         buttons = mixer.buttons
         leftTrigger = if (mixer.leftTrigger) 255 else 0
@@ -1054,6 +1094,7 @@ class TouchOverlayView @JvmOverloads constructor(
                             if (dpadBits[id] != arm) { dpadBits[id] = arm; changed = true }
                         }
                         ControlKind.SWIPE -> {
+                            feedSwipeHistory(event, index)
                             swipeClassifier.move(id, x, y)
                             val peek = swipeClassifier.peek(id)
                             if (peek != (liveSwipes[id] ?: Swipe.NONE)) {
@@ -1069,6 +1110,7 @@ class TouchOverlayView @JvmOverloads constructor(
                             // is part of the change: without it the arrows and
                             // the action name only appeared after the lift,
                             // which made a working swipe look ignored.
+                            feedSwipeHistory(event, index)
                             swipeClassifier.move(id, x, y)
                             val peek = swipeClassifier.peek(id)
                             if (peek != (liveSwipes[id] ?: Swipe.NONE)) {
@@ -1529,8 +1571,7 @@ class TouchOverlayView @JvmOverloads constructor(
         val action = element.swipeAction(direction)
         // If the modifier was already held alongside the charging button, the
         // title has the combination and the lift releases it; replaying the
-        // sequence would send the same command twice. A modifier that only
-        // became known as the thumb lifted still needs the timed sequence.
+        // sequence would send the same command twice.
         val alreadyHeld = liveSwipeHeldFor(action)
         // An ordinary tap on a button is silent here -- it already has its held
         // bit -- but a flick that charged a modifier and then read as no
@@ -1538,19 +1579,46 @@ class TouchOverlayView @JvmOverloads constructor(
         if (direction != Swipe.NONE || hasLiveModifier()) {
             Log.i(TouchTraceGate.TAG, TouchTraceGate.swipe(element.id, direction, action))
         }
-        if (!alreadyHeld && SwipePriority.sendsSwipe(action)) emitSwipe(action)
-        if (alreadyHeld) {
-            // The modifier has been down and the title has seen it, so the
-            // sequence is not replayed; it is held one beat past the button's
-            // lift instead. Releasing both in this push is what turned a finesse
-            // shot into an ordinary one whenever the title's poll came after it.
-            removeCallbacks(liveSwipeTail)
-            postDelayed(liveSwipeTail, LIVE_MODIFIER_TAIL_MS)
+        if (carriesHeldButton(element, action)) {
+            // The button the thumb pressed is still down in this push, and it is
+            // the bit the command wants: the modifier is armed beside it -- it
+            // may only have become known as the finger lifted -- and both are
+            // held one beat past the lift. That is one held pair, not a lift
+            // followed by a fresh press, so a sweep that resolved late plays the
+            // controlled shot instead of an ordinary one.
+            if (!alreadyHeld) applyLiveSwipe(pointerId, action, push = false)
+            liveSwipeHoldBits = action.bit
+            holdLiveSwipeThroughTail()
         } else {
-            clearLiveSwipe(pointerId)
+            if (!alreadyHeld && SwipePriority.sendsSwipe(action)) emitSwipe(action)
+            if (alreadyHeld) {
+                // The modifier has been down and the title has seen it, so the
+                // sequence is not replayed; it is held one beat past the
+                // button's lift instead. Releasing both in this push is what
+                // turned a chip shot into an ordinary one whenever the title's
+                // poll came after it.
+                holdLiveSwipeThroughTail()
+            } else {
+                clearLiveSwipe(pointerId)
+            }
         }
         noteSwipeTrail(element, direction)
     }
+
+    /**
+     * Whether this lift can keep the button the thumb pressed and add the
+     * modifier to it, rather than replaying the whole combination.
+     *
+     * Only an action button that is already sending its own bit qualifies: a
+     * spare or a tactical button holds nothing, a double tap is by definition a
+     * second press, a stick flick is not a button at all, and a direction bound
+     * to a different button than the one under the thumb has no held pair to
+     * keep.
+     */
+    private fun carriesHeldButton(element: ControlElement, action: SwipeAction): Boolean =
+        element.kind == ControlKind.BUTTON && element.value != 0 &&
+            action.bound && !action.doubleTap && action.flick == SwipeFlick.NONE &&
+            action.modifier != SwipeModifier.NONE && action.bit == element.value
 
     /**
      * Keeps the modifier of the live swipe down beside the button that is being
@@ -1564,24 +1632,75 @@ class TouchOverlayView @JvmOverloads constructor(
         // still gets its own sequence on the lift.
         if (liveSwipePointer >= 0 && liveSwipePointer != pointerId && hasLiveModifier()) return
         val action = if (direction == Swipe.NONE) SwipeAction.NONE else element.swipeAction(direction)
+        applyLiveSwipe(pointerId, action)
+    }
+
+    /**
+     * Holds [action]'s modifier beside whatever button is already down, or lets
+     * go when the action has no modifier.
+     *
+     * The bits alone do not decide when a hold began: a direction that flickers
+     * to NONE and back is the same hold, so the arming time is kept across it
+     * and only a different modifier, or a different finger, restarts the clock.
+     */
+    private fun applyLiveSwipe(pointerId: Int, action: SwipeAction, push: Boolean = true) {
         val modifierOnly = action.bound && !action.doubleTap && action.modifier != SwipeModifier.NONE
         val buttons = if (modifierOnly) action.modifier.bit else 0
         val left = modifierOnly && action.modifier == SwipeModifier.LT
         val right = modifierOnly && action.modifier == SwipeModifier.RT
-        if (buttons == liveSwipeButtonBits && left == liveSwipeLeft && right == liveSwipeRight) {
-            return
-        }
-        if (buttons == 0 && !left && !right) {
-            liveSwipePointer = -1
+        val disarmed = buttons == 0 && !left && !right
+        val unchanged = buttons == liveSwipeButtonBits && left == liveSwipeLeft &&
+            right == liveSwipeRight
+        if (unchanged && (disarmed || pointerId == liveSwipePointer)) return
+        if (disarmed) {
+            // The bits go, the clock stays: see liveSwipeArmedAt.
             liveSwipeSince = 0L
         } else {
+            // A hold that comes on after being off, or under another finger, is
+            // a new hold: the tail of the previous one no longer owns it.
+            if (!hasLiveModifier() || pointerId != liveSwipePointer) liveSwipeEpoch++
+            val same = buttons == liveSwipeArmedButtons && left == liveSwipeArmedLeft &&
+                right == liveSwipeArmedRight
+            if (!same || liveSwipeArmedAt == 0L) {
+                liveSwipeArmedAt = SystemClock.uptimeMillis()
+                liveSwipeArmedButtons = buttons
+                liveSwipeArmedLeft = left
+                liveSwipeArmedRight = right
+            }
             liveSwipePointer = pointerId
-            if (liveSwipeSince == 0L) liveSwipeSince = SystemClock.uptimeMillis()
+            liveSwipeSince = liveSwipeArmedAt
         }
         liveSwipeButtonBits = buttons
         liveSwipeLeft = left
         liveSwipeRight = right
-        if (NativeBridge.isLoaded()) pushState()
+        if (push && NativeBridge.isLoaded()) pushState()
+    }
+
+    /** Keeps the live pair down one beat past the lift, for the title's poll. */
+    private fun holdLiveSwipeThroughTail() {
+        removeCallbacks(liveSwipeTail)
+        liveSwipeTailEpoch = liveSwipeEpoch
+        postDelayed(liveSwipeTail, LIVE_MODIFIER_TAIL_MS)
+    }
+
+    /**
+     * Feeds a batched move event's earlier samples to the swipe classifier.
+     *
+     * The samples before the one this event carries are part of the same
+     * travel, so a fast flick no longer reaches the classifier as one jump from
+     * where it started to wherever it happened to be when a frame next arrived.
+     * What the lift reads is still where the thumb ended up -- a gesture that
+     * comes back to where it landed is a tap, however far it wandered -- so the
+     * history can only fill in the samples, never invent a direction.
+     */
+    private fun feedSwipeHistory(event: MotionEvent, index: Int) {
+        if (event.historySize <= 0) return
+        val id = event.getPointerId(index)
+        for (h in 0 until event.historySize) {
+            swipeClassifier.move(
+                id, event.getHistoricalX(index, h), event.getHistoricalY(index, h),
+            )
+        }
     }
 
     private fun hasLiveModifier(): Boolean =
@@ -1609,6 +1728,11 @@ class TouchOverlayView @JvmOverloads constructor(
         liveSwipeButtonBits = 0
         liveSwipeLeft = false
         liveSwipeRight = false
+        liveSwipeHoldBits = 0
+        liveSwipeArmedAt = 0L
+        liveSwipeArmedButtons = 0
+        liveSwipeArmedLeft = false
+        liveSwipeArmedRight = false
     }
 
     /**
