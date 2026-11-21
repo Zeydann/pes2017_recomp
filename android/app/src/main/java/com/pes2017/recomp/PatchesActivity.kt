@@ -11,6 +11,7 @@ import androidx.appcompat.app.AppCompatActivity
 import java.io.File
 import java.text.DateFormat
 import java.util.Date
+import kotlin.concurrent.thread
 
 /**
  * PATCHES: what data pack and edit save are installed beside the game, and the
@@ -276,14 +277,17 @@ class PatchesActivity : AppCompatActivity() {
             .setMessage(R.string.patches_busy)
             .setCancelable(false)
             .show()
-        Thread(name = "patch-work") {
+        // kotlin.concurrent.thread, not the Thread constructor: the constructor
+        // takes (target, name) and cannot be called with the name first and a
+        // trailing lambda, which does not compile.
+        thread(name = "patch-work") {
             val result = block()
             runOnUiThread {
                 progress.dismiss()
                 refresh()
                 if (result.isNotEmpty()) Toast.makeText(this, result, Toast.LENGTH_LONG).show()
             }
-        }.start()
+        }
     }
 
     private fun refreshOnUi() {
