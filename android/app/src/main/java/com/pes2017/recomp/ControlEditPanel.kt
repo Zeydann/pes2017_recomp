@@ -2,6 +2,7 @@ package com.pes2017.recomp
 
 import android.app.Activity
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
@@ -175,6 +176,13 @@ class ControlEditPanel(
     private var attached = false
     private var atTop = false
 
+    /** Where a drag of the panel's grip started, and whether it has moved it. */
+    private var gripDownX = 0f
+    private var gripDownY = 0f
+    private var panelLeft = 0
+    private var panelTop = 0
+    private var panelMoved = false
+
     /**
      * Set while [show] writes the switches from the selected control. Without
      * it, setting `isChecked` fires the change listener, which reads a
@@ -185,6 +193,24 @@ class ControlEditPanel(
 
     init {
         val dp = activity.resources.displayMetrics.density
+        // A grip to carry the panel. The toolbar used to sit pinned in a corner
+        // and cover the controls under it; dragging this bar moves the whole
+        // panel, while the buttons stay ordinary buttons so a tap is still a
+        // click. The bar is deliberately its own target: intercepting drags
+        // over the tool row would have stolen the horizontal scroll it needs.
+        val grip = TextView(activity).apply {
+            text = "≡"
+            textSize = 16f
+            gravity = Gravity.CENTER
+            setTextColor(0xB3FFFFFF.toInt())
+            setBackgroundColor(0xCC1B2126.toInt())
+            isClickable = true
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            setOnTouchListener { _, event -> onGripTouch(event) }
+        }
+        actions.addView(grip, 0, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, (22 * dp).roundToInt(),
+        ))
         toolRow().addView(saveLayout, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
         ).apply { marginStart = (6 * dp).roundToInt() })
@@ -1071,6 +1097,47 @@ class ControlEditPanel(
         }
     }
 
+    /**
+     * Carries the panel with the finger. It stops at the root's edges, so a
+     * drag towards one cannot lose the toolbar off screen, and the place it is
+     * left survives until the editor closes.
+     */
+    private fun onGripTouch(event: MotionEvent): Boolean {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                gripDownX = event.rawX
+                gripDownY = event.rawY
+                panelLeft = actions.left
+                panelTop = actions.top
+            }
+            MotionEvent.ACTION_MOVE -> movePanel(
+                panelLeft + (event.rawX - gripDownX).roundToInt(),
+                panelTop + (event.rawY - gripDownY).roundToInt(),
+            )
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> Unit
+            else -> return false
+        }
+        return true
+    }
+
+    private fun movePanel(x: Int, y: Int) {
+        val params = actions.layoutParams as? FrameLayout.LayoutParams ?: return
+        // Absolute left/top: with START/END the margins mean different sides in
+        // an RTL layout, which is why the panel could not be placed by pixels.
+        params.gravity = Gravity.TOP or Gravity.LEFT
+        params.leftMargin = x.coerceIn(0, (root.width - actions.width).coerceAtLeast(0))
+        params.topMargin = y.coerceIn(0, (root.height - actions.height).coerceAtLeast(0))
+        actions.layoutParams = params
+        panelMoved = true
+    }
+
+    /** Keeps a moved panel inside the window when it changes size, as on rotation. */
+    private val keepOnScreen = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+        if (!panelMoved) return@OnLayoutChangeListener
+        val params = actions.layoutParams as? FrameLayout.LayoutParams ?: return@OnLayoutChangeListener
+        movePanel(params.leftMargin, params.topMargin)
+    }
+
     fun attach() {
         if (attached) return
         root.addView(view, params(top = false))
@@ -1091,11 +1158,13 @@ class ControlEditPanel(
         )
         atTop = false
         attached = true
+        root.addOnLayoutChangeListener(keepOnScreen)
         show(null)
     }
 
     fun detach() {
         if (!attached) return
+        root.removeOnLayoutChangeListener(keepOnScreen)
         root.removeView(view)
         root.removeView(idle)
         root.removeView(actions)
