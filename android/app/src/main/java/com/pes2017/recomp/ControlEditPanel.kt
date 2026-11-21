@@ -428,13 +428,23 @@ class ControlEditPanel(
      * shoulders and the two menu buttons do not: LB and RB are held as the
      * modifiers of other actions, and Start/Select belong to the title's menus,
      * so a direction on them was a setting that did nothing useful.
+     *
+     * The four face buttons keep their swipes but are not offered here: their
+     * directions are the title's skills (a finesse shot, a controlled pass and
+     * so on), and editing them through the pad turned a working action into a
+     * dead one. The bindings themselves are untouched, so the swipes still
+     * fire; only the editor's way into them is closed.
      */
     private fun offersSwipes(element: ControlElement): Boolean = when (element.kind) {
         ControlKind.SWIPE, ControlKind.CUSTOM, ControlKind.TACTICAL -> true
         ControlKind.BUTTON -> element.value != NativeBridge.LB &&
             element.value != NativeBridge.RB &&
             element.value != NativeBridge.START &&
-            element.value != NativeBridge.BACK
+            element.value != NativeBridge.BACK &&
+            element.value != NativeBridge.A &&
+            element.value != NativeBridge.B &&
+            element.value != NativeBridge.X &&
+            element.value != NativeBridge.Y
         else -> false
     }
 
@@ -442,6 +452,9 @@ class ControlEditPanel(
 
     private fun showSwipeBindings() {
         val element = current ?: return
+        // The button is hidden for the face buttons; this keeps their editor
+        // page unreachable even if the selection changes under an open strip.
+        if (!offersSwipes(element)) return
         val directions = intArrayOf(R.string.swipe_up, R.string.swipe_down,
             R.string.swipe_left, R.string.swipe_right, R.string.swipe_center)
         val labels = directions.mapIndexed { index, id ->
