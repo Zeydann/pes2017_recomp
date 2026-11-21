@@ -21,6 +21,7 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.view.Gravity
+import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.SurfaceHolder
@@ -45,6 +46,7 @@ import androidx.appcompat.widget.SwitchCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -78,6 +80,18 @@ class GameActivity : AppCompatActivity(), NativeListener {
 
     private val pads = GamepadInput()
     private val handler = Handler(Looper.getMainLooper())
+
+    /**
+     * A gamepad button held for [PAD_MENU_HOLD_MS] opens the pause menu, the
+     * same menu the hamburger button opens. Only one button at a time is
+     * timed: a second button, or a stick pushed past [PAD_STICK_CANCEL],
+     * cancels the hold, so a combination or a dribble cannot open it. A tap is
+     * long over before the timer fires, which is what keeps ordinary presses
+     * and gameplay inputs out of the menu.
+     */
+    private val padHolds = HashMap<Int, Long>()
+    private var padHoldPolling = false
+    private val padHoldPoll = Runnable { pollPadMenuHold() }
     private var vibrator: Vibrator? = null
 
     /** The shared haptics policy: the pad and this activity ask the same switch. */
@@ -963,6 +977,9 @@ class GameActivity : AppCompatActivity(), NativeListener {
     }
 
     private fun showMenu() {
+        // However the menu was asked for -- the button, a pad held for three
+        // seconds -- the hold that opened it is done with.
+        clearPadHolds()
         // Opening the menu is pausing, as the title's own Start does: the match
         // must not keep running (and keep taking damage) behind a menu, and a
         // thumb resting on the pad must not fire through it.
@@ -1007,7 +1024,7 @@ class GameActivity : AppCompatActivity(), NativeListener {
         // Recording has its own button beside Menu; playing is picked here.
         if (prefs.developerTools || Macro.recording || Macro.playing) {
             rows += if (Macro.playing) {
-                PesMenu.Row(getString(R.string.macro_stop_play)) { paused ->
+                PesMenu.Row(getString(R.string.macro_stop_play), toggle = true) { paused ->
                     Macro.stopPlayback()
                     paused.refresh()
                 }
@@ -1017,12 +1034,14 @@ class GameActivity : AppCompatActivity(), NativeListener {
         }
         rows += PesMenu.Row(
             getString(if (prefs.touchControls) R.string.hide_touch_controls else R.string.show_touch_controls),
+            toggle = true,
         ) { paused ->
             setTouchControls(!prefs.touchControls)
             paused.refresh()
         }
         rows += PesMenu.Row(
             getString(if (prefs.gamepadEnabled) R.string.disable_gamepad else R.string.enable_gamepad),
+            toggle = true,
         ) { paused ->
             setGamepad(!prefs.gamepadEnabled)
             paused.refresh()
@@ -1197,6 +1216,7 @@ class GameActivity : AppCompatActivity(), NativeListener {
         // The dialogs and the editor come first; a pad should not fire a gun
         // through a menu, and nothing may be forwarded once the run is ending.
         if (quitting) return true
+        trackPadHold(event)
         if (started && !overlay.editing && pads.onKey(event)) {
             if (event.action == KeyEvent.ACTION_DOWN) hideTouchForPad()
             return true
@@ -1206,6 +1226,14 @@ class GameActivity : AppCompatActivity(), NativeListener {
 
     override fun onGenericMotionEvent(event: MotionEvent): Boolean {
         if (started && !overlay.editing && pads.onMotion(event)) {
+            // A stick pushed while a button is down is play, not a request for
+            // the menu: the hold is cancelled and starts over from a release.
+            if (padHolds.isNotEmpty() &&
+                (abs(event.getAxisValue(MotionEvent.AXIS_X)) > PAD_STICK_CANCEL ||
+                    abs(event.getAxisValue(MotionEvent.AXIS_Y)) > PAD_STICK_CANCEL)
+            ) {
+                clearPadHolds()
+            }
             // A pad that only moves its sticks takes the screen over the same
             // way one with buttons does; otherwise the overlay sits on top of a
             // match already being played with a controller, and both drive
@@ -1214,6 +1242,65 @@ class GameActivity : AppCompatActivity(), NativeListener {
             return true
         }
         return super.onGenericMotionEvent(event)
+    }
+
+    /** Starts, keeps or ends the 3 s timer for a button the pad is holding. */
+    private fun trackPadHold(event: KeyEvent) {
+        if (!started || quitting || menuOpen || overlay.editing) {
+            clearPadHolds()
+            return
+        }
+        val source = event.source
+        val fromPad = source and InputDevice.SOURCE_GAMEPAD == InputDevice.SOURCE_GAMEPAD ||
+            source and InputDevice.SOURCE_JOYSTICK == InputDevice.SOURCE_JOYSTICK
+        if (!fromPad || event.keyCode == KeyEvent.KEYCODE_BACK) return
+        when (event.action) {
+            KeyEvent.ACTION_DOWN -> {
+                // A pad repeats DOWN while a button is held; only the first one
+                // starts the clock.
+                if (event.repeatCount > 0) return
+                if (padHolds.isNotEmpty()) {
+                    // Two buttons down is a combination, never a hold.
+                    clearPadHolds()
+                    return
+                }
+                padHolds[event.keyCode] = SystemClock.uptimeMillis()
+                if (!padHoldPolling) {
+                    padHoldPolling = true
+                    handler.postDelayed(padHoldPoll, PAD_HOLD_POLL_MS)
+                }
+            }
+
+            KeyEvent.ACTION_UP -> {
+                padHolds.remove(event.keyCode)
+                if (padHolds.isEmpty()) clearPadHolds()
+            }
+        }
+    }
+
+    private fun pollPadMenuHold() {
+        if (!padHoldPolling) return
+        val since = padHolds.values.minOrNull()
+        if (since == null || !started || quitting || menuOpen || overlay.editing) {
+            clearPadHolds()
+            return
+        }
+        if (SystemClock.uptimeMillis() - since >= PAD_MENU_HOLD_MS) {
+            // One opening per hold: the clock is cleared before the menu
+            // appears, so holding on cannot close and open it again.
+            clearPadHolds()
+            showMenu()
+            return
+        }
+        handler.postDelayed(padHoldPoll, PAD_HOLD_POLL_MS)
+    }
+
+    private fun clearPadHolds() {
+        padHolds.clear()
+        if (padHoldPolling) {
+            padHoldPolling = false
+            handler.removeCallbacks(padHoldPoll)
+        }
     }
 
     // ---- lifecycle ---------------------------------------------------------------------
@@ -1659,6 +1746,15 @@ class GameActivity : AppCompatActivity(), NativeListener {
     }
 
     companion object {
+        /** How long a gamepad button must stay down to open the menu. */
+        private const val PAD_MENU_HOLD_MS = 3000L
+
+        /** The timer's resolution: how often a hold is checked, in milliseconds. */
+        private const val PAD_HOLD_POLL_MS = 100L
+
+        /** Past this much stick the hold is gameplay, not a request for the menu. */
+        private const val PAD_STICK_CANCEL = 0.5f
+
         /** Started by the launcher once the files are in place. */
         fun start(activity: Activity) {
             activity.startActivity(Intent(activity, GameActivity::class.java))

@@ -59,6 +59,12 @@ class PesMenu(
         val detail: String = "",
         val enabled: Boolean = true,
         val checked: Boolean? = null,
+        /**
+         * A row that switches something. Pressing it plays the toggle sound
+         * instead of the press beep; a row with [checked] is one too, since
+         * the dot is this menu's way of showing a switch's state.
+         */
+        val toggle: Boolean = false,
         val onAdjust: ((PesMenu, Int) -> Unit)? = null,
         val activate: ((PesMenu) -> Unit)? = null,
     )
@@ -145,6 +151,10 @@ class PesMenu(
 
     init {
         setCanceledOnTouchOutside(false)
+        // The two menu samples are loaded once per process, on the first menu
+        // that opens. A device that cannot play them says nothing and the menu
+        // works the same (MenuSounds).
+        MenuSounds.prepare(activity)
         setOnDismissListener {
             if (!closedOnce) {
                 closedOnce = true
@@ -317,6 +327,7 @@ class PesMenu(
     /** Back one level, closing the dialog when this is the root. */
     fun back() {
         if (closing) return
+        MenuSounds.press()
         if (stack.size > 1) {
             stack.removeAt(stack.size - 1)
             showScreen(stack.last(), keepSelection = false)
@@ -492,6 +503,7 @@ class PesMenu(
         if (selection.move(delta)) {
             index = selection.index
             paintSelection(scrollTo = true)
+            MenuSounds.press()
         }
     }
 
@@ -499,14 +511,18 @@ class PesMenu(
         val row = rows.getOrNull(index) ?: return
         if (!row.enabled) return
         if (row.onAdjust != null) {
+            MenuSounds.press()
             row.onAdjust.invoke(this, 1)
         } else {
+            // A switch is a toggle action, everything else is a press.
+            if (row.toggle || row.checked != null) MenuSounds.toggle() else MenuSounds.press()
             row.activate?.invoke(this) ?: closeMenu()
         }
     }
 
     private fun adjust(row: Row, delta: Int) {
         val handler = row.onAdjust ?: return
+        MenuSounds.press()
         handler.invoke(this, delta)
     }
 
@@ -514,6 +530,7 @@ class PesMenu(
     fun submit() {
         val current = screen ?: return
         if (current.fields.isEmpty()) return
+        MenuSounds.press()
         current.onSubmit.invoke(fieldViews.map { it.text.toString() })
     }
 
@@ -653,6 +670,7 @@ class PesMenu(
                 // The Back row is not a page row: a tap leaves the page rather
                 // than moving the band onto something that is not a choice.
                 if (rowIndex == BACK_ROW) {
+                    MenuSounds.press()
                     row.activate?.invoke(this@PesMenu)
                     return@setOnClickListener
                 }
@@ -660,7 +678,12 @@ class PesMenu(
                     index = rowIndex
                     paintSelection(scrollTo = true)
                 }
-                if (row.onAdjust != null) adjust(row, 1) else row.activate?.invoke(this@PesMenu) ?: closeMenu()
+                if (row.onAdjust != null) {
+                    adjust(row, 1)
+                } else {
+                    if (row.toggle || row.checked != null) MenuSounds.toggle() else MenuSounds.press()
+                    row.activate?.invoke(this@PesMenu) ?: closeMenu()
+                }
             }
             setOnLongClickListener {
                 if (!row.enabled || row.onAdjust == null) return@setOnLongClickListener false
