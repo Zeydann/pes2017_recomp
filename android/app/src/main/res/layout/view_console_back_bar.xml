@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The strip along the top of the two setup screens. Kept separate from
+     view_back_bar.xml so the launcher menu stays in its original style. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@color/ui_bg"
+    android:paddingStart="10dp"
+    android:paddingTop="6dp">
+
+    <Button
+        android:id="@+id/back_button"
+        style="@style/ConsoleBack"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/ui_back" />
+</LinearLayout>

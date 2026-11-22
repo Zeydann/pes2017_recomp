@@ -10,12 +10,14 @@ import android.os.StatFs
 import android.provider.OpenableColumns
 import android.view.View
 import android.widget.Button
+import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import java.io.File
 import kotlin.concurrent.thread
 
@@ -44,10 +46,12 @@ class InstallActivity : AppCompatActivity() {
 
     private lateinit var prefs: Prefs
     private lateinit var sourceText: TextView
+    private lateinit var sourceIcon: ImageView
     private lateinit var progress: ProgressBar
     private lateinit var progressText: TextView
     private lateinit var begin: Button
     private lateinit var choose: Button
+    private lateinit var chooseTitle: TextView
     private lateinit var pick: Button
     private lateinit var pickFolder: Button
     private lateinit var cancel: Button
@@ -104,6 +108,7 @@ class InstallActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_install)
+        findViewById<View>(R.id.root).padSystemBars()
         // BACK on the strip along the top; through the dispatcher, so a screen's own back handling (the install's
         // "stop copying?") applies to it too.
         findViewById<android.view.View>(R.id.back_button).setOnClickListener { onBackPressedDispatcher.onBackPressed() }
@@ -113,10 +118,12 @@ class InstallActivity : AppCompatActivity() {
         title = getString(R.string.install_game)
 
         sourceText = findViewById(R.id.source)
+        sourceIcon = findViewById(R.id.source_icon)
         progress = findViewById(R.id.progress)
         progressText = findViewById(R.id.progress_text)
         begin = findViewById(R.id.begin)
         choose = findViewById(R.id.choose)
+        chooseTitle = findViewById(R.id.choose_title)
         pick = findViewById(R.id.pick)
         pickFolder = findViewById(R.id.pick_folder)
         cancel = findViewById(R.id.cancel)
@@ -180,7 +187,15 @@ class InstallActivity : AppCompatActivity() {
 
     private fun useSource(path: String) {
         source = path
-        sourceText.text = getString(R.string.chosen, path)
+        val folder = File(path).isDirectory
+        sourceIcon.setImageResource(if (folder) R.drawable.ic_folder else R.drawable.ic_disc)
+        sourceIcon.setColorFilter(
+            ContextCompat.getColor(this, if (folder) R.color.ui_green else R.color.ui_text),
+        )
+        sourceText.setTextColor(ContextCompat.getColor(this, R.color.ui_text))
+        sourceText.text = getString(
+            if (folder) R.string.ui_source_folder else R.string.ui_source_image, path,
+        )
         begin.isEnabled = NativeBridge.isLoaded()
     }
 
@@ -489,6 +504,7 @@ class InstallActivity : AppCompatActivity() {
         pickFolder.isEnabled = !busy
         // Out of the way while it works, so the progress and cancel fit without scrolling.
         val choosing = if (busy) View.GONE else View.VISIBLE
+        chooseTitle.visibility = choosing
         for (button in listOf(pick, pickFolder, choose, begin)) button.visibility = choosing
         progress.visibility = if (busy) View.VISIBLE else View.GONE
         cancel.visibility = if (busy) View.VISIBLE else View.GONE

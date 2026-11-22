@@ -1,7 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- The app's own palette, shared with its artwork (tools/make_artwork.py):
      a white page, navy and blue, a red accent and a gold highlight. As in the
-     PES 5/6 menus, the chosen entry is the one in gold on a dark band. -->
+     PES 5/6 menus, the chosen entry is the one in gold on a dark band.
+
+     The ui_* colours belong to the setup screens only. They are dark because
+     those screens lead straight into the game's own black surface. Green is kept
+     for the action that moves the player forward, red for stopping. -->
 <resources>
     <color name="launcher_background">#FFFFFF</color>
     <color name="pes_page">#FFFFFF</color>
@@ -16,4 +20,15 @@
     <color name="pes_text">#0A1B45</color>
     <color name="pes_muted">#5D6B86</color>
     <color name="pes_on_dark">#FFFFFF</color>
+
+    <color name="ui_bg">#0B0E13</color>
+    <color name="ui_surface">#151B23</color>
+    <color name="ui_surface_alt">#1C242E</color>
+    <color name="ui_surface_pressed">#26313E</color>
+    <color name="ui_line">#2A3542</color>
+    <color name="ui_text">#F2F6F8</color>
+    <color name="ui_muted">#A9B7C4</color>
+    <color name="ui_green">#54E08D</color>
+    <color name="ui_red">#FF6B6B</color>
+    <color name="ui_on_green">#082113</color>
 </resources>

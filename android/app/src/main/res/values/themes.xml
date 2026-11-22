@@ -13,6 +13,24 @@
         <item name="android:buttonStyle">@style/PanelButton</item>
     </style>
 
+    <!-- Setup screens. Dark because they hand straight over to the game's
+         black surface; green is the forward action, red the stopping one. -->
+    <style name="Theme.PES17.Console" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:windowBackground">@color/ui_bg</item>
+        <item name="android:statusBarColor">@color/ui_bg</item>
+        <item name="android:navigationBarColor">@color/ui_bg</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="colorPrimary">@color/ui_surface_alt</item>
+        <item name="colorPrimaryDark">@color/ui_bg</item>
+        <item name="colorAccent">@color/ui_green</item>
+        <item name="colorControlActivated">@color/ui_green</item>
+        <item name="android:textColorPrimary">@color/ui_text</item>
+        <item name="android:textColorSecondary">@color/ui_muted</item>
+        <item name="buttonStyle">@style/ConsoleButton</item>
+        <item name="android:buttonStyle">@style/ConsoleButton</item>
+    </style>
+
     <!-- The run: black behind the surface, and the dark pad editor over it. -->
     <style name="Theme.PES17.Game" parent="Theme.AppCompat.NoActionBar">
         <item name="android:windowBackground">@android:color/black</item>
@@ -139,6 +157,90 @@
         <item name="android:textStyle">bold|italic</item>
         <item name="android:fontFamily">sans-serif-condensed</item>
         <item name="android:minHeight">40dp</item>
+        <item name="android:stateListAnimator">@null</item>
+    </style>
+
+    <!-- The setup screens' content column: full width in portrait, capped in
+         values-land so a pill does not run the whole length of a wide screen. -->
+    <style name="SetupColumn">
+        <item name="android:layout_width">match_parent</item>
+    </style>
+
+    <style name="ConsoleBack" parent="Widget.AppCompat.Button.Borderless">
+        <item name="android:background">@android:color/transparent</item>
+        <item name="android:drawableStart">@drawable/ic_chevron_left</item>
+        <item name="android:drawableTint">@color/ui_muted</item>
+        <item name="android:drawablePadding">6dp</item>
+        <item name="android:minHeight">48dp</item>
+        <item name="android:minWidth">0dp</item>
+        <item name="android:paddingStart">4dp</item>
+        <item name="android:paddingEnd">12dp</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:textColor">@color/ui_text</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:stateListAnimator">@null</item>
+    </style>
+
+    <style name="ConsoleTitle">
+        <item name="android:textColor">@color/ui_text</item>
+        <item name="android:textSize">22sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:fontFamily">sans-serif</item>
+    </style>
+
+    <style name="ConsoleSubtitle">
+        <item name="android:textColor">@color/ui_muted</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:lineSpacingExtra">3dp</item>
+        <item name="android:fontFamily">sans-serif</item>
+    </style>
+
+    <style name="ConsoleCaption">
+        <item name="android:textColor">@color/ui_muted</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:fontFamily">sans-serif</item>
+    </style>
+
+    <style name="ConsoleButton" parent="Widget.AppCompat.Button">
+        <item name="android:background">@drawable/bg_console_button</item>
+        <item name="android:minHeight">52dp</item>
+        <item name="android:paddingStart">16dp</item>
+        <item name="android:paddingEnd">16dp</item>
+        <item name="android:drawablePadding">12dp</item>
+        <item name="android:drawableTint">@color/ui_green</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:textColor">@color/ui_text</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:stateListAnimator">@null</item>
+    </style>
+
+    <style name="ConsoleButton.Primary">
+        <item name="android:background">@drawable/bg_console_primary</item>
+        <item name="android:drawableTint">@color/console_primary_text</item>
+        <item name="android:textColor">@color/console_primary_text</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="ConsoleButton.Stop">
+        <item name="android:background">@drawable/bg_console_stop</item>
+        <item name="android:drawableTint">@color/ui_red</item>
+        <item name="android:textColor">@color/ui_red</item>
+    </style>
+
+    <!-- A secondary action that must not compete with the filled pill. -->
+    <style name="ConsoleLink" parent="Widget.AppCompat.Button.Borderless">
+        <item name="android:minHeight">44dp</item>
+        <item name="android:minWidth">0dp</item>
+        <item name="android:paddingStart">8dp</item>
+        <item name="android:paddingEnd">8dp</item>
+        <item name="android:drawablePadding">8dp</item>
+        <item name="android:drawableTint">@color/ui_green</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:textColor">@color/ui_green</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:fontFamily">sans-serif</item>
         <item name="android:stateListAnimator">@null</item>
     </style>
 </resources>

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The one filled control: green while it can act, a plain surface while it
+     cannot, so a disabled primary button still reads as the primary one. -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="#33FFFFFF">
+    <item>
+        <selector>
+            <item android:state_enabled="false">
+                <shape android:shape="rectangle">
+                    <solid android:color="@color/ui_surface_alt" />
+                    <corners android:radius="26dp" />
+                </shape>
+            </item>
+            <item android:state_focused="true">
+                <shape android:shape="rectangle">
+                    <solid android:color="@color/ui_green" />
+                    <corners android:radius="26dp" />
+                    <stroke android:width="2dp" android:color="@color/ui_text" />
+                </shape>
+            </item>
+            <item>
+                <shape android:shape="rectangle">
+                    <solid android:color="@color/ui_green" />
+                    <corners android:radius="26dp" />
+                </shape>
+            </item>
+        </selector>
+    </item>
+</ripple>

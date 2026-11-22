@@ -34,7 +34,6 @@
     <string name="choose_source">Browse the phone\u2019s storage</string>
     <string name="begin_install">Install</string>
     <string name="no_source">Nothing chosen yet.</string>
-    <string name="chosen">Installing from:\n%1$s</string>
     <string name="installing">%1$s  (%2$d%%)</string>
     <string name="install_done">The game files are installed.</string>
     <string name="install_failed">The install did not finish:\n%1$s</string>
@@ -56,15 +55,27 @@
     <string name="log_share_note">Sharing sends the whole log, not this summary.</string>
 
     <!-- bringing a file in through the system picker -->
-    <string name="pick_with_files">Choose with the Files app</string>
+    <string name="pick_with_files">Import a disc image</string>
     <string name="import_file">Import</string>
     <string name="copying_file">Copying %1$s (%2$d%%)</string>
     <string name="import_explained">The Files app hands over a document rather than a path, so the file is copied into this app first: %1$s now, and about 7 GB again for the installed game. %2$s is free.\n\nIf space is tight, use “Browse the phone’s storage” instead — it reads the file where it lies.</string>
     <string name="import_explained_unknown">The Files app hands over a document rather than a path, so the file is copied into this app first. A disc image is several gigabytes, and the installed game needs about 7 GB more.\n\nIf space is tight, use “Browse the phone’s storage” instead — it reads the file where it lies.</string>
     <string name="copying">Copying in: %1$s</string>
 
+    <!-- the setup screens' shared labels -->
+    <string name="ui_back">Back</string>
+    <string name="ui_install_step">Setup · game files</string>
+    <string name="ui_source_label">Source</string>
+    <string name="ui_choose_title">Choose a source</string>
+    <string name="ui_source_folder">Folder: %1$s</string>
+    <string name="ui_source_image">Disc image: %1$s</string>
+
     <!-- the file browser -->
-    <string name="up_one">..  (up one)</string>
+    <string name="ui_breadcrumb_storage">Internal storage</string>
+    <string name="ui_empty">No folders or disc images here.</string>
+    <string name="ui_unreadable">This folder can\'t be read. Allow storage access, then open it again.</string>
+    <string name="ui_unreadable_closed">Android keeps this folder shut to apps. Use the Files app to pick the game inside it.</string>
+    <string name="up_one">Up one level</string>
 
     <!-- the driver screen -->
     <string name="driver_hint">Adreno phones can run Mesa\'s Turnip driver, which is often much quicker than the one the phone shipped with, and sometimes renders things the shipped one gets wrong. Import the driver\'s zip archive as it was downloaded; it is unpacked into the app\'s own storage.</string>
@@ -189,7 +200,7 @@
     <string name="status_needs_access">The game folder is set, but Android has not given the app access to read it:\n%1$s</string>
 
     <!-- choosing the game folder -->
-    <string name="pick_folder">Copy an extracted game folder (no permission needed)</string>
+    <string name="pick_folder">Import a game folder</string>
     <string name="folder_title">Game folder</string>
     <string name="folder_no_xex">That folder has no default.xex. Pick the folder that holds default.xex and the .cpk files.</string>
     <string name="folder_found_inside">Found the game one level down:\n%1$s</string>

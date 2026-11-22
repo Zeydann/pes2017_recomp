@@ -1,0 +1,22 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- A disc, so a disc image is recognisable without reading its filename. -->
+    <path
+        android:pathData="M12,2.75a9.25,9.25 0 1,0 0,18.5a9.25,9.25 0 1,0 0,-18.5Z"
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.7" />
+    <path
+        android:pathData="M12,8.75a3.25,3.25 0 1,0 0,6.5a3.25,3.25 0 1,0 0,-6.5Z"
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.7" />
+    <path
+        android:pathData="M12,2.75v6M18.8,16.2l-4.2,-2.3"
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.7" />
+</vector>
