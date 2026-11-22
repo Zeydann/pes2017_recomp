@@ -586,4 +586,14 @@
     <string name="patches_unreadable_path">La aplicación no puede leer esa carpeta o archivo.</string>
     <string name="patches_need_access">La aplicación necesita acceso a esa carpeta. Permite el acceso a todos los archivos y vuelve a intentarlo.</string>
     <string name="patches_wrong_game">Esa carpeta no contiene default.xex.</string>
+    <string name="patches_menu">INSTALAR PARCHES</string>
+    <string name="patch_import_system_toggle">GUARDADO GLOBAL · SYSTEM00000000</string>
+    <string name="patch_import_system_hint">Cambia el guardado del sistema compartido por todos los modos. Déjalo desactivado salvo que el parche lo exija.</string>
+    <string name="patch_system_confirm_title">¿Reemplazar el guardado global?</string>
+    <string name="patch_system_confirm_body">SYSTEM00000000 contiene los ajustes y el progreso de todos los modos. Instalarlo los reemplaza; se guarda una copia, pero el progreso no se fusiona. Déjalo desactivado salvo que el parche lo exija.</string>
+    <string name="patch_system_confirm_positive">REEMPLAZAR GUARDADO</string>
+    <string name="patch_system_confirm_negative">CONSERVAR MI GUARDADO</string>
+    <string name="patch_import_warn_dp_unreadable">DpFileList.bin no tiene el formato que lee la aplicación. Se instala tal cual; comprueba que coincide con los CPK.</string>
+    <string name="patch_import_warn_dp_missing_cpk">DpFileList.bin nombra un CPK que el paquete no incluye.</string>
+    <string name="patch_import_warn_dp_order">Las prioridades de DpFileList.bin no son descendentes.</string>
 </resources>

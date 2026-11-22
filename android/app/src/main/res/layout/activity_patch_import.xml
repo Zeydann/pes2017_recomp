@@ -279,6 +279,25 @@
                         android:paddingTop="6dp"
                         android:text="@string/patch_import_backup_note" />
 
+                    <CheckBox
+                        android:id="@+id/system_save_check"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:paddingStart="4dp"
+                        android:paddingEnd="4dp"
+                        android:text="@string/patch_import_system_toggle"
+                        android:textSize="12sp"
+                        android:visibility="gone" />
+
+                    <TextView
+                        android:id="@+id/system_save_hint"
+                        style="@style/SettingHint"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/patch_import_system_hint"
+                        android:visibility="gone" />
+
                     <Button
                         android:id="@+id/install_button"
                         android:layout_width="match_parent"

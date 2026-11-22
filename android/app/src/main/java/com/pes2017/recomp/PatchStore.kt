@@ -17,10 +17,10 @@ import java.util.zip.ZipFile
  * runtime runs from the game folder and reads its saves from `saves/` in the
  * folder above it, so everything here is addressed from the same root -- the
  * game folder's parent. The game folder holds `default.xex`; a patch is a data
- * pack (the `.cpk` archives plus `DpFileList.bin`) and is copied into that game
- * folder -- where the runtime reads the title's archives, and where a manual
- * replacement puts it -- as well as kept in `dlc/SYSTEM00000000`;
- * EDITED DATA is `saves/EDIT00000000`.
+ * pack (the `.cpk` archives plus `DpFileList.bin`) and lives in
+ * `dlc/SYSTEM00000000`, which the runtime mounts as the title's data-pack
+ * drive. The game folder itself is never written; EDITED DATA is
+ * `saves/EDIT00000000`.
  *
  * Three rules decide the shape of this file:
  *
@@ -33,8 +33,9 @@ import java.util.zip.ZipFile
  *    and the directory's files and bytes counted against it; a backup that is
  *    short a file, or a file that is empty, is refused rather than restored.
  *
- *  - **`SYSTEM00000000` is never written.** It belongs to the game and holds
- *    progress for every mode, so it is only ever read, for the status line.
+ *  - **`SYSTEM00000000` is only written when the player ticks it.** It holds
+ *    progress for every mode, so the import screen keeps it behind a separate
+ *    switch and a confirmation, and the save in place is backed up first.
  */
 object PatchStore {
 
@@ -56,10 +57,6 @@ object PatchStore {
     private const val STAGING = "patch-staging"
     private const val MANIFEST = "backup.properties"
     private const val STATE = "state.properties"
-
-    /** The backup of the game's own files a patch replaced, and the names it added. */
-    private const val GAME_FILES = "game"
-    private const val GAME_ADDED = "added-files.txt"
 
     /** The largest edit save this app will accept; a real one is a few MB. */
     private const val MAX_EDIT_BYTES = 64L * 1024 * 1024
@@ -143,9 +140,9 @@ object PatchStore {
         val state = readState(root)
         return Status(
             game = game,
-            patch = slotOf(patchSlot(root), directory = true),
-            edit = slotOf(editFile(root), directory = false),
-            system = slotOf(systemFile(root), directory = false),
+            patch = slotOf(patchSlot(root)),
+            edit = slotOf(editFile(root)),
+            system = slotOf(systemFile(root)),
             patchAt = state.first,
             patchFrom = state.second,
             editAt = state.third,
@@ -154,26 +151,22 @@ object PatchStore {
         )
     }
 
-    private fun slotOf(file: File, directory: Boolean): Slot {
+    private fun slotOf(file: File): Slot {
         if (!file.exists()) return Slot(false, 0, 0)
-        return if (directory) {
-            if (!file.isDirectory) return Slot(true, 0, 0)
+        if (file.isDirectory) {
             val (files, bytes) = count(file)
-            Slot(true, files, bytes)
-        } else {
-            Slot(true, if (file.isFile) 1 else 0, if (file.isFile) file.length() else 0)
+            return Slot(true, files, bytes)
         }
+        return Slot(true, if (file.isFile) 1 else 0, if (file.isFile) file.length() else 0)
     }
 
     // ---- installing a patch --------------------------------------------------
 
     /**
-     * Installs a patch: its files are copied into the game folder beside
-     * `default.xex` (overwriting files of the same name, as a manual replace
-     * does) and kept in `dlc/SYSTEM00000000`. [source] is either the folder the
-     * pack was extracted to or a `.zip` of it; the `.cpk` archives and
-     * `DpFileList.bin` are taken from anywhere inside it and written flat,
-     * which is the shape the game reads.
+     * Installs an extracted loose payload (a `.cpk` set and `DpFileList.bin`).
+     * [source] is the folder the pack was extracted to or a `.zip` of it; the
+     * files are written flat into `dlc/SYSTEM00000000`, which is the package
+     * the runtime mounts. The game folder itself is never written.
      *
      * The payload is staged first and swapped in only once it is whole, so a
      * cancelled or failed copy leaves the installed pack exactly as it was.
@@ -186,43 +179,133 @@ object PatchStore {
 
         val staging = File(File(root, STAGING), "install-" + stamp())
         staging.deleteRecursively()
-        var keptGame: GameKept? = null
         try {
             val imported = importPayload(source, staging, progress)
             if (imported.files == 0) {
                 throw Failure("not a PES 2017 patch", "no .cpk files and no $DP_FILE_LIST")
             }
-            // The runtime reads the title's archives from the game folder
-            // itself, exactly where a player replacing files by hand puts
-            // them, so the payload is copied there -- overwriting a file of
-            // the same name -- *as well as* kept as the slot's pack. Writing
-            // only to dlc/SYSTEM00000000 was why an installed patch showed no
-            // change in the game.
-            keptGame = backupGameFiles(root, game, staging, source.name)
-            applyToGame(game, staging)
-
-            val slot = patchSlot(root)
-            val backup = if (slot.exists()) backupDirectory(root, "patch", slot, source.name) else null
-            if (slot.exists() && !slot.deleteRecursively()) {
-                backup?.let { restoreDirectory(root, it, slot) }
-                throw Failure("could not clear the old patch", slot.absolutePath)
-            }
-            if (!move(staging, slot)) {
-                backup?.let { restoreDirectory(root, it, slot) }
-                throw Failure("could not put the patch in place", slot.absolutePath)
-            }
-            val state = readState(root)
-            writeState(root, System.currentTimeMillis(), source.name, state.third, state.fourth)
-            return backup
-        } catch (error: Throwable) {
-            // A failure anywhere leaves the game's files as they were found.
-            if (keptGame != null) restoreGameFiles(root, game, keptGame)
-            throw error
+            val names = staging.listFiles()
+                ?.filter { it.isFile && isPlainName(it.name) }
+                ?.map { it.name }
+                .orEmpty()
+            val hasDp = names.any { it.equals(DP_FILE_LIST, ignoreCase = true) }
+            val cpks = names.filter { it.lowercase(Locale.US).endsWith(".cpk") }
+            return commitPatch(root, staging, cpks, hasDp, emptyList(), source.name)
+                .firstOrNull { it.first == "patch" }
+                ?.second
         } finally {
             staging.deleteRecursively()
             // An empty staging parent is noise in the status; drop it.
             File(root, STAGING).listFiles()?.takeIf { it.isEmpty() }?.let { File(root, STAGING).delete() }
         }
+    }
+
+    /**
+     * Installs what the import screen extracted: the plan's CPKs and
+     * DpFileList into `dlc/SYSTEM00000000`, the edit save into
+     * `saves/EDIT00000000` and, only when [installSystem] is true, the shared
+     * save into `saves/SYSTEM00000000`. Each slot that already holds something
+     * is moved to `patch-backups` first.
+     *
+     * Nothing under the game folder changes: the runtime mounts `dlc/` at
+     * launch, which is how the pack reaches the game.
+     */
+    fun installExtracted(
+        game: File,
+        staging: File,
+        plan: PatchScanner.Plan,
+        installSystem: Boolean,
+        sourceName: String,
+    ): List<Pair<String, Backup>> {
+        val root = rootOf(game)
+        requireGame(game)
+        val cpks = plan.cpks.map { it.name }
+        if (cpks.isEmpty() && !plan.dpFileList) {
+            throw Failure("not a PES 2017 patch", "the plan holds no data pack")
+        }
+        for (name in cpks) {
+            val file = File(staging, name)
+            if (!file.isFile || file.length() == 0L) {
+                throw Failure("the extraction has no $name", staging.absolutePath)
+            }
+        }
+        if (plan.dpFileList && !File(staging, DP_FILE_LIST).isFile) {
+            throw Failure("the extraction has no $DP_FILE_LIST", staging.absolutePath)
+        }
+        val saves = plan.saves
+            .filter { it.slot == EDIT || (installSystem && it.slot == SYSTEM) }
+            .map { it.slot }
+            .distinct()
+        return commitPatch(root, staging, cpks, plan.dpFileList, saves, sourceName)
+    }
+
+    /**
+     * The one place a payload becomes the installed slots. The old slot is
+     * moved to `patch-backups` (never copied), the staged files are moved in,
+     * and a failure rolls the slot it was working on back.
+     */
+    private fun commitPatch(
+        root: File,
+        staging: File,
+        cpks: List<String>,
+        hasDp: Boolean,
+        saves: List<String>,
+        sourceName: String,
+    ): List<Pair<String, Backup>> {
+        val done = ArrayList<Pair<String, Backup>>()
+        val now = System.currentTimeMillis()
+        val state = readState(root)
+        var patchAt = state.first
+        var patchFrom = state.second
+        var editAt = state.third
+        var editFrom = state.fourth
+
+        if (cpks.isNotEmpty() || hasDp) {
+            val slot = patchSlot(root)
+            val backup = if (slot.exists()) backupDirectory(root, "patch", slot, sourceName) else null
+            slot.mkdirs()
+            val names = cpks + if (hasDp) listOf(DP_FILE_LIST) else emptyList()
+            for (name in names) {
+                val from = File(staging, name)
+                if (!from.isFile) {
+                    backup?.let { restoreDirectory(root, it, slot) }
+                    throw Failure("the extraction has no $name", staging.absolutePath)
+                }
+                if (!move(from, File(slot, name))) {
+                    backup?.let { restoreDirectory(root, it, slot) }
+                    throw Failure("could not put $name in place", slot.absolutePath)
+                }
+            }
+            patchAt = now
+            patchFrom = sourceName
+            backup?.let { done.add("patch" to it) }
+        }
+
+        for (name in saves) {
+            val from = File(staging, name)
+            if (!from.isDirectory) continue
+            val target = if (name == EDIT) editFile(root) else systemFile(root)
+            val kind = if (name == EDIT) "edit" else "system"
+            val backup = if (target.exists()) {
+                if (target.isDirectory) backupDirectory(root, kind, target, sourceName)
+                else backupFile(root, kind, target, sourceName)
+            } else {
+                null
+            }
+            target.deleteRecursively()
+            if (!move(from, target)) {
+                backup?.let { restoreDirectory(root, it, target) }
+                throw Failure("could not put $name in place", target.absolutePath)
+            }
+            backup?.let { done.add(kind to it) }
+            if (name == EDIT) {
+                editAt = now
+                editFrom = sourceName
+            }
+        }
+
+        writeState(root, patchAt, patchFrom, editAt, editFrom)
+        return done
     }
 
     /**
@@ -234,15 +317,7 @@ object PatchStore {
         val root = rootOf(game)
         requireGame(game)
         val backup = newestBackup(root, "patch")
-        if (backup == null) {
-            if (newestBackup(root, "game") == null) {
-                throw Failure("there is no patch backup to restore")
-            }
-            restoreGameFiles(root, game)
-            val state = readState(root)
-            writeState(root, 0, "", state.third, state.fourth)
-            return null
-        }
+            ?: throw Failure("there is no patch backup to restore")
         verify(backup)
         val slot = patchSlot(root)
         val aside = File(File(root, STAGING), "previous-" + stamp())
@@ -257,74 +332,9 @@ object PatchStore {
         // second RESTORE would put back.
         val kept = aside.takeIf { it.exists() }?.let { backupDirectory(root, "patch", it, "restored-from") }
         aside.deleteRecursively()
-        restoreGameFiles(root, game)
         val state = readState(root)
         writeState(root, 0, "", state.third, state.fourth)
         return kept
-    }
-
-    // ---- the game's own files -------------------------------------------------
-
-    /**
-     * Copies [staging]'s files into the game folder, over files of the same
-     * name, which is the shape the runtime reads. This is what a manual
-     * replacement of the game's data does, done with the payload intact.
-     */
-    private fun applyToGame(game: File, staging: File) {
-        val files = staging.listFiles()?.filter { it.isFile } ?: return
-        for (file in files) {
-            if (!isPlainName(file.name)) continue
-            val target = File(game, file.name)
-            target.delete()
-            file.copyTo(target, overwrite = true)
-        }
-    }
-
-    /**
-     * Keeps every game file the payload will overwrite, and the names it will
-     * add, so a failed install or a RESTORE can put the folder back. The copy
-     * lives under `patch-backups/game/`, one directory per install.
-     */
-    private fun backupGameFiles(root: File, game: File, staging: File, source: String): GameKept? {
-        val names = staging.listFiles()?.filter { it.isFile && isPlainName(it.name) }?.map { it.name }
-            ?: return null
-        if (names.isEmpty()) return null
-        val target = freshBackupDir(root, GAME_FILES)
-        target.parentFile?.mkdirs()
-        if (!target.mkdirs()) throw Failure("could not make a backup folder", target.absolutePath)
-        var files = 0
-        var bytes = 0L
-        val added = ArrayList<String>()
-        for (name in names) {
-            val existing = File(game, name)
-            if (existing.isFile) {
-                existing.copyTo(File(target, name), overwrite = false)
-                files++
-                bytes += existing.length()
-            } else {
-                added += name
-            }
-        }
-        File(target, GAME_ADDED).writeText(added.joinToString("\n"), Charsets.UTF_8)
-        writeManifest(target, GAME_FILES, files, bytes, source)
-        return GameKept(target)
-    }
-
-    /** Puts back the newest kept game files, then removes the files a patch added. */
-    private fun restoreGameFiles(root: File, game: File, kept: GameKept? = null) {
-        val directory = kept?.directory ?: newestBackup(root, GAME_FILES)?.directory ?: return
-        directory.listFiles()?.forEach { file ->
-            if (!file.isFile || file.name == MANIFEST || file.name == GAME_ADDED) return@forEach
-            if (!isPlainName(file.name)) return@forEach
-            file.copyTo(File(game, file.name), overwrite = true)
-        }
-        File(directory, GAME_ADDED).takeIf { it.isFile }?.readLines(Charsets.UTF_8)?.forEach { name ->
-            if (!isPlainName(name)) return@forEach
-            File(game, name).takeIf { it.isFile }?.delete()
-        }
-        directory.deleteRecursively()
-        val parent = slotDir(root, GAME_FILES)
-        parent.listFiles()?.takeIf { it.isEmpty() }?.let { parent.delete() }
     }
 
     /** A name that stays inside the folder it is joined to. */
@@ -388,18 +398,41 @@ object PatchStore {
         val backup = newestBackup(root, "edit")
             ?: throw Failure("there is no edited-data backup to restore")
         verify(backup)
-        val kept = backup.directory.listFiles()?.firstOrNull { it.isFile && it.name != MANIFEST }
-            ?: throw Failure("the edit backup holds no save", backup.directory.absolutePath)
         val target = editFile(root)
-        val current = if (target.exists()) backupFile(root, "edit", target, "restored-from") else null
         savesDir(root).mkdirs()
-        val incoming = File(savesDir(root), "$EDIT.installing")
-        incoming.delete()
-        kept.copyTo(incoming, overwrite = true)
-        val wanted = sha256(incoming)
-        if (target.exists() && !target.delete()) throw Failure("could not clear the edit save", target.absolutePath)
-        if (!incoming.renameTo(target)) throw Failure("could not put the backup back", target.absolutePath)
-        if (sha256(target) != wanted) throw Failure("the restored edit save does not verify", target.absolutePath)
+        // An edited-data slot is one file for a hand-imported save and a
+        // folder (data.bin, data.inf, data.png) for one that came inside a
+        // patch's save container. Restore whichever the backup holds.
+        val files = backup.directory.listFiles()
+            ?.filter { it.isFile && it.name != MANIFEST }
+            .orEmpty()
+        if (files.isEmpty()) throw Failure("the edit backup holds no save", backup.directory.absolutePath)
+        val current = if (target.exists()) backupFile(root, "edit", target, "restored-from") else null
+        if (files.size == 1 && files[0].name == EDIT) {
+            val incoming = File(savesDir(root), "$EDIT.installing")
+            incoming.delete()
+            files[0].copyTo(incoming, overwrite = true)
+            val wanted = sha256(incoming)
+            if (target.exists() && !target.deleteRecursively()) {
+                throw Failure("could not clear the edit save", target.absolutePath)
+            }
+            if (!incoming.renameTo(target)) {
+                throw Failure("could not put the backup back", target.absolutePath)
+            }
+            if (sha256(target) != wanted) {
+                throw Failure("the restored edit save does not verify", target.absolutePath)
+            }
+        } else {
+            val aside = File(File(root, STAGING), "edit-restored-" + stamp())
+            if (target.exists() && !move(target, aside)) {
+                throw Failure("could not move the installed edit save aside", target.absolutePath)
+            }
+            if (!move(backup.directory, target)) {
+                aside.takeIf { it.exists() }?.let { move(it, target) }
+                throw Failure("could not put the backup back", target.absolutePath)
+            }
+            aside.deleteRecursively()
+        }
         val state = readState(root)
         writeState(root, state.first, state.second, 0, "")
         return current ?: backup.summary
@@ -434,8 +467,6 @@ object PatchStore {
     private class BackupGroup(val kind: String, val directory: File, val summary: Backup, val manifest: Properties)
 
     /** Kept game files and the names a patch added; [directory] holds both. */
-    private class GameKept(val directory: File)
-
     /**
      * Every backup, newest first. The game-files backups are looked up by
      * [newestBackup] alone: they are bookkeeping for a restore, not a slot the
@@ -516,11 +547,7 @@ object PatchStore {
         val expectedFiles = manifest.getProperty("files")?.toIntOrNull() ?: 0
         val expectedBytes = manifest.getProperty("bytes")?.toLongOrNull() ?: 0
         if (expectedFiles <= 0) throw Failure("the backup is empty", backup.directory.absolutePath)
-        val (files, bytes) = if (backup.kind == "patch") count(backup.directory) else {
-            val file = backup.directory.listFiles()?.firstOrNull { it.isFile && it.name != MANIFEST }
-                ?: throw Failure("the backup holds no save", backup.directory.absolutePath)
-            1 to file.length()
-        }
+        val (files, bytes) = count(backup.directory)
         if (files != expectedFiles || bytes != expectedBytes) {
             throw Failure(
                 "the backup does not match its record",
@@ -528,7 +555,8 @@ object PatchStore {
             )
         }
         manifest.getProperty("sha256")?.let { wanted ->
-            val file = backup.directory.listFiles()?.firstOrNull { it.isFile && it.name != MANIFEST } ?: return
+            val file = backup.directory.listFiles()?.firstOrNull { it.isFile && it.name != MANIFEST }
+                ?: return
             if (!sha256(file).equals(wanted, ignoreCase = true)) {
                 throw Failure("the backup's save does not match its record", backup.directory.absolutePath)
             }

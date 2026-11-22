@@ -586,4 +586,14 @@
     <string name="patches_unreadable_path">Приложение не может прочитать эту папку или файл.</string>
     <string name="patches_need_access">Приложению нужен доступ к этой папке. Разрешите доступ ко всем файлам и повторите попытку.</string>
     <string name="patches_wrong_game">В этой папке нет default.xex.</string>
+    <string name="patches_menu">УСТАНОВИТЬ ПАТЧИ</string>
+    <string name="patch_import_system_toggle">ОБЩЕЕ СОХРАНЕНИЕ · SYSTEM00000000</string>
+    <string name="patch_import_system_hint">Меняет общее системное сохранение для всех режимов. Оставьте выключенным, если патч этого не требует.</string>
+    <string name="patch_system_confirm_title">Заменить общее сохранение?</string>
+    <string name="patch_system_confirm_body">SYSTEM00000000 хранит настройки и прогресс всех режимов. Установка заменит их; копия сохраняется, но прогресс не объединяется. Оставьте выключенным, если патч этого не требует.</string>
+    <string name="patch_system_confirm_positive">ЗАМЕНИТЬ СОХРАНЕНИЕ</string>
+    <string name="patch_system_confirm_negative">ОСТАВИТЬ МОЁ</string>
+    <string name="patch_import_warn_dp_unreadable">DpFileList.bin не в том формате, который читает приложение. Он устанавливается как есть; проверьте соответствие CPK.</string>
+    <string name="patch_import_warn_dp_missing_cpk">DpFileList.bin ссылается на CPK, которого нет в наборе.</string>
+    <string name="patch_import_warn_dp_order">Приоритеты DpFileList.bin не по убыванию.</string>
 </resources>

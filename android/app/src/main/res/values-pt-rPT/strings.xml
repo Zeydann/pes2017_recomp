@@ -586,4 +586,14 @@
     <string name="patches_unreadable_path">A aplicação não consegue ler essa pasta ou ficheiro.</string>
     <string name="patches_need_access">A aplicação precisa de acesso a essa pasta. Permita o acesso a todos os ficheiros e tente novamente.</string>
     <string name="patches_wrong_game">Essa pasta não contém default.xex.</string>
+    <string name="patches_menu">INSTALAR PATCHES</string>
+    <string name="patch_import_system_toggle">GRAVAÇÃO GLOBAL · SYSTEM00000000</string>
+    <string name="patch_import_system_hint">Altera a gravação de sistema partilhada por todos os modos. Deixe desligado, a não ser que o patch o exija.</string>
+    <string name="patch_system_confirm_title">Substituir a gravação global?</string>
+    <string name="patch_system_confirm_body">SYSTEM00000000 contém as definições e o progresso de todos os modos. Instalá-lo substitui-os; é guardada uma cópia, mas o progresso não é fundido. Deixe desligado, a não ser que o patch o exija.</string>
+    <string name="patch_system_confirm_positive">SUBSTITUIR GRAVAÇÃO</string>
+    <string name="patch_system_confirm_negative">MANTER A MINHA</string>
+    <string name="patch_import_warn_dp_unreadable">O DpFileList.bin não está no formato lido pela aplicação. É instalado como está; confirme que corresponde aos CPK.</string>
+    <string name="patch_import_warn_dp_missing_cpk">O DpFileList.bin indica um CPK que o pacote não inclui.</string>
+    <string name="patch_import_warn_dp_order">As prioridades do DpFileList.bin não são decrescentes.</string>
 </resources>

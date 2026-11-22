@@ -125,6 +125,11 @@ namespace kernel
     void MountDevice(const std::string& name, const std::filesystem::path& root);
     void UnmountDevice(const std::string& name);
     const std::filesystem::path& SaveRoot();
+
+    // The console's Content/<title>/<package> tree, extracted: the data packs
+    // the title mounts as a DLC drive. Separate from SaveRoot() because a save
+    // backup must not walk a pack, and a pack is never written here.
+    const std::filesystem::path& DlcRoot();
     // What is kept under a player's number -- his rank, offline and Live, and
     // the settings of a profile at the second to fourth controllers -- renamed
     // to another number, where that one has none yet (kernel/xam.cpp).

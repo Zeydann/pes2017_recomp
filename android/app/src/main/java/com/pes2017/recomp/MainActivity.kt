@@ -223,7 +223,7 @@ class MainActivity : AppCompatActivity() {
         }
         findViewById<Button>(R.id.patches).setOnClickListener {
             select(it as Button)
-            showDetail(getString(R.string.patches), getString(R.string.patches_hint))
+            showDetail(getString(R.string.patches_menu), getString(R.string.patches_hint))
             startActivity(Intent(this, PatchesActivity::class.java))
         }
         quitButton.setOnClickListener {

@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.text.InputType
 import android.view.View
 import android.widget.Button
+import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.ProgressBar
 import android.widget.TextView
@@ -57,6 +58,8 @@ class PatchImportActivity : AppCompatActivity() {
     private lateinit var peakValue: TextView
     private lateinit var peakBreakdown: TextView
     private lateinit var lowSpace: TextView
+    private lateinit var systemSaveCheck: CheckBox
+    private lateinit var systemSaveHint: TextView
     private lateinit var installButton: Button
     private lateinit var installProgress: ProgressBar
     private lateinit var installText: TextView
@@ -122,6 +125,8 @@ class PatchImportActivity : AppCompatActivity() {
         peakValue = findViewById(R.id.peak_value)
         peakBreakdown = findViewById(R.id.peak_breakdown)
         lowSpace = findViewById(R.id.low_space)
+        systemSaveCheck = findViewById(R.id.system_save_check)
+        systemSaveHint = findViewById(R.id.system_save_hint)
         installButton = findViewById(R.id.install_button)
         installProgress = findViewById(R.id.install_progress)
         installText = findViewById(R.id.install_text)
@@ -246,7 +251,12 @@ class PatchImportActivity : AppCompatActivity() {
                 }
                 val existing = PatchStore.status(game).patch.bytes
                 val scanned = try {
-                    PatchScanner.scan(opened, existing, freeBytes())
+                    PatchScanner.scan(
+                        opened,
+                        existing,
+                        freeBytes(),
+                        File(cacheDir, "patch-scan"),
+                    )
                 } catch (error: Throwable) {
                     opened.close()
                     throw error
@@ -372,10 +382,20 @@ class PatchImportActivity : AppCompatActivity() {
                 PatchScanner.Warning.EDIT_SAVE_IN_SOURCE -> getString(R.string.patch_import_warn_edit)
                 PatchScanner.Warning.SYSTEM_SAVE_IN_SOURCE -> getString(R.string.patch_import_warn_system)
                 PatchScanner.Warning.EMPTY_CPK -> getString(R.string.patch_import_warn_empty_cpk)
+                PatchScanner.Warning.DP_UNREADABLE -> getString(R.string.patch_import_warn_dp_unreadable)
+                PatchScanner.Warning.DP_MISSING_CPK -> getString(R.string.patch_import_warn_dp_missing_cpk)
+                PatchScanner.Warning.DP_ORDER -> getString(R.string.patch_import_warn_dp_order)
             }
         }.distinct()
         summaryWarning.visibility = if (notes.isEmpty()) View.GONE else View.VISIBLE
         summaryWarning.text = notes.joinToString("\n")
+
+        // The shared save is the one slot a patch can carry that changes data
+        // for every mode, so it is offered off the main path and off by default.
+        val offerSystem = scanned.systemSave
+        systemSaveCheck.visibility = if (offerSystem) View.VISIBLE else View.GONE
+        systemSaveHint.visibility = if (offerSystem) View.VISIBLE else View.GONE
+        systemSaveCheck.isChecked = false
 
         paintSpace()
         showStep(Step.SUMMARY)
@@ -392,8 +412,6 @@ class PatchImportActivity : AppCompatActivity() {
         peakBreakdown.text = getString(
             R.string.patch_import_peak_breakdown,
             PatchFormat.bytes(scanned.extractBytes),
-            PatchFormat.bytes(scanned.stagingBytes),
-            PatchFormat.bytes(scanned.gameBytes),
             PatchFormat.bytes(scanned.existingBytes),
             PatchFormat.bytes(PatchScanner.MARGIN_BYTES),
         )
@@ -452,6 +470,26 @@ class PatchImportActivity : AppCompatActivity() {
             paintSpace()
             return
         }
+        if (systemSaveCheck.visibility == View.VISIBLE && systemSaveCheck.isChecked) {
+            AlertDialog.Builder(this)
+                .setTitle(R.string.patch_system_confirm_title)
+                .setMessage(R.string.patch_system_confirm_body)
+                .setPositiveButton(R.string.patch_system_confirm_positive) { _, _ -> startInstall() }
+                .setNegativeButton(R.string.patch_system_confirm_negative) { _, _ ->
+                    systemSaveCheck.isChecked = false
+                    startInstall()
+                }
+                .show()
+            return
+        }
+        startInstall()
+    }
+
+    private fun startInstall() {
+        val game = game()
+        val scanned = plan
+        val opened = source
+        if (game == null || scanned == null || opened == null) return
         cancelled = false
         installing = true
         installStop.isEnabled = true
@@ -461,22 +499,23 @@ class PatchImportActivity : AppCompatActivity() {
 
         val label = scanned.label
         val temp = File(importDir(), "extract-" + stamp())
+        val installSystem = systemSaveCheck.visibility == View.VISIBLE && systemSaveCheck.isChecked
         work("patch-install") {
-            var backup: PatchStore.Backup? = null
+            var backups: List<Pair<String, PatchStore.Backup>> = emptyList()
             try {
                 PatchScanner.extract(opened, scanned, temp) { copied, total ->
                     publishProgress(copied, total, getString(R.string.patch_import_phase_extracting))
                     !cancelled
                 }
                 if (cancelled) throw PatchScanner.Cancelled()
-                backup = PatchStore.installPatch(
+                backups = PatchStore.installExtracted(
                     game,
                     temp,
-                    PatchStore.Progress { copied, total ->
-                        publishProgress(copied, total, getString(R.string.patch_import_phase_staging))
-                        !cancelled
-                    },
+                    scanned,
+                    installSystem,
+                    label,
                 )
+                val backup = backups.firstOrNull { it.first == "patch" }?.second
                 runOnUiThread {
                     installing = false
                     if (isFinishing) return@runOnUiThread

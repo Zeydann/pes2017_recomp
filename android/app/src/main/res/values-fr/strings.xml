@@ -541,7 +541,7 @@
     <string name="toggle_shielding">Protection : LT</string>
     <string name="toggle_player_movement">Déplacement du joueur : LS</string>
     <!-- PATCHES -->
-    <string name="patches">CORRECTIFS</string>
+    <string name="patches">PATCHS</string>
     <string name="patches_hint">Installez une banque de données à côté du jeu et gérez la sauvegarde éditée. Rien n\'est modifié avant qu\'une copie ne soit conservée.</string>
     <string name="patches_status_section">DONNÉES DU JEU ET SAUVEGARDES</string>
     <string name="patches_no_folder">Pas encore de dossier de jeu. Choisissez le dossier qui contient default.xex.</string>
@@ -586,4 +586,14 @@
     <string name="patches_unreadable_path">Ce dossier ou fichier ne peut pas être lu par l\'application.</string>
     <string name="patches_need_access">L\'application a besoin d\'accéder à ce dossier. Autorisez l\'accès à tous les fichiers, puis réessayez.</string>
     <string name="patches_wrong_game">Ce dossier ne contient pas default.xex.</string>
+    <string name="patches_menu">INSTALLER DES PATCHS</string>
+    <string name="patch_import_system_toggle">SAUVEGARDE GLOBALE · SYSTEM00000000</string>
+    <string name="patch_import_system_hint">Modifie la sauvegarde système partagée par tous les modes. Laissez désactivé sauf si le patch l’exige.</string>
+    <string name="patch_system_confirm_title">Remplacer la sauvegarde globale ?</string>
+    <string name="patch_system_confirm_body">SYSTEM00000000 contient les réglages et la progression de tous les modes. L’installer les remplace ; une copie est conservée mais la progression n’est pas fusionnée. Laissez désactivé sauf si le patch l’exige.</string>
+    <string name="patch_system_confirm_positive">REMPLACER LA SAUVEGARDE</string>
+    <string name="patch_system_confirm_negative">GARDER MA SAUVEGARDE</string>
+    <string name="patch_import_warn_dp_unreadable">DpFileList.bin n’est pas au format lu par l’application. Il est installé tel quel ; vérifiez qu’il correspond aux CPK.</string>
+    <string name="patch_import_warn_dp_missing_cpk">DpFileList.bin cite un CPK absent du pack.</string>
+    <string name="patch_import_warn_dp_order">Les priorités de DpFileList.bin ne sont pas décroissantes.</string>
 </resources>

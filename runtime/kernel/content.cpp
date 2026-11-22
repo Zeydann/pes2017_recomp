@@ -129,6 +129,49 @@ const fs::path& kernel::SaveRoot()
     return root;
 }
 
+const fs::path& kernel::DlcRoot()
+{
+    // The console's Content/<title>/<package> tree, extracted. The title mounts
+    // a data pack from here as its own drive (mntLIVE00000000: and the like),
+    // exactly as it mounts a save from saves/; a pack is read, never written.
+    static const fs::path root = fs::path("dlc");
+    return root;
+}
+
+namespace
+{
+    // XamContentCreate mounts both saves and data packs. The save drives the
+    // title uses are "save0:" (a per-controller memory unit) and
+    // "savedgame:". The data pack is mounted from the console's DLC tree, which
+    // the PES family asks for as "mntLIVE00000000:" / "FreeDlc000:" (the
+    // same names the 2018 port's runtime routes); "LIVE" and "dlc" are kept
+    // for the variants a different build uses. The prefix list is checked
+    // first; an unknown non-save drive is only treated as DLC when a pack of
+    // that name is actually installed, so no other content request changes
+    // behaviour.
+    bool HasPrefix(const std::string& lower, const char* prefix)
+    {
+        return lower.rfind(prefix, 0) == 0;
+    }
+
+    bool IsSaveDrive(const std::string& lower)
+    {
+        return HasPrefix(lower, "save");
+    }
+
+    bool IsKnownDlcDrive(const std::string& lower)
+    {
+        return HasPrefix(lower, "mntlive") || HasPrefix(lower, "freedlc") ||
+               HasPrefix(lower, "live") || HasPrefix(lower, "dlc");
+    }
+
+    std::string Lower(std::string value)
+    {
+        for (char& c : value) c = char(std::tolower(uint8_t(c)));
+        return value;
+    }
+}
+
 // Memcard_InitializeSystem. The table is clear when it returns, so this is the
 // moment to answer the question the prompt would ask.
 #ifdef T_Memcard_InitializeSystem
@@ -206,16 +249,38 @@ PPC_FUNC(__imp__XamContentCreateEx)
          unsigned(*GuestPtr<be32>(contentData + kContentType)), licenseOut, overlapped);
     const uint32_t type = *GuestPtr<be32>(contentData + kContentType);
     const uint32_t device = *GuestPtr<be32>(contentData + kContentDeviceId);
-    const fs::path package = SaveRoot() / file;
+    const std::string lowerDrive = Lower(drive);
+    const bool saveDrive = IsSaveDrive(lowerDrive);
     std::error_code ec;
+    const bool dlcKnown = IsKnownDlcDrive(lowerDrive);
+    const bool dlcInstalled = !saveDrive && fs::is_directory(DlcRoot() / file, ec);
+    const bool dlcDrive = !saveDrive && (dlcKnown || dlcInstalled);
+    if (dlcDrive)
+        LOGK("content: %s: is a data-pack drive (the pack %s is %s)", drive.c_str(),
+             file.c_str(), dlcInstalled ? "installed" : "missing");
+    const fs::path package = (dlcDrive ? DlcRoot() : SaveRoot()) / file;
     const bool existed = fs::is_directory(package, ec);
+
+    // A data pack is not ours to create or empty: the installer put it there,
+    // and the title only opens it. Asking for a pack that is not installed is
+    // the title's "no data pack" path, so report it and mount nothing.
+    if (dlcDrive && !existed)
+    {
+        LOGK("content: there is no data pack at %s (%s: asked to open it)",
+             package.string().c_str(), drive.c_str());
+        if (auto* d = GuestPtr<be32>(dispositionOut)) *d = 1u;
+        if (auto* l = GuestPtr<be32>(licenseOut)) *l = 0;
+        CompleteOverlapped(overlapped, X_ERROR_PATH_NOT_FOUND);
+        ctx.r3.u64 = X_ERROR_PATH_NOT_FOUND;
+        return;
+    }
 
     // "Create always" and "truncate" both mean the package the title gets is a
     // new empty one. Keeping the old contents instead is not a smaller version
     // of that: the title saves by creating its file with CREATE_NEW, so a
     // leftover file from the last save collides and the save fails.
     const uint32_t disposition = flags & 0xF;
-    const bool clear = disposition == kCreateAlways || disposition == kTruncate;
+    const bool clear = !dlcDrive && (disposition == kCreateAlways || disposition == kTruncate);
 
     uint32_t result = X_ERROR_SUCCESS;
     switch (disposition)
@@ -228,20 +293,25 @@ PPC_FUNC(__imp__XamContentCreateEx)
     default:            break;
     }
     if (!result && clear && existed) RotatePackage(package);
-    if (!result && !fs::create_directories(package, ec) && !fs::is_directory(package, ec))
+    if (!result && !dlcDrive &&
+        !fs::create_directories(package, ec) && !fs::is_directory(package, ec))
         result = X_ERROR_PATH_NOT_FOUND;
 
     if (!result)
     {
         // The title finds its saves again by enumerating packages, so what it passed
         // in (the display name and type the dashboard would list) is kept with them.
-        const fs::path record = package / ".xcontent";
-        if (!fs::exists(record, ec))
-            if (std::FILE* out = std::fopen(record.string().c_str(), "wb"))
-            {
-                std::fwrite(guest::Base() + contentData, 1, kXContentDataSize, out);
-                std::fclose(out);
-            }
+        // A data pack is left exactly as the installer wrote it.
+        if (!dlcDrive)
+        {
+            const fs::path record = package / ".xcontent";
+            if (!fs::exists(record, ec))
+                if (std::FILE* out = std::fopen(record.string().c_str(), "wb"))
+                {
+                    std::fwrite(guest::Base() + contentData, 1, kXContentDataSize, out);
+                    std::fclose(out);
+                }
+        }
         MountDevice(drive, package);
         LOGK("content: mounted %s: on %s (device %u, type %u, %s)", drive.c_str(),
              package.string().c_str(), device, type,

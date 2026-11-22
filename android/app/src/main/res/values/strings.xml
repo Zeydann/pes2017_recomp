@@ -551,7 +551,8 @@
          each operation keeps, and the game folder every one of them uses
          (PatchStore, PatchesActivity). -->
     <string name="patches">PATCHES</string>
-    <string name="patches_hint">Install a data pack beside the game and manage the edit save. Nothing is changed before a copy is kept.</string>
+    <string name="patches_menu">INSTALL PATCHES</string>
+    <string name="patches_hint">Install a data pack and manage the edit save. The pack is written to dlc/SYSTEM00000000 beside the game and mounted at the next launch; nothing is changed before a copy is kept.</string>
     <string name="patches_status_section">GAME AND SAVE DATA</string>
     <string name="patches_no_folder">No game folder yet. Choose the folder that holds default.xex.</string>
     <string name="patches_folder_set">Game folder: %1$s</string>
@@ -601,7 +602,7 @@
     <string name="patch_import_heading">INSTALL PATCH</string>
     <string name="patch_import_source_section">PATCH SOURCE</string>
     <string name="patch_import_pick_hint">Choose the patch as it was downloaded, or the folder it was extracted to. The source is scanned before anything is written, and nothing is replaced before a copy is kept.</string>
-    <string name="patch_import_instructions">A PES 2017 data pack is the .cpk archives plus DpFileList.bin. They may sit anywhere inside the archive or folder; they are copied into the game folder beside default.xex, replacing files of the same name exactly as a manual replacement does, and kept in dlc/SYSTEM00000000. A locked archive asks for its password once, and the password is not kept.</string>
+    <string name="patch_import_instructions">A PES 2017 data pack is either the .cpk archives plus DpFileList.bin, or the Xbox 360 content packages (CON / LIVE / PIRS) the community ships, for title 0x4A3007D1. Its CPKs, DpFileList and edit save are read from inside the packages. The pack is written to dlc/SYSTEM00000000 beside the game, which the runtime mounts at launch; the game folder itself is never changed. A locked archive asks for its password, and the password is not kept.</string>
     <string name="patch_import_archive">PATCH ARCHIVE (.ZIP / .RAR / .7Z)</string>
     <string name="patch_import_folder">EXTRACTED PATCH FOLDER</string>
     <string name="patch_import_multipart">MULTI-PART FOLDER (PART 1)</string>
@@ -625,19 +626,28 @@
     <string name="patch_import_skipped_none">Nothing skipped.</string>
     <string name="patch_import_warn_no_dpfilelist">No DpFileList.bin in the source: the game will not see the new CPK files.</string>
     <string name="patch_import_warn_no_cpk">No CPK files in the source: there is nothing to install.</string>
-    <string name="patch_import_warn_edit">EDIT00000000 is in the source. It is not installed here; use REPLACE EDITED DATA on PATCHES for it.</string>
-    <string name="patch_import_warn_system">SYSTEM00000000 is in the source. This app never writes it.</string>
+    <string name="patch_import_warn_edit">EDIT00000000 is in the source and will be installed with the pack. A loose save file is skipped; use REPLACE EDITED DATA on PATCHES for that.</string>
+    <string name="patch_import_warn_system">SYSTEM00000000 is in the source. It changes the shared save for every mode: tick GLOBAL SAVE below to replace it, otherwise it is skipped.</string>
     <string name="patch_import_warn_empty_cpk">A CPK in the source is empty; check the download.</string>
+    <string name="patch_import_warn_dp_unreadable">DpFileList.bin is not in the format this app reads. It is installed unchanged; check that it matches the CPKs.</string>
+    <string name="patch_import_warn_dp_missing_cpk">DpFileList.bin names a CPK that the pack does not carry.</string>
+    <string name="patch_import_warn_dp_order">DpFileList.bin priorities are not in descending order.</string>
+    <string name="patch_import_system_toggle">GLOBAL SAVE · SYSTEM00000000</string>
+    <string name="patch_import_system_hint">Changes the shared system save for every mode. Leave it off unless the patch says it needs it.</string>
+    <string name="patch_system_confirm_title">Replace the global save?</string>
+    <string name="patch_system_confirm_body">SYSTEM00000000 holds settings and progress for every mode. Installing it replaces them; the save is backed up first, but progress is not merged. Leave it off unless the patch requires it.</string>
+    <string name="patch_system_confirm_positive">REPLACE GLOBAL SAVE</string>
+    <string name="patch_system_confirm_negative">KEEP MY SAVE</string>
     <string name="patch_import_peak_title">PEAK SPACE NEEDED (NOT THE FINAL SIZE)</string>
     <string name="patch_import_peak_value">%1$s</string>
-    <string name="patch_import_peak_breakdown">Extraction %1$s + staging %2$s + the copy in the game folder %3$s + the pack being kept %4$s, plus a %5$s reserve.</string>
+    <string name="patch_import_peak_breakdown">Extraction %1$s + the pack being kept %2$s, plus a %3$s reserve. The game folder is not written.</string>
     <string name="patch_import_low_space">NOT ENOUGH SPACE · %1$s free, %2$s needed at peak. Free some space, then come back.</string>
-    <string name="patch_import_backup_note">The pack installed now is moved to patch-backups before the new one is put in place, and a failed or cancelled install leaves the game folder as it was.</string>
+    <string name="patch_import_backup_note">The pack installed now is moved to patch-backups before the new one is put in place, and a failed or cancelled install leaves the installed pack as it was. The game folder itself is never written.</string>
     <string name="patch_import_install">INSTALL PATCH</string>
     <string name="patch_import_cancel">CANCEL</string>
     <string name="patch_import_installing">INSTALLING PATCH…</string>
     <string name="patch_import_phase_extracting">Extracting the source…</string>
-    <string name="patch_import_phase_staging">Copying into the game folder…</string>
+    <string name="patch_import_phase_staging">Moving the pack into dlc/SYSTEM00000000…</string>
     <string name="patch_import_progress">%1$s %2$s of %3$s</string>
     <string name="patch_import_progress_unknown">%1$s %2$s</string>
     <string name="patch_import_stopping">Stopping after the file being written…</string>
@@ -647,7 +657,7 @@
     <string name="patch_import_cancel_keep">KEEP INSTALLING</string>
     <string name="patch_import_cancel_stop">STOP INSTALL</string>
     <string name="patch_import_result_installed">PATCH INSTALLED</string>
-    <string name="patch_import_result_installed_body">%1$s is installed. The previous data is in RESTORE PREVIOUS PATCH.</string>
+    <string name="patch_import_result_installed_body">%1$s is installed in dlc/SYSTEM00000000 and is mounted the next time the game starts. The previous data is in RESTORE PREVIOUS PATCH.</string>
     <string name="patch_import_result_installed_body_nobackup">%1$s is installed. There was no earlier pack, so no backup was needed.</string>
     <string name="patch_import_result_installed_detail">%1$s CPK files · %2$s</string>
     <string name="patch_import_result_cancelled">INSTALL CANCELLED</string>
@@ -657,7 +667,7 @@
     <string name="patch_import_result_password">PASSWORD NEEDED</string>
     <string name="patch_import_result_password_body">The archive is locked and the password did not open it. Choose the source again and type its password.</string>
     <string name="patch_import_result_wrong">NOT A PES 2017 PATCH</string>
-    <string name="patch_import_result_wrong_body">This source does not carry a PES 2017 data pack: it holds no .cpk files and no DpFileList.bin. Check that you picked the patch, not a stadium or scoreboard add-on.</string>
+    <string name="patch_import_result_wrong_body">This source does not carry a PES 2017 data pack: it holds no .cpk files, no DpFileList.bin and no Xbox 360 content package for title 0x4A3007D1. Check that you picked the patch, not a stadium or scoreboard add-on.</string>
     <string name="patch_import_result_corrupt">SOURCE CORRUPT</string>
     <string name="patch_import_result_corrupt_body">The source could not be read whole. Check the download, or copy it to the phone again.</string>
     <string name="patch_import_result_missing_part">PART MISSING</string>
