@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- The launcher's screens: a white page, navy type, red controls. -->
+    <!-- The settings screens still to be moved over: a white page, navy type,
+         red controls. -->
     <style name="Theme.PES17" parent="Theme.AppCompat.Light.NoActionBar">
         <item name="android:windowBackground">@color/pes_page</item>
         <item name="colorPrimary">@color/pes_navy</item>
@@ -87,26 +88,6 @@
         <item name="android:textSize">14sp</item>
         <item name="android:textStyle">bold</item>
         <item name="android:fontFamily">sans-serif-condensed</item>
-    </style>
-
-    <!-- The main menu's entries: big italic capitals, left-aligned, as PES 6's. -->
-    <style name="MenuEntry">
-        <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">0dp</item>
-        <item name="android:layout_weight">1</item>
-        <item name="android:minHeight">0dp</item>
-        <item name="android:background">@android:color/transparent</item>
-        <item name="android:gravity">start|center_vertical</item>
-        <item name="android:paddingStart">6dp</item>
-        <item name="android:drawablePadding">8dp</item>
-        <item name="android:drawableStart">@drawable/ic_menu_cursor_space</item>
-        <item name="android:textColor">@color/pes_navy</item>
-        <item name="android:textSize">17sp</item>
-        <item name="android:textStyle">bold|italic</item>
-        <item name="android:textAllCaps">true</item>
-        <item name="android:fontFamily">sans-serif-condensed</item>
-        <item name="android:letterSpacing">0.04</item>
-        <item name="android:stateListAnimator">@null</item>
     </style>
 
     <!-- A card holding one group of settings (Display, Frame rate, ...). -->
@@ -227,6 +208,14 @@
         <item name="android:background">@drawable/bg_console_stop</item>
         <item name="android:drawableTint">@color/ui_red</item>
         <item name="android:textColor">@color/ui_red</item>
+    </style>
+
+    <!-- The launcher's landscape menu: the same pill, narrow enough that two
+         sit side by side without the label wrapping. -->
+    <style name="ConsoleButton.Grid">
+        <item name="android:textSize">13sp</item>
+        <item name="android:paddingStart">14dp</item>
+        <item name="android:paddingEnd">14dp</item>
     </style>
 
     <!-- A secondary action that must not compete with the filled pill. -->

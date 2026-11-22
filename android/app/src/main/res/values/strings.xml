@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- app_name is set in build.gradle.kts. -->
-    <string name="check_updates">CHECK FOR UPDATES</string>
-    <string name="quit_launcher">QUIT</string>
+    <string name="check_updates">Check for updates</string>
+    <string name="quit_launcher">Quit launcher</string>
     <string name="up_to_date">This is the newest version.</string>
 
     <!-- launcher -->
@@ -177,18 +177,24 @@
     <string name="wordmark">PES17 Recompiled for Android</string>
     <string name="wordmark_year">2017</string>
     <string name="disclaimer">UNOFFICIAL FAN PORT. NOT AFFILIATED WITH KONAMI. BRING YOUR OWN COPY.</string>
-    <string name="detail_default_title">MAIN MENU</string>
+    <string name="detail_default_title">Main menu</string>
     <string name="detail_default_text">Pick an entry: its details show here, and choosing it acts at once.</string>
 
     <string name="version_tag">%1$s \u00b7 build %2$d \u00b7 EUROPE</string>
-    <string name="install_and_play">INSTALL &amp; KICK OFF</string>
+    <string name="install_and_play">Install &amp; kick off</string>
 
     <!-- main menu entries -->
-    <string name="play">KICK OFF</string>
-    <string name="entry_select_folder">SELECT GAME FOLDER</string>
-    <string name="entry_install">INSTALL FROM DISC IMAGE</string>
-    <string name="entry_settings">SETTINGS</string>
+    <string name="play">Kick off</string>
+    <string name="entry_select_folder">Select game folder</string>
+    <string name="entry_install">Install from disc image</string>
+    <string name="entry_settings">Settings</string>
     <string name="direct_launch">Kick off straight away when the app opens</string>
+    <string name="direct_launch_hint">Start the game as soon as this menu opens.</string>
+
+    <!-- the launcher's own labels -->
+    <string name="ui_menu">Menu</string>
+    <string name="ui_status">Status</string>
+    <string name="wordmark_caption">Recompiled for Android</string>
     <string name="select_folder_hint">The app first looks for the game on this phone by itself. If it cannot find it, point it at the folder that holds your PES 2017 files (default.xex and the .cpk archives). If Android has not yet let the app read that part of the storage, it asks first.</string>
     <string name="settings_hint">Picture, performance, controls and game files for this port.</string>
     <string name="install_game">Install the game files</string>

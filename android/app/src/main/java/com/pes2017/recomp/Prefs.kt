@@ -347,8 +347,9 @@ class Prefs(context: Context) {
         get() = store.getBoolean(KEY_WELCOME, false)
         set(value) = store.edit().putBoolean(KEY_WELCOME, value).apply()
 
+    /** Off by default: the menu is where the folder, driver and updates live. */
     var autoLaunch: Boolean
-        get() = store.getBoolean(KEY_AUTO_LAUNCH, true)
+        get() = store.getBoolean(KEY_AUTO_LAUNCH, false)
         set(value) = store.edit().putBoolean(KEY_AUTO_LAUNCH, value).apply()
 
     /**

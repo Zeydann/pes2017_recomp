@@ -49,6 +49,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var detailText: TextView
     private lateinit var versionTag: TextView
     private lateinit var directLaunchSwitch: androidx.appcompat.widget.SwitchCompat
+    private lateinit var directLaunchCard: android.view.View
     private var detectedSource: GameSource? = null
     private var detectedSources: List<GameSource> = emptyList()
     private var nativeReady = false
@@ -83,6 +84,9 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        // Android 15 hands the app the whole screen; the console's edges are
+        // padded instead of letting the system bars sit on the header.
+        findViewById<android.view.View>(R.id.root).padSystemBars()
         prefs = Prefs(this)
         relaunchRequested = QuickGraphics.takeRelaunch(intent, prefs)
         // The performance preset this phone starts from, once (DeviceProfile).
@@ -99,6 +103,7 @@ class MainActivity : AppCompatActivity() {
         detailText = findViewById(R.id.detail_text)
         versionTag = findViewById(R.id.version_tag)
         directLaunchSwitch = findViewById(R.id.direct_launch_switch)
+        directLaunchCard = findViewById(R.id.direct_launch_card)
         try {
             val info = packageManager.getPackageInfo(packageName, 0)
             val name = info.versionName ?: ""
@@ -114,7 +119,6 @@ class MainActivity : AppCompatActivity() {
         }
 
         play.setOnClickListener {
-            select(play)
             showDetail(getString(R.string.play), status.text.toString())
             val gameDirectory = prefs.gameDirectory
             val installed = gameDirectory.isNotEmpty() && safely(false) {
@@ -137,42 +141,33 @@ class MainActivity : AppCompatActivity() {
             }
         }
         selectFolderButton.setOnClickListener {
-            select(selectFolderButton)
             selectGameFolder()
         }
         installButton.setOnClickListener {
-            select(installButton)
             showDetail(getString(R.string.install_game), getString(R.string.install_hint))
             if (detectedSources.size > 1) chooseSource()
             else startActivity(Intent(this, InstallActivity::class.java))
         }
         findViewById<Button>(R.id.driver).setOnClickListener {
-            select(it as Button)
             showDetail(getString(R.string.graphics_driver), getString(R.string.driver_hint))
             startActivity(Intent(this, DriverActivity::class.java))
         }
         findViewById<Button>(R.id.settings).setOnClickListener {
-            select(it as Button)
             showDetail(getString(R.string.entry_settings), getString(R.string.settings_hint))
             startActivity(Intent(this, SettingsActivity::class.java))
         }
         findViewById<Button>(R.id.log).setOnClickListener {
-            select(it as Button)
             showDetail(getString(R.string.view_log), "")
             showLog()
         }
         updatesButton.setOnClickListener {
-            select(updatesButton)
             showDetail(getString(R.string.check_updates), "")
             checkForUpdates(manual = true)
         }
         quitButton.setOnClickListener {
-            select(quitButton)
             finishAndRemoveTask()
         }
-        // The cursor starts on KICK OFF, and the strip at the foot scrolls
-        // (a marquee runs only on a selected view).
-        select(play)
+        // The strip at the foot scrolls (a marquee runs only on a selected view).
         footer.isSelected = true
 
         // Whatever killed the app last time, shown before anything else is
@@ -442,7 +437,7 @@ class MainActivity : AppCompatActivity() {
             play.text = getString(R.string.play)
             status.text = getString(if (autoFound) R.string.status_ready_auto else R.string.status_ready, gameDirectory)
             installButton.visibility = android.view.View.GONE
-            directLaunchSwitch.visibility = android.view.View.VISIBLE
+            directLaunchCard.visibility = android.view.View.VISIBLE
 
             if (relaunchRequested) {
                 relaunchRequested = false
@@ -463,7 +458,7 @@ class MainActivity : AppCompatActivity() {
                 ?: detectedSources.firstOrNull()
             detectedSource = chosen
             installButton.visibility = android.view.View.VISIBLE
-            directLaunchSwitch.visibility = android.view.View.GONE
+            directLaunchCard.visibility = android.view.View.GONE
 
             if (gameDirectory.isNotEmpty()) {
                 // A folder was chosen but is no longer usable: say why.
@@ -589,26 +584,6 @@ class MainActivity : AppCompatActivity() {
     private fun showDetail(title: String, text: String) {
         detailTitle.text = title
         detailText.text = text
-    }
-
-    private var selectedEntry: Button? = null
-    private var selectedColors: android.content.res.ColorStateList? = null
-
-    /**
-     * PES 6's cursor on the chosen entry: the ring beside it, the band under it,
-     * its text in gold. The one before gets its own colour back.
-     */
-    private fun select(entry: Button) {
-        selectedEntry?.let { previous ->
-            previous.setBackgroundColor(android.graphics.Color.TRANSPARENT)
-            previous.setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_menu_cursor_space, 0, 0, 0)
-            selectedColors?.let { previous.setTextColor(it) }
-        }
-        selectedEntry = entry
-        selectedColors = entry.textColors
-        entry.setBackgroundResource(R.drawable.bg_entry_selected)
-        entry.setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_menu_cursor, 0, 0, 0)
-        entry.setTextColor(getColor(R.color.pes_gold))
     }
 
     /** A newer published APK, if there is one: silent when offline. */
