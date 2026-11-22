@@ -28,6 +28,7 @@ class CapturesActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_captures)
+        findViewById<View>(R.id.root).padSystemBars()
         findViewById<View>(R.id.back_button).setOnClickListener { onBackPressedDispatcher.onBackPressed() }
         title = getString(R.string.captures_title)
         // Zips left by an earlier share. Not removed when the screen is left: the share sheet opens over
@@ -122,8 +123,16 @@ class CapturesActivity : AppCompatActivity() {
                 orientation = LinearLayout.VERTICAL
                 val margin = (12 * resources.displayMetrics.density).roundToInt()
                 setPadding(margin, margin, margin, margin)
-                addView(TextView(this@CapturesActivity).apply { id = android.R.id.text1; textSize = 15f })
-                addView(TextView(this@CapturesActivity).apply { id = android.R.id.text2; textSize = 11f })
+                addView(TextView(this@CapturesActivity).apply {
+                    id = android.R.id.text1
+                    textSize = 15f
+                    setTextColor(getColor(R.color.ui_text))
+                })
+                addView(TextView(this@CapturesActivity).apply {
+                    id = android.R.id.text2
+                    textSize = 11f
+                    setTextColor(getColor(R.color.ui_muted))
+                })
             }
             val item = items[position]
             row.findViewById<TextView>(android.R.id.text1).text = item.name

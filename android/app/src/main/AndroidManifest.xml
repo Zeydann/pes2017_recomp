@@ -47,18 +47,20 @@
         android:hardwareAccelerated="true"
         android:extractNativeLibs="true"
         android:largeHeap="true"
-        android:theme="@style/Theme.PES17">
+        android:theme="@style/Theme.PES17.Console">
 
         <!-- The game modes the system may offer for this game (res/xml/game_mode_config.xml). -->
         <meta-data
             android:name="android.game_mode_config"
             android:resource="@xml/game_mode_config" />
 
+        <!-- The menu is a landscape page: the game itself is sensorLandscape,
+             and two columns of entries need the width. -->
         <activity
             android:name=".MainActivity"
             android:theme="@style/Theme.PES17.Console"
             android:exported="true"
-            android:screenOrientation="fullUser"
+            android:screenOrientation="sensorLandscape"
             android:configChanges="keyboardHidden|uiMode|density"
             tools:ignore="DiscouragedApi,LockedOrientationActivity">
             <intent-filter>
@@ -100,6 +102,7 @@
 
         <activity
             android:name=".SettingsActivity"
+            android:theme="@style/Theme.PES17.Console"
             android:exported="false"
             android:parentActivityName=".MainActivity"
             android:screenOrientation="fullUser"
@@ -117,6 +120,7 @@
 
         <activity
             android:name=".DriverActivity"
+            android:theme="@style/Theme.PES17.Console"
             android:exported="false"
             android:parentActivityName=".MainActivity"
             android:screenOrientation="fullUser"
@@ -125,6 +129,7 @@
 
         <activity
             android:name=".CapturesActivity"
+            android:theme="@style/Theme.PES17.Console"
             android:exported="false"
             android:parentActivityName=".SettingsActivity"
             android:screenOrientation="fullUser"

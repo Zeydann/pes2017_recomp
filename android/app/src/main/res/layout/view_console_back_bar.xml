@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The strip along the top of the console screens. Kept separate from
-     view_back_bar.xml, which the settings screens still use. -->
+<!-- The strip along the top of the console screens: back, and nothing else. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"

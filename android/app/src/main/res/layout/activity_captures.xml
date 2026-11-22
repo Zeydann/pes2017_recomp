@@ -1,57 +1,79 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- The captures on this phone. What they are and how many is a card, the
+     list is the captures themselves, and deleting them all is the one red
+     control on the page. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:background="@color/pes_page">
-
-    <include layout="@layout/view_back_bar" />
+    android:background="@color/ui_bg"
+    android:orientation="vertical">
 
     <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:orientation="vertical"
-        android:padding="20dp">
+        style="@style/SetupColumn"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
 
-        <TextView
+        <include layout="@layout/view_console_back_bar" />
+
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="@string/captures_title"
-            android:textColor="@color/pes_navy"
-            android:textSize="20sp"
-            android:textStyle="bold" />
+            android:orientation="vertical"
+            android:paddingStart="@dimen/setup_gutter"
+            android:paddingTop="2dp"
+            android:paddingEnd="@dimen/setup_gutter">
 
-        <TextView
-            android:id="@+id/captures_summary"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:background="@color/pes_panel"
-            android:padding="12dp"
-            android:textColor="@color/pes_text"
-            android:textSize="13sp" />
+            <TextView
+                style="@style/ConsoleTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/captures_title" />
 
-        <TextView
-            style="@style/SettingHint"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/captures_hint" />
+            <TextView
+                android:id="@+id/captures_summary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:background="@drawable/bg_console_card"
+                android:padding="14dp"
+                android:textColor="@color/ui_text"
+                android:textSize="13sp" />
+
+            <TextView
+                style="@style/ConsoleSubtitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:layout_marginTop="10dp"
+                android:text="@string/captures_hint" />
+
+        </LinearLayout>
 
         <ListView
             android:id="@+id/captures_list"
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_weight="1"
             android:layout_marginTop="12dp"
-            android:divider="@color/pes_line"
-            android:dividerHeight="1dp" />
+            android:layout_weight="1"
+            android:divider="@color/ui_line"
+            android:dividerHeight="1dp"
+            android:listSelector="@android:color/transparent"
+            android:paddingStart="@dimen/setup_gutter"
+            android:paddingEnd="@dimen/setup_gutter"
+            android:scrollbarStyle="insideOverlay" />
 
         <Button
             android:id="@+id/captures_clear"
+            style="@style/ConsoleButton.Stop"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/setup_gutter"
             android:layout_marginTop="8dp"
+            android:layout_marginEnd="@dimen/setup_gutter"
+            android:layout_marginBottom="12dp"
+            android:gravity="center"
             android:text="@string/captures_clear_all" />
+
     </LinearLayout>
 </LinearLayout>

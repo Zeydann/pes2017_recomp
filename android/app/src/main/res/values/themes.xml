@@ -1,21 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- The settings screens still to be moved over: a white page, navy type,
-         red controls. -->
-    <style name="Theme.PES17" parent="Theme.AppCompat.Light.NoActionBar">
-        <item name="android:windowBackground">@color/pes_page</item>
-        <item name="colorPrimary">@color/pes_navy</item>
-        <item name="colorPrimaryDark">@color/pes_navy</item>
-        <item name="colorAccent">@color/pes_red</item>
-        <item name="colorControlActivated">@color/pes_red</item>
-        <item name="android:textColorPrimary">@color/pes_text</item>
-        <item name="android:textColorSecondary">@color/pes_muted</item>
-        <item name="buttonStyle">@style/PanelButton</item>
-        <item name="android:buttonStyle">@style/PanelButton</item>
-    </style>
-
-    <!-- Setup screens. Dark because they hand straight over to the game's
-         black surface; green is the forward action, red the stopping one. -->
+    <!-- Every screen outside the run. Dark because they hand straight over to
+         the game's black surface; green is the forward action, red the
+         stopping one. -->
     <style name="Theme.PES17.Console" parent="Theme.AppCompat.NoActionBar">
         <item name="android:windowBackground">@color/ui_bg</item>
         <item name="android:statusBarColor">@color/ui_bg</item>
@@ -30,6 +17,25 @@
         <item name="android:textColorSecondary">@color/ui_muted</item>
         <item name="buttonStyle">@style/ConsoleButton</item>
         <item name="android:buttonStyle">@style/ConsoleButton</item>
+        <item name="alertDialogTheme">@style/Theme.PES17.Dialog</item>
+    </style>
+
+    <!-- A question or the log, over the console: the same surface as the cards,
+         not the platform's grey. -->
+    <style name="Theme.PES17.Dialog" parent="Theme.AppCompat.Dialog.Alert">
+        <item name="colorAccent">@color/ui_green</item>
+        <item name="colorBackgroundFloating">@color/ui_surface</item>
+        <item name="android:colorBackground">@color/ui_surface</item>
+        <item name="android:textColorPrimary">@color/ui_text</item>
+        <item name="android:textColorSecondary">@color/ui_muted</item>
+        <item name="android:textColorAlertDialogListItem">@color/ui_text</item>
+        <item name="buttonBarButtonStyle">@style/ConsoleDialogButton</item>
+    </style>
+
+    <style name="ConsoleDialogButton" parent="Widget.AppCompat.Button.ButtonBar.AlertDialog">
+        <item name="android:textAllCaps">false</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:fontFamily">sans-serif</item>
     </style>
 
     <!-- The run: black behind the surface, and the dark pad editor over it. -->
@@ -42,107 +48,9 @@
         <item name="android:textColorSecondary">#8FA0C2</item>
     </style>
 
-    <!-- A settings panel's header row: a solid bar, as the PES 6 menus' header strips. -->
-    <style name="SectionHeading">
-        <item name="android:layout_marginTop">14dp</item>
-        <item name="android:background">@drawable/bg_section_bar</item>
-        <item name="android:paddingStart">10dp</item>
-        <item name="android:paddingTop">3dp</item>
-        <item name="android:paddingBottom">3dp</item>
-        <item name="android:textColor">@color/pes_on_dark</item>
-        <item name="android:textSize">13sp</item>
-        <item name="android:textStyle">bold|italic</item>
-        <item name="android:textAllCaps">true</item>
-        <item name="android:fontFamily">sans-serif-condensed</item>
-    </style>
-
-    <!-- One setting: a row with a hairline under it, label on the left. -->
-    <style name="SettingLabel">
-        <item name="android:layout_marginTop">2dp</item>
-        <item name="android:background">@drawable/bg_setting_row</item>
-        <item name="android:paddingStart">10dp</item>
-        <item name="android:paddingTop">7dp</item>
-        <item name="android:paddingBottom">5dp</item>
-        <item name="android:textColor">@color/pes_text</item>
-        <item name="android:textSize">14sp</item>
-        <item name="android:textStyle">bold</item>
-        <item name="android:fontFamily">sans-serif-condensed</item>
-    </style>
-
-    <style name="SettingHint">
-        <item name="android:paddingStart">10dp</item>
-        <item name="android:paddingTop">2dp</item>
-        <item name="android:paddingBottom">4dp</item>
-        <item name="android:textColor">@color/pes_muted</item>
-        <item name="android:textSize">11sp</item>
-    </style>
-
-    <style name="SettingSwitch">
-        <item name="android:layout_marginTop">2dp</item>
-        <item name="android:background">@drawable/bg_setting_row</item>
-        <item name="android:paddingStart">10dp</item>
-        <item name="android:paddingEnd">6dp</item>
-        <item name="android:paddingTop">7dp</item>
-        <item name="android:paddingBottom">5dp</item>
-        <item name="android:textColor">@color/pes_text</item>
-        <item name="android:textSize">14sp</item>
-        <item name="android:textStyle">bold</item>
-        <item name="android:fontFamily">sans-serif-condensed</item>
-    </style>
-
-    <!-- A card holding one group of settings (Display, Frame rate, ...). -->
-    <style name="SettingGroup">
-        <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="android:layout_marginTop">4dp</item>
-        <item name="android:background">@drawable/bg_setting_group</item>
-        <item name="android:orientation">vertical</item>
-        <item name="android:padding">4dp</item>
-    </style>
-
-    <style name="TabEntry">
-        <item name="android:layout_width">0dp</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="android:layout_weight">1</item>
-        <item name="android:minHeight">34dp</item>
-        <item name="android:background">@android:color/transparent</item>
-        <item name="android:gravity">center</item>
-        <item name="android:textColor">@color/pes_on_dark</item>
-        <item name="android:textSize">12sp</item>
-        <item name="android:textStyle">bold|italic</item>
-        <item name="android:textAllCaps">true</item>
-        <item name="android:fontFamily">sans-serif-condensed</item>
-        <item name="android:letterSpacing">0.06</item>
-        <item name="android:stateListAnimator">@null</item>
-    </style>
-
-    <!-- BACK: gold italic capitals with an arrow, on the strip's navy. -->
-    <style name="BackButton">
-        <item name="android:background">@android:color/transparent</item>
-        <item name="android:minHeight">36dp</item>
-        <item name="android:minWidth">0dp</item>
-        <item name="android:paddingStart">10dp</item>
-        <item name="android:paddingEnd">14dp</item>
-        <item name="android:textColor">@color/pes_gold</item>
-        <item name="android:textSize">14sp</item>
-        <item name="android:textStyle">bold|italic</item>
-        <item name="android:textAllCaps">true</item>
-        <item name="android:fontFamily">sans-serif-condensed</item>
-        <item name="android:letterSpacing">0.06</item>
-        <item name="android:stateListAnimator">@null</item>
-    </style>
-
-    <style name="PanelButton" parent="Widget.AppCompat.Button">
-        <item name="android:background">@drawable/bg_button_action</item>
-        <item name="android:textColor">@color/pes_on_dark</item>
-        <item name="android:textStyle">bold|italic</item>
-        <item name="android:fontFamily">sans-serif-condensed</item>
-        <item name="android:minHeight">40dp</item>
-        <item name="android:stateListAnimator">@null</item>
-    </style>
-
-    <!-- The setup screens' content column: full width in portrait, capped in
-         values-land so a pill does not run the whole length of a wide screen. -->
+    <!-- The setup screens' content column: the whole window, in either
+         orientation. The side margin is setup_gutter, so the cards line up with
+         the strip above them. -->
     <style name="SetupColumn">
         <item name="android:layout_width">match_parent</item>
     </style>
@@ -231,5 +139,83 @@
         <item name="android:textSize">14sp</item>
         <item name="android:fontFamily">sans-serif</item>
         <item name="android:stateListAnimator">@null</item>
+    </style>
+
+    <!-- A settings page's section heading: small, bold, directly above the
+         card it names. -->
+    <style name="ConsoleSection">
+        <item name="android:layout_marginTop">20dp</item>
+        <item name="android:layout_marginStart">4dp</item>
+        <item name="android:textColor">@color/ui_text</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:fontFamily">sans-serif</item>
+    </style>
+
+    <!-- A group of settings: one surface, the hairline between rows is what
+         separates them. -->
+    <style name="ConsoleCard">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">8dp</item>
+        <item name="android:background">@drawable/bg_console_card</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:paddingTop">6dp</item>
+        <item name="android:paddingBottom">6dp</item>
+    </style>
+
+    <!-- One tab on a settings strip: the chosen one is white above a green
+         rule, the rest stay muted. -->
+    <style name="ConsoleTab" parent="Widget.AppCompat.Button.Borderless">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:minHeight">52dp</item>
+        <item name="android:background">@drawable/bg_console_tab</item>
+        <item name="android:gravity">center</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:textColor">@color/ui_muted</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:stateListAnimator">@null</item>
+    </style>
+
+    <!-- The label of a setting, and the line of explanation under it. -->
+    <style name="ConsoleRowLabel">
+        <item name="android:paddingStart">14dp</item>
+        <item name="android:paddingTop">12dp</item>
+        <item name="android:paddingEnd">14dp</item>
+        <item name="android:paddingBottom">2dp</item>
+        <item name="android:textColor">@color/ui_text</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:fontFamily">sans-serif</item>
+    </style>
+
+    <style name="ConsoleRowHint">
+        <item name="android:paddingStart">14dp</item>
+        <item name="android:paddingTop">2dp</item>
+        <item name="android:paddingEnd">14dp</item>
+        <item name="android:paddingBottom">12dp</item>
+        <item name="android:textColor">@color/ui_muted</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:lineSpacingExtra">3dp</item>
+        <item name="android:fontFamily">sans-serif</item>
+    </style>
+
+    <style name="ConsoleSwitch">
+        <item name="android:minHeight">52dp</item>
+        <item name="android:paddingStart">14dp</item>
+        <item name="android:paddingEnd">14dp</item>
+        <item name="android:textColor">@color/ui_text</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:fontFamily">sans-serif</item>
+    </style>
+
+    <style name="ConsoleDivider">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">1dp</item>
+        <item name="android:layout_marginStart">14dp</item>
+        <item name="android:layout_marginEnd">14dp</item>
+        <item name="android:background">@color/ui_line</item>
     </style>
 </resources>

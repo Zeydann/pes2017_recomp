@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The chosen tab: the strip's line thickens to the console's green under
+     the one page being shown. -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="#3354E08D">
+    <item>
+        <layer-list>
+            <item>
+                <shape android:shape="rectangle">
+                    <solid android:color="@color/ui_bg" />
+                </shape>
+            </item>
+            <item android:gravity="bottom" android:height="2dp">
+                <shape android:shape="rectangle">
+                    <solid android:color="@color/ui_green" />
+                </shape>
+            </item>
+        </layer-list>
+    </item>
+</ripple>

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- An unchosen tab: it sits on the page, with the strip's hairline under
+     it so the tabs read as one row. -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="#3354E08D">
+    <item>
+        <layer-list>
+            <item>
+                <shape android:shape="rectangle">
+                    <solid android:color="@color/ui_bg" />
+                </shape>
+            </item>
+            <item android:gravity="bottom" android:height="1dp">
+                <shape android:shape="rectangle">
+                    <solid android:color="@color/ui_line" />
+                </shape>
+            </item>
+        </layer-list>
+    </item>
+</ripple>

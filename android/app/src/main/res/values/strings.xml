@@ -178,7 +178,7 @@
     <string name="wordmark_year">2017</string>
     <string name="disclaimer">UNOFFICIAL FAN PORT. NOT AFFILIATED WITH KONAMI. BRING YOUR OWN COPY.</string>
     <string name="detail_default_title">Main menu</string>
-    <string name="detail_default_text">Pick an entry: its details show here, and choosing it acts at once.</string>
+    <string name="detail_default_text">Pick an entry to see what it does.</string>
 
     <string name="version_tag">%1$s \u00b7 build %2$d \u00b7 EUROPE</string>
     <string name="install_and_play">Install &amp; kick off</string>
@@ -193,7 +193,6 @@
 
     <!-- the launcher's own labels -->
     <string name="ui_menu">Menu</string>
-    <string name="ui_status">Status</string>
     <string name="wordmark_caption">Recompiled for Android</string>
     <string name="select_folder_hint">The app first looks for the game on this phone by itself. If it cannot find it, point it at the folder that holds your PES 2017 files (default.xex and the .cpk archives). If Android has not yet let the app read that part of the storage, it asks first.</string>
     <string name="settings_hint">Picture, performance, controls and game files for this port.</string>
@@ -226,11 +225,10 @@
     <string name="use_this_folder">Use this folder</string>
 
     <!-- settings tabs and sections -->
-    <string name="tab_graphics">GRAPHICS &amp; PERFORMANCE</string>
-    <string name="tab_performance">PERFORMANCE</string>
-    <string name="tab_controls">CONTROLS &amp; SOUND</string>
-    <string name="tab_advanced">ADVANCED</string>
-    <string name="tab_files">GAME FILES</string>
+    <string name="tab_graphics">Graphics</string>
+    <string name="tab_controls">Controls</string>
+    <string name="tab_advanced">Advanced</string>
+    <string name="tab_files">Game files</string>
     <string name="section_preset">Quality preset</string>
     <string name="section_display">Display</string>
     <string name="section_image_quality">Image quality</string>
@@ -268,7 +266,7 @@
     <string name="arrange_controls_hint">Drag a control to move it, pinch it or use the size slider to resize it, and hide the ones you do not use. A control dropped on another steps aside. Also in a match: pause and choose \u201cEdit controls\u201d.</string>
     <string name="arrange_hint">Touch a control to pick it up</string>
     <string name="advanced_warning">For tinkering and troubleshooting. The defaults suit most phones; the Graphics and Performance tabs cover the usual changes.</string>
-    <string name="settings_help_strip">Every change is kept the moment it is made, and takes effect when the next match starts. Press Back to return to the menu.</string>
+    <string name="settings_help_strip">Kept as you change it; used from the next match.</string>
     <string name="preset_label">Preset: %1$s</string>
     <string name="preset_low">Low</string>
     <string name="preset_medium">Medium</string>

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The console screens' side margin, the same on the launcher's menu, the
+     setup pages and the two lists, so every card edge lands on one line. -->
+<resources>
+    <dimen name="setup_gutter">24dp</dimen>
+</resources>

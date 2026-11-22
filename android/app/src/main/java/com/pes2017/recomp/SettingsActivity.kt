@@ -43,6 +43,7 @@ class SettingsActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
+        findViewById<android.view.View>(R.id.root).padSystemBars()
         // BACK on the strip along the top; through the dispatcher, so a screen's own back handling (the install's
         // "stop copying?") applies to it too.
         findViewById<android.view.View>(R.id.back_button).setOnClickListener { onBackPressedDispatcher.onBackPressed() }
@@ -327,20 +328,22 @@ class SettingsActivity : AppCompatActivity() {
         if (prefs.gameDirectory.isEmpty()) getString(R.string.paths_none)
         else getString(R.string.paths_line, prefs.gameDirectory)
 
-    /** Custom tab bar: highlight bar on the chosen tab, one page shown. */
+    /** Custom tab bar: a green rule under the chosen tab, one page shown. */
     private fun selectTab(index: Int) {
         tabPages.forEachIndexed { i, page ->
             page.visibility = if (i == index) android.view.View.VISIBLE else android.view.View.GONE
         }
         findViewById<android.view.View>(R.id.page_performance).visibility =
             if (index == TAB_GRAPHICS) android.view.View.VISIBLE else android.view.View.GONE
+        // A page opens at its top; otherwise the offset from the last one stays.
+        findViewById<android.widget.ScrollView>(R.id.page_scroll).scrollTo(0, 0)
         tabButtons.forEachIndexed { i, button ->
             if (i == index) {
-                button.setBackgroundResource(R.drawable.bg_tab_selected)
-                button.setTextColor(getColor(R.color.pes_gold))
+                button.setBackgroundResource(R.drawable.bg_console_tab_selected)
+                button.setTextColor(getColor(R.color.ui_text))
             } else {
-                button.setBackgroundColor(android.graphics.Color.TRANSPARENT)
-                button.setTextColor(getColor(R.color.pes_on_dark))
+                button.setBackgroundResource(R.drawable.bg_console_tab)
+                button.setTextColor(getColor(R.color.ui_muted))
             }
         }
     }

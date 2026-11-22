@@ -57,6 +57,7 @@ class DriverActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_driver)
+        findViewById<View>(R.id.root).padSystemBars()
         // BACK on the strip along the top; through the dispatcher, so a screen's own back handling (the install's
         // "stop copying?") applies to it too.
         findViewById<android.view.View>(R.id.back_button).setOnClickListener { onBackPressedDispatcher.onBackPressed() }
@@ -183,8 +184,16 @@ class DriverActivity : AppCompatActivity() {
                 orientation = LinearLayout.VERTICAL
                 val margin = (12 * resources.displayMetrics.density).roundToInt()
                 setPadding(margin, margin, margin, margin)
-                addView(TextView(this@DriverActivity).apply { id = android.R.id.text1; textSize = 15f })
-                addView(TextView(this@DriverActivity).apply { id = android.R.id.text2; textSize = 11f })
+                addView(TextView(this@DriverActivity).apply {
+                    id = android.R.id.text1
+                    textSize = 15f
+                    setTextColor(getColor(R.color.ui_text))
+                })
+                addView(TextView(this@DriverActivity).apply {
+                    id = android.R.id.text2
+                    textSize = 11f
+                    setTextColor(getColor(R.color.ui_muted))
+                })
             }
             val title = row.findViewById<TextView>(android.R.id.text1)
             val detail = row.findViewById<TextView>(android.R.id.text2)

@@ -221,20 +221,10 @@
                             android:background="@color/ui_line" />
 
                         <TextView
-                            style="@style/ConsoleCaption"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="12dp"
-                            android:letterSpacing="0.16"
-                            android:text="@string/ui_status"
-                            android:textAllCaps="true"
-                            android:textSize="10sp" />
-
-                        <TextView
                             android:id="@+id/status"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="4dp"
+                            android:layout_marginTop="12dp"
                             android:lineSpacingExtra="2dp"
                             android:textColor="@color/ui_text"
                             android:textSize="13sp"

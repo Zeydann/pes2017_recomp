@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- Landscape only: the setup screens' column stops growing. -->
-<resources>
-    <style name="SetupColumn">
-        <item name="android:layout_width">560dp</item>
-        <item name="android:layout_gravity">center_horizontal</item>
-    </style>
-</resources>
