@@ -294,21 +294,6 @@
                         <View style="@style/ConsoleDivider" />
 
                         <androidx.appcompat.widget.SwitchCompat
-                            android:id="@+id/frame_gen"
-                            style="@style/ConsoleSwitch"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:text="@string/frame_gen" />
-
-                        <TextView
-                            style="@style/ConsoleRowHint"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:text="@string/frame_gen_hint" />
-
-                        <View style="@style/ConsoleDivider" />
-
-                        <androidx.appcompat.widget.SwitchCompat
                             android:id="@+id/black_guard"
                             style="@style/ConsoleSwitch"
                             android:layout_width="match_parent"
@@ -447,6 +432,21 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:text="@string/fps_limit_hint" />
+
+                        <View style="@style/ConsoleDivider" />
+
+                        <androidx.appcompat.widget.SwitchCompat
+                            android:id="@+id/frame_gen"
+                            style="@style/ConsoleSwitch"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/frame_gen" />
+
+                        <TextView
+                            style="@style/ConsoleRowHint"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/frame_gen_hint" />
 
                         <View style="@style/ConsoleDivider" />
 

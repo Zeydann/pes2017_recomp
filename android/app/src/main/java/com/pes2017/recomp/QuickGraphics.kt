@@ -29,6 +29,7 @@ object QuickGraphics {
     private const val X_MSAA = "gfx_msaa"
     private const val X_FSR = "gfx_fsr"
     private const val X_FPS = "gfx_fps"
+    private const val X_FRAMEGEN = "gfx_framegen"
     private const val X_HEAT = "gfx_heat"
     private const val X_CROWD = "gfx_crowd"
     private const val X_LOWMEM = "gfx_lowmem"
@@ -36,14 +37,15 @@ object QuickGraphics {
 
     private class Values(
         var scene: Int, var scale: Int, var msaa: Boolean, var fsr: Boolean, var fps: Int,
-        var heat: Boolean, var crowd: Boolean, var lowMemory: Boolean, var preset: String,
+        var frameGen: Boolean, var heat: Boolean, var crowd: Boolean, var lowMemory: Boolean,
+        var preset: String,
     )
 
     /** Shows the dialog; `onApply` runs after the relaunch has been requested. */
     fun show(activity: Activity, prefs: Prefs, onApply: () -> Unit, onClose: () -> Unit) {
         val v = Values(
             prefs.sceneScalePercent, prefs.renderScale, prefs.multisampling, prefs.fsr, prefs.fpsLimit,
-            prefs.heatScale, prefs.crowd, prefs.lowMemory, prefs.preset,
+            prefs.frameGeneration, prefs.heatScale, prefs.crowd, prefs.lowMemory, prefs.preset,
         )
         val dp = activity.resources.displayMetrics.density
         fun px(value: Int) = (value * dp).roundToInt()
@@ -73,19 +75,23 @@ object QuickGraphics {
         fun switch(text: String) = SwitchCompat(activity).apply { this.text = text; setPadding(0, px(6), 0, px(6)) }
         val msaa = switch(activity.getString(R.string.qg_msaa))
         val fsr = switch(activity.getString(R.string.qg_fsr))
+        val frameGen = switch(activity.getString(R.string.qg_framegen))
         val heat = switch(activity.getString(R.string.qg_heat))
         val crowd = switch(activity.getString(R.string.qg_crowd))
         val lowMem = switch(activity.getString(R.string.qg_lowmem))
 
         fun refresh() {
             sceneText.text = activity.getString(R.string.qg_scene, v.scene)
-            fpsText.text = activity.getString(R.string.qg_fps, v.fps)
+            fpsText.text = if (v.frameGen) activity.getString(R.string.fps_limit_framegen)
+                           else activity.getString(R.string.qg_fps, v.fps)
             scaleText.text = activity.getString(R.string.qg_scale, v.scale)
             scale.progress = v.scale - 1
             scene.isEnabled = v.scale == 1
             scene.progress = (v.scene - 50) / 5
+            fps.isEnabled = !v.frameGen
             fps.progress = (v.fps - 30) / 5
             msaa.isChecked = v.msaa; fsr.isChecked = v.fsr; heat.isChecked = v.heat
+            frameGen.isChecked = v.frameGen
             crowd.isChecked = v.crowd; lowMem.isChecked = v.lowMemory
             tiers.forEachIndexed { i, tier -> tierButtons[i].isChecked = v.preset == tier.name }
         }
@@ -95,6 +101,7 @@ object QuickGraphics {
             button.setOnClickListener {
                 val p = DeviceProfile.preset(tiers[i])
                 v.scene = p.sceneScalePercent; v.scale = 1; v.msaa = p.multisampling; v.fsr = p.fsr; v.fps = p.fpsLimit
+                v.frameGen = p.frameGeneration
                 v.heat = p.heatScale; v.lowMemory = p.lowMemory; v.preset = tiers[i].name
                 quiet = true; refresh(); quiet = false
             }
@@ -130,12 +137,13 @@ object QuickGraphics {
         fun bind(button: CompoundButton, set: (Boolean) -> Unit) =
             button.setOnCheckedChangeListener { _, on -> if (!quiet) { set(on); touched() } }
         bind(msaa) { v.msaa = it }; bind(fsr) { v.fsr = it }; bind(heat) { v.heat = it }
+        bind(frameGen) { v.frameGen = it; quiet = true; refresh(); quiet = false }
         bind(crowd) { v.crowd = it }; bind(lowMem) { v.lowMemory = it }
 
         column.addView(scaleText); column.addView(scale)
         column.addView(sceneText); column.addView(scene)
         column.addView(fpsText); column.addView(fps)
-        listOf(msaa, fsr, heat, crowd, lowMem).forEach { column.addView(it) }
+        listOf(msaa, fsr, frameGen, heat, crowd, lowMem).forEach { column.addView(it) }
         column.addView(TextView(activity).apply {
             setText(R.string.qg_note); textSize = 11f; alpha = 0.7f; setPadding(0, px(10), 0, 0)
         })
@@ -150,7 +158,8 @@ object QuickGraphics {
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                     .putExtra(EXTRA_RELAUNCH, true)
                     .putExtra(X_SCENE, v.scene).putExtra(X_SCALE, v.scale).putExtra(X_MSAA, v.msaa).putExtra(X_FSR, v.fsr)
-                    .putExtra(X_FPS, v.fps).putExtra(X_HEAT, v.heat).putExtra(X_CROWD, v.crowd)
+                    .putExtra(X_FPS, v.fps).putExtra(X_FRAMEGEN, v.frameGen)
+                    .putExtra(X_HEAT, v.heat).putExtra(X_CROWD, v.crowd)
                     .putExtra(X_LOWMEM, v.lowMemory).putExtra(X_PRESET, v.preset)
                 activity.startActivity(intent)
                 onApply()
@@ -169,6 +178,7 @@ object QuickGraphics {
             prefs.multisampling = intent.getBooleanExtra(X_MSAA, prefs.multisampling)
             prefs.fsr = intent.getBooleanExtra(X_FSR, prefs.fsr)
             prefs.fpsLimit = intent.getIntExtra(X_FPS, prefs.fpsLimit)
+            prefs.frameGeneration = intent.getBooleanExtra(X_FRAMEGEN, prefs.frameGeneration)
             prefs.heatScale = intent.getBooleanExtra(X_HEAT, prefs.heatScale)
             prefs.crowd = intent.getBooleanExtra(X_CROWD, prefs.crowd)
             prefs.lowMemory = intent.getBooleanExtra(X_LOWMEM, prefs.lowMemory)

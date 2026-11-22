@@ -72,6 +72,30 @@ match each, temperatures from `dumpsys thermalservice` (SKIN, AP) every 10 s: 60
 against plain 30 says what the made frames cost. Note: the S20 FE dropped off USB three times
 when hot and under `adb shell screenrecord`; record with the phone's own recorder instead.
 
+## Where a Dimensity 8400 phone spends a match (2412DPC0AG, Mali-G720 MC7)
+
+Measured 2026-11-22 on the phone the app now runs on, High preset (scene 0.75, MSAA on, 60 fps
+limit, heat rule on), from the `perf:` lines the runtime writes every 600 swaps. Charging, so
+this is a workload profile, not a heat test.
+
+- **The GPU has room.** In the title's attract match it held 60.0 fps at 16.5-16.8 ms a frame,
+  with `0.00 ms a frame waiting for the GPU`, 51-63 C skin and thermal status 0 throughout. The
+  CPU side was 10.4-19.0 ms a frame (63-114% of one core).
+- **The frames that fall short are CPU frames.** In a longer session on the same phone the median
+  was 59.2 fps over 56 reports, but the dips (30.4-43.6 fps) came with 700-1200 draws and up to
+  31 MB of vertex data copied a frame, where the CPU reached 63.9 ms a frame (194% of a core) and
+  the GPU was still not waited on. Halving the frames (30 fps, or 30 with frame generation) is
+  therefore the only lever that halves the work; MSAA and scene scale are free at 0.75 on this
+  phone, and lowering them only moves the heat, not the frame rate.
+- **Presets carry frame generation** (`DeviceProfile.Preset.frameGeneration`), so switching tiers
+  cannot leave a 30 fps limit beside a 60 fps frame-generation setting. It is off in every preset:
+  on this phone, with frame generation on, the match scene came out as colour noise and then
+  stopped swapping (see below), so it stays a switch the player turns on.
+- **Open: frame generation on a Mali-G720 (Android 16).** With `PES17_FRAMEGEN=1` and the 30 fps
+  limit it sets, the menus drew normally, but as the match loaded the picture became colour noise
+  and the title stopped presenting (`pacing: 0-1 swaps in the last 600 blanks`, `tele: draws
+  1429-1429 same 2501`). Not yet told apart from the 30 fps limit alone.
+
 ## Leads not tried yet (workload and heat)
 
 - **Sun shadow map at a lower resolution.** The shadow map is one 1024x2048 depth surface holding two

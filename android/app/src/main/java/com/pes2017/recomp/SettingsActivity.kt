@@ -70,7 +70,6 @@ class SettingsActivity : AppCompatActivity() {
             { getString(R.string.scene_scale, 50 + it * 5) }) { prefs.sceneScalePercent = 50 + it * 5; presetTouched() }
         switch(R.id.msaa, prefs.multisampling) { prefs.multisampling = it; presetTouched() }
         switch(R.id.fsr, prefs.fsr) { prefs.fsr = it; presetTouched() }
-        switch(R.id.frame_gen, prefs.frameGeneration) { prefs.frameGeneration = it }
         switch(R.id.black_guard, prefs.blackGuard) { prefs.blackGuard = it }
         // Experiments: arena size (Auto, 128, 192, 256, 320 MB) and four switches the runtime already has.
         val arenaIds = intArrayOf(R.id.arena_auto, R.id.arena_128, R.id.arena_192, R.id.arena_256, R.id.arena_320)
@@ -86,10 +85,25 @@ class SettingsActivity : AppCompatActivity() {
             { getString(R.string.fsr_sharp, it / 10f) }) { prefs.fsrSharpness = it / 10f }
 
         // ---- performance: frame rate, heat and battery ----
-        bar(R.id.fps_limit, R.id.fps_limit_label, 6, (prefs.fpsLimit - 30) / 5,
-            { if (it == 6) getString(R.string.fps_limit_off) else getString(R.string.fps_limit, 30 + it * 5) }) {
+        fun fpsText(progress: Int) =
+            if (progress == 6) getString(R.string.fps_limit_off) else getString(R.string.fps_limit, 30 + progress * 5)
+        bar(R.id.fps_limit, R.id.fps_limit_label, 6, (prefs.fpsLimit - 30) / 5, ::fpsText) {
             prefs.fpsLimit = 30 + it * 5; presetTouched()
         }
+        // Frame generation runs the match at 30 and shows 60, so it owns the limit
+        // while it is on: the slider would only contradict it.
+        val fpsBar = findViewById<SeekBar>(R.id.fps_limit)
+        val fpsLabel = findViewById<TextView>(R.id.fps_limit_label)
+        fun showFrameRate() {
+            fpsBar.isEnabled = !prefs.frameGeneration
+            fpsBar.alpha = if (prefs.frameGeneration) 0.4f else 1f
+            fpsLabel.text = if (prefs.frameGeneration) getString(R.string.fps_limit_framegen)
+                            else fpsText(fpsBar.progress)
+        }
+        switch(R.id.frame_gen, prefs.frameGeneration) {
+            prefs.frameGeneration = it; presetTouched(); showFrameRate()
+        }
+        showFrameRate()
         switch(R.id.prefer60, prefs.prefer60Hz) { prefs.prefer60Hz = it }
         // Off / Minimal / Normal / Complete, in Prefs.HUD_* order.
         val hudChoices = intArrayOf(R.id.hud_off, R.id.hud_minimal, R.id.hud_normal, R.id.hud_complete)

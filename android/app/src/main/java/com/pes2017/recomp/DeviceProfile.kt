@@ -45,6 +45,7 @@ object DeviceProfile {
         val multisampling: Boolean,
         val fsr: Boolean,
         val fpsLimit: Int,
+        val frameGeneration: Boolean,
         val lowMemory: Boolean,
         val heatScale: Boolean,
         val loadScale: Boolean,
@@ -55,10 +56,12 @@ object DeviceProfile {
     // would be fixed. The heat rule is on everywhere: on a Snapdragon 865 it dropped the picture and
     // held 57-60 fps in a match at thermal status 4. The load rule is not in any preset: on that
     // phone the GPU pass time never went over budget in a slow match, so it never acted.
+    // Frame generation is in no preset: it is off by default and the player turns it on in
+    // Settings > Frame rate, where it owns the limit.
     fun preset(tier: Tier): Preset = when (tier) {
-        Tier.HIGH -> Preset(75, multisampling = true, fsr = false, fpsLimit = 60, lowMemory = false, heatScale = true, loadScale = false)
-        Tier.MEDIUM -> Preset(75, multisampling = true, fsr = true, fpsLimit = 60, lowMemory = false, heatScale = true, loadScale = false)
-        Tier.LOW -> Preset(60, multisampling = false, fsr = true, fpsLimit = 30, lowMemory = true, heatScale = true, loadScale = false)
+        Tier.HIGH -> Preset(75, multisampling = true, fsr = false, fpsLimit = 60, frameGeneration = false, lowMemory = false, heatScale = true, loadScale = false)
+        Tier.MEDIUM -> Preset(75, multisampling = true, fsr = true, fpsLimit = 60, frameGeneration = false, lowMemory = false, heatScale = true, loadScale = false)
+        Tier.LOW -> Preset(60, multisampling = false, fsr = true, fpsLimit = 30, frameGeneration = false, lowMemory = true, heatScale = true, loadScale = false)
     }
 
     fun apply(prefs: Prefs, tier: Tier) {
@@ -67,6 +70,7 @@ object DeviceProfile {
         prefs.multisampling = p.multisampling
         prefs.fsr = p.fsr
         prefs.fpsLimit = p.fpsLimit
+        prefs.frameGeneration = p.frameGeneration
         prefs.lowMemory = p.lowMemory
         prefs.heatScale = p.heatScale
         prefs.loadScale = p.loadScale
