@@ -362,7 +362,12 @@ object PatchStore {
             }
             val wanted = sha256(packed)
             val target = editFile(root)
-            val backup = if (target.exists()) backupFile(root, "edit", target, source.name) else null
+            val backup = if (target.exists()) {
+                if (target.isDirectory) backupDirectory(root, "edit", target, source.name)
+                else backupFile(root, "edit", target, source.name)
+            } else {
+                null
+            }
             savesDir(root).mkdirs()
             val incoming = File(savesDir(root), "$EDIT.installing")
             incoming.delete()
@@ -407,7 +412,12 @@ object PatchStore {
             ?.filter { it.isFile && it.name != MANIFEST }
             .orEmpty()
         if (files.isEmpty()) throw Failure("the edit backup holds no save", backup.directory.absolutePath)
-        val current = if (target.exists()) backupFile(root, "edit", target, "restored-from") else null
+        val current = if (target.exists()) {
+            if (target.isDirectory) backupDirectory(root, "edit", target, "restored-from")
+            else backupFile(root, "edit", target, "restored-from")
+        } else {
+            null
+        }
         if (files.size == 1 && files[0].name == EDIT) {
             val incoming = File(savesDir(root), "$EDIT.installing")
             incoming.delete()
